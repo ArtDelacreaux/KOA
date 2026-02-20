@@ -276,9 +276,12 @@ export default function TavernMenu() {
       setTimeout(() => {
         const v = videoRef.current;
         if (!v) return;
-        v.currentTime = 0;
-        v.volume = 0.18;
-        v.play().catch(() => {});
+        // Only call play() on real <video> elements, not YouTube iframes
+        if (typeof v.play === 'function') {
+          v.currentTime = 0;
+          v.volume = 0.18;
+          v.play().catch(() => {});
+        }
       }, 30);
     }, { flip: false });
   };
@@ -287,8 +290,11 @@ export default function TavernMenu() {
     const v = videoRef.current;
     if (v) {
       try {
-        v.pause();
-        v.currentTime = 0;
+        // Only call pause/currentTime on real <video> elements
+        if (typeof v.pause === 'function') {
+          v.pause();
+          v.currentTime = 0;
+        }
       } catch {}
     }
     setVideoChoice(null);

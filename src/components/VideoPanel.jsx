@@ -210,32 +210,46 @@ export default function VideoPanel({
               <div style={{ maxWidth: 520 }}>
                 <div style={{ fontSize: 22, fontWeight: 950, marginBottom: 10 }}>Cinematic Player</div>
                 <div style={{ lineHeight: 1.7, opacity: 0.88 }}>
-                  Put <strong>intro.mp4</strong> and <strong>outro.mp4</strong> in your <strong>public</strong> folder.
-                  <br />
-                  Then press <strong>Play Intro</strong> or <strong>Play Outro</strong>.
+                  Press <strong>Play Intro</strong> or <strong>Play Outro</strong> to begin.
                 </div>
-                <div style={{ marginTop: 14, opacity: 0.75, fontSize: 12 }}>(Tip: If you change files while dev server runs, refresh the browser.)</div>
               </div>
             </div>
-          ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <video
-                ref={videoRef}
-                controls
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  maxHeight: 'calc(86vh - 160px)',
-                  borderRadius: 14,
-                  background: 'black',
-                  boxShadow: '0 24px 70px rgba(0,0,0,0.75)',
-                  border: '1px solid rgba(255,220,160,0.18)',
-                }}
-                src={videoChoice === 'intro' ? INTRO_SRC : OUTRO_SRC}
-                onEnded={() => {}}
-              />
-            </div>
-          )}
+          ) : (() => {
+            const src = videoChoice === 'intro' ? INTRO_SRC : OUTRO_SRC;
+            const isYouTube = src.includes('youtube.com/embed') || src.includes('youtu.be');
+            const mediaStyle = {
+              width: '100%',
+              height: '100%',
+              maxHeight: 'calc(86vh - 160px)',
+              borderRadius: 14,
+              background: 'black',
+              boxShadow: '0 24px 70px rgba(0,0,0,0.75)',
+              border: '1px solid rgba(255,220,160,0.18)',
+            };
+
+            return (
+              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {isYouTube ? (
+                  <iframe
+                    ref={videoRef}
+                    src={src}
+                    style={mediaStyle}
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    title={videoChoice}
+                  />
+                ) : (
+                  <video
+                    ref={videoRef}
+                    controls
+                    style={mediaStyle}
+                    src={src}
+                    onEnded={() => {}}
+                  />
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
     </ShellLayout>
