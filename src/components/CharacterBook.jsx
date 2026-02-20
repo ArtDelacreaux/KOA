@@ -548,46 +548,44 @@ export default function CharacterBook({
     },
     {
       name: 'Cerci', image: '/characters/Cerci.png',
-      synopsis: 'A dhampir walking between night and dawn.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
-      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
-      goals: 'Find belonging beyond the shadows of her past.',
+      synopsis: 'A dhampir walking between right and wrong.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
+      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with this group is one of the few anchors keeping her tied to hope.',
+      goals: 'Unknown',
       npcs: [
-        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
-        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
+        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—part, part reminder that she still lives in fear of a debt made many years ago." },
+        { name: 'The Fed Fang', relation: 'Old Gang', bio: 'It is said Cerci used to be a part of this gang before she met the group. They have shown nothing but ruthlessness and cruelty among the people.' },
       ],
     },
     {
       name: 'Fen', image: '/characters/Fen.png',
       synopsis: 'A relentless warrior of iron will.',
       age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
-      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
+      lore: 'Blunt, fierce, and stubborn, Fen masks deep care with fumbled words and unstoppable fury in battle.',
       goals: 'Protect the party at any cost.',
       npcs: [
-        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
-        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
+        { name: 'UkValee', relation: 'Former Tribe', bio: 'The innermost and feared tribe in the world spear. Fen was outcasted after she failed to meet cruel traditions.' },
+        { name: 'Idysis', relation: 'Folk Tale Legend', bio: 'A man told to the strongest tribe in the world spear as the bogeyman. Even the ghosts fear him.' },
       ],
     },
     {
       name: 'Arlis', image: arlisImgA,
       synopsis: 'A cunning and graceful adventurer.',
       age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
-      lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
-      goals: 'Reveal the truth of her heart—and survive the journey.',
+      lore: 'A childhood friend thought lost, Arlis carries strong feelings and a sharp mind. Her path has always curved back toward William.',
+      goals: 'Stop the blight, and rid herself and William of their pact.',
       npcs: [
-        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.' },
-        { name: 'Jasper Delancey', relation: 'Childhood Friend (Cover Story)', bio: 'Their parents think they\'re courting. In reality: a mutually useful disguise with complicated edges.' },
+        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family that adopted her with expectations that never stop. Arlis learned early: appearances are armor.' },
       ],
     },
     {
       name: 'Castor', image: 'https://i.imgur.com/EFMhZGu.png',
       synopsis: 'Split from Williams mind, he knows more than he lets others on.',
       age: '21', height: "5'10\"", class: 'Warlock',
-      lore: 'Born from fractured identity and dark magic, Castor walks as his own person—protective, intense, and deeply loyal to the few he trusts.',
+      lore: 'Born from fractured identity and dark magic, Castor now walks as his own person. Whimsical, kind, and deeply loyal to the few he trusts.',
       goals: 'Protect his friends and prove he deserves to exist.',
       npcs: [
-        { name: 'Vykell', relation: 'Mentor (Monster Hunter)', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
-        { name: "Von'Ghul", relation: 'Brother-in-Arms', bio: 'A wary guardian with a soft spot he pretends doesn\'t exist. He\'s watching for the darkness to bite.' },
+        { name: 'Vykell', relation: 'Mentor?', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons in the swamp and dropped him off in Notriq.' },
       ],
     },
     {
@@ -605,7 +603,7 @@ export default function CharacterBook({
       age: '31',
       height: "6'2\"",
       class: 'Cleric',
-      lore: '',
+      lore: 'Joined the group after they already arrived in Avalon, was previously in the war as a combat healer.',
       goals: 'Unknown',
       npcs: [],
     },
@@ -613,9 +611,9 @@ export default function CharacterBook({
       name: 'Thryvaris', image: '/characters/3V.png',
       synopsis: 'A mysterious mage with that lives in a cave.',
       age: 'Unknown', height: "6'1\"", class: 'Sorcerer',
-      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
-      goals: 'Pursue truths lost to time.',
-      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
+      lore: 'Little is known of Thryvaris beyond his departure from the University and his love for painting.',
+      goals: 'To live without worry.',
+      npcs: [{ name: 'Mezzerack', relation: 'Ex-Professor', bio: 'A man that was part of the Avalon University, who had a hand in ousting Thryvaris.' }],
     },
   ];
 
@@ -1326,7 +1324,7 @@ export default function CharacterBook({
                 <div>
                   <div style={fieldLabel}>Faction</div>
                   <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
-                    placeholder="e.g. Church of Amiras" style={inputBase} />
+                    placeholder="e.g. Church of Amira" style={inputBase} />
                 </div>
                 <div>
                   <div style={fieldLabel}>Location</div>

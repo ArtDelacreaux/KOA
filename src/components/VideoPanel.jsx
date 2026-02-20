@@ -76,11 +76,15 @@ export default function VideoPanel({
     right: 0,
     top: 110,
     bottom: 0,
-    padding: 14,
-    overflow: 'hidden',
+    padding: '16px 18px',
+    overflowY: 'auto',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
   };
 
-  const cardShell = (bg = 'rgba(10, 8, 6, 0.70)', fg = 'rgba(255,245,220,0.95)') => ({
+  const cardShell = (bg = 'rgba(10, 8, 6, 0.70)', fg = 'rgba(255,245,220,0.55)') => ({
     width: 'min(1100px, 94vw)',
     height: 'min(760px, 86vh)',
     borderRadius: 18,
@@ -206,48 +210,67 @@ export default function VideoPanel({
 
         <div style={bodyArea}>
           {!videoChoice ? (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', opacity: 0.9 }}>
-              <div style={{ maxWidth: 520 }}>
-                <div style={{ fontSize: 22, fontWeight: 950, marginBottom: 10 }}>Cinematic Player</div>
-                <div style={{ lineHeight: 1.7, opacity: 0.88 }}>
-                  Press <strong>Play Intro</strong> or <strong>Play Outro</strong> to begin.
-                </div>
+            <div style={{ width: '100%', textAlign: 'center', opacity: 0.9 }}>
+              <div style={{ fontSize: 22, fontWeight: 950, marginBottom: 10 }}>Cinematic Player</div>
+              <div style={{ lineHeight: 1.7, opacity: 0.88 }}>
+                Press <strong>Play Intro</strong> or <strong>Play Outro</strong> to begin.
               </div>
             </div>
           ) : (() => {
             const src = videoChoice === 'intro' ? INTRO_SRC : OUTRO_SRC;
             const isYouTube = src.includes('youtube.com/embed') || src.includes('youtu.be');
-            const sharedStyle = {
-              width: '100%',
+
+            // Ensure YouTube URL has controls enabled
+            const buildYtSrc = (raw) => {
+              try {
+                const u = new URL(raw);
+                u.searchParams.set('controls', '1');
+                u.searchParams.set('rel', '0');
+                u.searchParams.set('modestbranding', '1');
+                return u.toString();
+              } catch { return raw; }
+            };
+
+            const finalSrc = isYouTube ? buildYtSrc(src) : src;
+
+            const sharedMediaStyle = {
               borderRadius: 14,
               background: 'black',
               boxShadow: '0 24px 70px rgba(0,0,0,0.75)',
               border: '1px solid rgba(255,220,160,0.18)',
-              // YouTube needs a fixed aspect-ratio height with padding at bottom for controls
-              height: isYouTube ? 'calc(86vh - 240px)' : 'calc(86vh - 160px)',
-              maxHeight: isYouTube ? 'calc(86vh - 240px)' : 'calc(86vh - 160px)',
+              display: 'block',
             };
-            return (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {isYouTube ? (
+
+            return isYouTube ? (
+              // Padding-bottom trick: gives the iframe a true 16:9 box,
+              // never clipping the YouTube control bar at the bottom
+              <div style={{ width: '100%' }}>
+                <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', ...sharedMediaStyle, height: 0 }}>
                   <iframe
                     ref={videoRef}
-                    src={src}
-                    style={sharedStyle}
+                    src={finalSrc}
+                    style={{
+                      position: 'absolute',
+                      top: 0, left: 0,
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: 14,
+                      border: 'none',
+                    }}
                     allow="autoplay; fullscreen; picture-in-picture"
                     allowFullScreen
                     title={videoChoice}
                   />
-                ) : (
-                  <video
-                    ref={videoRef}
-                    controls
-                    style={sharedStyle}
-                    src={src}
-                    onEnded={() => {}}
-                  />
-                )}
+                </div>
               </div>
+            ) : (
+              <video
+                ref={videoRef}
+                controls
+                style={{ ...sharedMediaStyle, width: '100%', maxHeight: '100%', aspectRatio: '16 / 9' }}
+                src={finalSrc}
+                onEnded={() => {}}
+              />
             );
           })()}
         </div>
