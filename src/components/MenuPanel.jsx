@@ -703,6 +703,17 @@ updatedAt: p.updatedAt || null,
           70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.40)) drop-shadow(0 0 40px rgba(255,200,120,0.18)); }
           100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
         }
+
+        .jrpgShimmer:hover .cmd-title {
+          color: rgba(20,10,2,0.95) !important;
+          text-shadow: none !important;
+        }
+        .jrpgShimmer:hover .cmd-sub {
+          color: rgba(40,20,5,0.90) !important;
+        }
+        .jrpgShimmer:hover .cmd-chevron {
+          color: rgba(140,70,10,0.95) !important;
+        }
       `}</style>
       {/* PRESS TO START overlay */}
       {!menuStarted && (
@@ -849,12 +860,12 @@ updatedAt: p.updatedAt || null,
                           <Icon name={it.key} active={active} />
                         </div>
                         <div style={{ minWidth: 0 }}>
-                          <div style={cmdTitle(active)}>{it.label}</div>
-                          <div style={cmdSub}>{it.sub}</div>
+                          <div className="cmd-title" style={cmdTitle(active)}>{it.label}</div>
+                          <div className="cmd-sub" style={cmdSub}>{it.sub}</div>
                         </div>
                       </div>
 
-                      <div style={cmdChevron(active)}>›</div>
+                      <div className="cmd-chevron" style={cmdChevron(active)}>›</div>
                     </div>
                   );
                 })}
