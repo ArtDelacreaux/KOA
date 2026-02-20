@@ -579,7 +579,7 @@ export default function CharacterBook({
       ],
     },
     {
-      name: 'Castor', image: 'https://i.imgur.com/EFMhZGu.png',
+      name: 'Castor', image: '/characters/Castor.png',
       synopsis: 'Split from Williams mind, he knows more than he lets others on.',
       age: '21', height: "5'10\"", class: 'Warlock',
       lore: 'Born from fractured identity and dark magic, Castor now walks as his own person. Whimsical, kind, and deeply loyal to the few he trusts.',
