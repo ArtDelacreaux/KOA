@@ -1,0 +1,258 @@
+:root{
+  --koa-shell-bg: linear-gradient(180deg, rgba(12,14,20,0.85), rgba(8,10,14,0.92));
+  --koa-parchment-bg: rgba(255,248,235,0.92);
+  --koa-ink: #2b1a0f;
+  --koa-ink-2: #5a3a22;
+
+  --koa-cream: rgba(255,245,220,0.96);
+  --koa-cream-soft: rgba(255,245,220,0.72);
+  --koa-line: rgba(255,220,160,0.18);
+  --koa-line-strong: rgba(255,220,160,0.22);
+
+  --koa-gold-a: rgba(176,101,0,0.90);
+  --koa-gold-b: rgba(122,55,0,0.92);
+  --koa-danger-a: rgba(122,30,30,0.92);
+  --koa-danger-b: rgba(90,18,18,0.92);
+}
+
+/* ===== shared tiny UI ===== */
+.koa-btn{
+  border: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.koa-btn-gold{
+  background: linear-gradient(180deg, var(--koa-gold-a), var(--koa-gold-b));
+  color: var(--koa-cream);
+}
+
+.koa-btn-danger{
+  background: linear-gradient(180deg, var(--koa-danger-a), var(--koa-danger-b));
+  color: var(--koa-cream);
+}
+
+.koa-hudBtn{
+  position: absolute;
+  top: 18px;
+  z-index: 12;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--koa-line-strong);
+  background: linear-gradient(180deg, rgba(176,101,0,0.88), rgba(122,55,0,0.92));
+  color: var(--koa-cream);
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.35px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.55);
+  box-shadow: 0 14px 28px rgba(0,0,0,0.42);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(6px);
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.koa-mixPanel{
+  position: absolute;
+  top: 66px;
+  right: 18px;
+  z-index: 12;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.50);
+  color: rgba(255,245,220,0.95);
+  backdrop-filter: blur(6px);
+  width: 260px;
+  border: 1px solid rgba(255,220,160,0.14);
+}
+
+.koa-mixHeader{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.koa-mixTitle{
+  font-size: 13px;
+  opacity: 0.95;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  color: rgba(255,245,220,0.95);
+}
+
+.koa-iconBtn{
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.koa-iconBtn-light{
+  color: white;
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.koa-mixLabel{
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: rgba(255,245,220,0.92);
+}
+
+.koa-mixLabelTop{
+  margin-top: 10px;
+}
+
+.koa-rangeFull{ width: 100%; }
+
+/* ===== VideoPanel helpers ===== */
+.koa-videoHeaderBar{
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  padding: 12px 14px;
+  border-top-left-radius: 18px;
+  border-top-right-radius: 18px;
+  color: rgba(255,245,220,0.95);
+  background: linear-gradient(180deg, rgba(20,16,12,0.72), rgba(12,10,8,0.62));
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255,220,160,0.12);
+  box-shadow: 0 10px 18px rgba(0,0,0,0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.koa-videoBodyArea{
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 110px;
+  bottom: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.koa-videoBtnBase{
+  margin: 10px;
+  padding: 14px 28px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  background-color: #b06500;
+  color: white;
+  font-size: 1.1rem;
+  transition: all 0.25s ease;
+}
+
+.koa-videoBackBtn{
+  background-color: #7a1e1e;
+  box-shadow: 0 0 15px rgba(255,80,80,0.5);
+  margin: 0;
+}
+
+.koa-smallBtn{
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,220,160,0.18);
+  cursor: pointer;
+  font-weight: 900;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+  user-select: none;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,245,220,0.96);
+}
+
+.koa-smallBtnGold{
+  background: linear-gradient(180deg, rgba(176,101,0,0.88), rgba(122,55,0,0.92));
+}
+
+.koa-smallBtnRed{
+  background: linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92));
+}
+
+/* ===== Character Portrait Frame (painterly-friendly) =====
+   Usage:
+   <div className="koa-portraitFrame" style={{ '--koa-portrait-h':'190px' }}>
+     <div className="koa-portraitMatte">
+       <img className="koa-portraitImg" ... />
+       <div className="koa-portraitGlass" />
+     </div>
+   </div>
+*/
+.koa-portraitFrame{
+  --koa-portrait-h: 220px;
+  height: var(--koa-portrait-h);
+  width: 100%;
+  border-radius: 18px;
+  padding: 8px;
+
+  background: linear-gradient(180deg, rgba(255,220,160,0.16), rgba(0,0,0,0.08));
+  border: 1px solid rgba(255,220,160,0.18);
+  box-shadow: 0 16px 34px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.10);
+  box-sizing: border-box;
+}
+
+.koa-portraitMatte{
+  position: relative;
+  height: 100%;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+
+  background: rgba(255,248,235,0.85); /* parchment matte */
+  border: 1px solid rgba(0,0,0,0.10);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.22), inset 0 -12px 18px rgba(0,0,0,0.12);
+  box-sizing: border-box;
+}
+
+.koa-portraitImg{
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  filter: saturate(1.02) contrast(1.02);
+}
+
+.koa-portraitGlass{
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 80% at 50% 10%, rgba(255,255,255,0.16), rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(0,0,0,0.10), rgba(0,0,0,0.00) 35%, rgba(0,0,0,0.12));
+  mix-blend-mode: soft-light;
+}
+
+
+/* ===== Global Title Logo ===== */
+.koa-titleWrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 0 18px 0;
+}
+
+.koa-titleLogo {
+  height: 110px;
+  width: auto;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 6px 16px rgba(0,0,0,0.55))
+    drop-shadow(0 0 12px rgba(255,180,80,0.25));
+  transition: transform 180ms ease;
+}
+
+.koa-titleLogo:hover {
+  transform: scale(1.03);
+}
