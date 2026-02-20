@@ -546,18 +546,17 @@ export default function CharacterBook({
         { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect." },
       ],
     },
-    {
-      name: 'Cerci', image: '/characters/Cerci.png',
-      synopsis: 'A dhampir walking between right and wrong.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
-      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with this group is one of the few anchors keeping her tied to hope.',
-      goals: 'Unknown',
+	{
+      name: 'Arlis', image: arlisImgA,
+      synopsis: 'A cunning and graceful adventurer.',
+      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
+      lore: 'A childhood friend thought lost, Arlis carries strong feelings and a sharp mind. Her path has always curved back toward William.',
+      goals: 'Stop the blight, and rid herself and William of their pact.',
       npcs: [
-        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—part, part reminder that she still lives in fear of a debt made many years ago." },
-        { name: 'The Fed Fang', relation: 'Old Gang', bio: 'It is said Cerci used to be a part of this gang before she met the group. They have shown nothing but ruthlessness and cruelty among the people.' },
+        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family that adopted her with expectations that never stop. Arlis learned early: appearances are armor.' },
       ],
     },
-    {
+	{
       name: 'Fen', image: '/characters/Fen.png',
       synopsis: 'A relentless warrior of iron will.',
       age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
@@ -568,17 +567,15 @@ export default function CharacterBook({
         { name: 'Idysis', relation: 'Folk Tale Legend', bio: 'A man told to the strongest tribe in the world spear as the bogeyman. Even the ghosts fear him.' },
       ],
     },
-    {
-      name: 'Arlis', image: arlisImgA,
-      synopsis: 'A cunning and graceful adventurer.',
-      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
-      lore: 'A childhood friend thought lost, Arlis carries strong feelings and a sharp mind. Her path has always curved back toward William.',
-      goals: 'Stop the blight, and rid herself and William of their pact.',
-      npcs: [
-        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family that adopted her with expectations that never stop. Arlis learned early: appearances are armor.' },
-      ],
+	{
+      name: "Von'Ghul", image: '/characters/Ghuli.png',
+      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
+      age: "Late 20's", height: "6'2\"", class: 'Artificer',
+      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
+      goals: 'Unknown',
+      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
     },
-    {
+	{
       name: 'Castor', image: '/characters/Castor.png',
       synopsis: 'Split from Williams mind, he knows more than he lets others on.',
       age: '21', height: "5'10\"", class: 'Warlock',
@@ -589,12 +586,15 @@ export default function CharacterBook({
       ],
     },
     {
-      name: "Von'Ghul", image: '/characters/Ghuli.png',
-      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
-      age: "Late 20's", height: "6'2\"", class: 'Artificer',
-      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
+      name: 'Cerci', image: '/characters/Cerci.png',
+      synopsis: 'A dhampir walking between right and wrong.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
+      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with this group is one of the few anchors keeping her tied to hope.',
       goals: 'Unknown',
-      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
+      npcs: [
+        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—part, part reminder that she still lives in fear of a debt made many years ago." },
+        { name: 'The Fed Fang', relation: 'Old Gang', bio: 'It is said Cerci used to be a part of this gang before she met the group. They have shown nothing but ruthlessness and cruelty among the people.' },
+      ],
     },
     {
       name: 'Jasper Delaney',
