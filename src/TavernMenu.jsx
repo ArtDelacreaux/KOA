@@ -100,7 +100,7 @@ export default function TavernMenu() {
   // ✅ anti-machinegun hover
   const lastHoverAtRef = useRef(0);
 
-  const INTRO_SRC = '/intro.mp4';
+  const INTRO_SRC = 'https://www.youtube.com/embed/x_shzgJZUwU?autoplay=1&controls=0&loop=1&playlist=x_shzgJZUwU&modestbranding=1&rel=0';
   const OUTRO_SRC = '/outro.mp4';
 
   /* ================= HELPERS ================= */
