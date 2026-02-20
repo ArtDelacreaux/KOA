@@ -7,7 +7,7 @@ import CampaignHub from './components/CampaignHub';
 import CharacterBook from './components/CharacterBook';
 import VideoPanel from './components/VideoPanel';
 
-import background from './assets/Background.jpeg';
+import background from './assets/background.jpeg';
 import tavernMusic from './assets/Music.mp3';
 import fireCrackle from './assets/fire_crackle.mp3';
 import pageFlip from './assets/PageFlip.mp3';
