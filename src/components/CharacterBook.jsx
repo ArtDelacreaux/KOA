@@ -365,88 +365,6 @@ export default function CharacterBook({
     try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch {}
   }, [worldNpcs]);
 
-  /* ---------- Editable character data (lore, goals, npcs) ---------- */
-  const LS_CHAR_DATA = 'koa:chardata:v1';
-
-  const [charData, setCharData] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_CHAR_DATA);
-      return raw ? JSON.parse(raw) : {};
-    } catch { return {}; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem(LS_CHAR_DATA, JSON.stringify(charData)); } catch {}
-  }, [charData]);
-
-  const getCharField = (charName, field, fallback = '') => {
-    return charData?.[charName]?.[field] ?? fallback;
-  };
-
-  const setCharField = (charName, field, value) => {
-    setCharData((prev) => ({
-      ...prev,
-      [charName]: { ...(prev?.[charName] || {}), [field]: value },
-    }));
-  };
-
-  // Per-character NPCs (overrides static list if set)
-  const getCharNpcs = (charName, staticNpcs) => {
-    if (charData?.[charName]?.npcs !== undefined) return charData[charName].npcs;
-    return staticNpcs || [];
-  };
-
-  const setCharNpcs = (charName, npcs) => {
-    setCharData((prev) => ({
-      ...prev,
-      [charName]: { ...(prev?.[charName] || {}), npcs },
-    }));
-  };
-
-  // Edit mode for lore/goals on detail page
-  const [detailEditMode, setDetailEditMode] = useState(false);
-
-  // World NPC detail view
-  const [viewingWorldNpc, setViewingWorldNpc] = useState(null);
-
-  // NPC add form state
-  const [npcAddOpen, setNpcAddOpen] = useState(false);
-  const [npcEditMode, setNpcEditMode] = useState(false);
-  const [npcAddDraft, setNpcAddDraft] = useState({ name: '', relation: '', bio: '', image: '' });
-
-  const addCharNpc = (charName, staticNpcs) => {
-    const name = (npcAddDraft.name || '').trim();
-    if (!name) return;
-    const current = getCharNpcs(charName, staticNpcs);
-    setCharNpcs(charName, [...current, {
-      id: newId(),
-      name,
-      relation: (npcAddDraft.relation || '').trim(),
-      bio: (npcAddDraft.bio || '').trim(),
-      image: npcAddDraft.image || '',
-    }]);
-    setNpcAddDraft({ name: '', relation: '', bio: '', image: '' });
-    setNpcAddOpen(false);
-  };
-
-  const deleteCharNpc = (charName, staticNpcs, npcToDelete) => {
-    // Migrate static NPCs into charData if not yet stored, assigning IDs to any that lack them
-    const current = getCharNpcs(charName, staticNpcs).map((n) => ({
-      ...n,
-      id: n.id || newId(),
-    }));
-    const targetId = typeof npcToDelete === 'string' ? npcToDelete : (npcToDelete?.id || null);
-    let next;
-    if (targetId) {
-      next = current.filter((n) => n.id !== targetId);
-    } else {
-      // Last resort: filter by name match
-      const targetName = npcToDelete?.name || '';
-      next = current.filter((n) => n.name !== targetName);
-    }
-    setCharNpcs(charName, next);
-  };
-
   const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
   const [npcFilterFaction, setNpcFilterFaction] = useState('All');
@@ -480,17 +398,17 @@ export default function CharacterBook({
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
-  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', summary: '', bio: '', image: '' });
+  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
 
   const openAddWorldNpc = () => {
     setEditingWorldNpcId(null);
-    setWorldNpcDraft({ name: '', faction: '', location: '', summary: '', bio: '', image: '' });
+    setWorldNpcDraft({ name: '', faction: '', location: '', bio: '' });
     setWorldNpcModalOpen(true);
   };
 
   const openEditWorldNpc = (npc) => {
     setEditingWorldNpcId(npc.id);
-    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', summary: npc.summary || '', bio: npc.bio || '', image: npc.image || '' });
+    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '' });
     setWorldNpcModalOpen(true);
   };
 
@@ -502,24 +420,19 @@ export default function CharacterBook({
         id: newId(), name,
         faction: (worldNpcDraft.faction || '').trim(),
         location: (worldNpcDraft.location || '').trim(),
-        summary: (worldNpcDraft.summary || '').trim(),
         bio: (worldNpcDraft.bio || '').trim(),
-        image: worldNpcDraft.image || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
       setWorldNpcs((prev) => [npc, ...(prev || [])]);
     } else {
-      const updated = { faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), summary: (worldNpcDraft.summary || '').trim(), bio: (worldNpcDraft.bio || '').trim(), image: worldNpcDraft.image || '', updatedAt: new Date().toISOString() };
       setWorldNpcs((prev) =>
         (prev || []).map((n) =>
-          n.id === editingWorldNpcId ? { ...n, name, ...updated } : n
+          n.id === editingWorldNpcId
+            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), updatedAt: new Date().toISOString() }
+            : n
         )
       );
-      // Update the detail view if we're currently viewing this NPC
-      if (viewingWorldNpc?.id === editingWorldNpcId) {
-        setViewingWorldNpc((prev) => ({ ...prev, name, ...updated }));
-      }
     }
     setWorldNpcModalOpen(false);
     setEditingWorldNpcId(null);
@@ -536,7 +449,7 @@ export default function CharacterBook({
       name: 'William',
       image: '/characters/Will.png',
       synopsis: 'A warlock bound to shadow and fate.',
-      age: '22', height: "5'11\"", class: 'Warlock, Paladin',
+      age: '22', height: "5'11\"", class: 'Fiend Warlock',
       lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
       goals: 'Protect those he loves and uncover the truth behind his cursed power.',
       npcs: [
@@ -546,28 +459,51 @@ export default function CharacterBook({
         { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect." },
       ],
     },
-	{
-      name: 'Arlis', image: arlisImgA,
-      synopsis: 'A cunning and graceful adventurer.',
-      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
-      lore: 'A childhood friend thought lost, Arlis carries strong feelings and a sharp mind. Her path has always curved back toward William.',
-      goals: 'Stop the blight, and rid herself and William of their pact.',
+    {
+      name: 'Cerci', image: '/characters/Cerci.png',
+      synopsis: 'A dhampir walking between night and dawn.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
+      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
+      goals: 'Find belonging beyond the shadows of her past.',
       npcs: [
-        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family that adopted her with expectations that never stop. Arlis learned early: appearances are armor.' },
+        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
+        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
       ],
     },
-	{
+    {
       name: 'Fen', image: '/characters/Fen.png',
       synopsis: 'A relentless warrior of iron will.',
       age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
-      lore: 'Blunt, fierce, and stubborn, Fen masks deep care with fumbled words and unstoppable fury in battle.',
+      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
       goals: 'Protect the party at any cost.',
       npcs: [
-        { name: 'UkValee', relation: 'Former Tribe', bio: 'The innermost and feared tribe in the world spear. Fen was outcasted after she failed to meet cruel traditions.' },
-        { name: 'Idysis', relation: 'Folk Tale Legend', bio: 'A man told to the strongest tribe in the world spear as the bogeyman. Even the ghosts fear him.' },
+        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
+        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
       ],
     },
-	{
+    {
+      name: 'Arlis', image: arlisImgA,
+      synopsis: 'A cunning and graceful adventurer.',
+      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
+      lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
+      goals: 'Reveal the truth of her heart—and survive the journey.',
+      npcs: [
+        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.' },
+        { name: 'Jasper Delancey', relation: 'Childhood Friend (Cover Story)', bio: 'Their parents think they\'re courting. In reality: a mutually useful disguise with complicated edges.' },
+      ],
+    },
+    {
+      name: 'Castor', image: 'https://i.imgur.com/EFMhZGu.png',
+      synopsis: 'Split from Williams mind, he knows more than he lets others on.',
+      age: '21', height: "5'10\"", class: 'Warlock',
+      lore: 'Born from fractured identity and dark magic, Castor walks as his own person—protective, intense, and deeply loyal to the few he trusts.',
+      goals: 'Protect his friends and prove he deserves to exist.',
+      npcs: [
+        { name: 'Vykell', relation: 'Mentor (Monster Hunter)', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
+        { name: "Von'Ghul", relation: 'Brother-in-Arms', bio: 'A wary guardian with a soft spot he pretends doesn\'t exist. He\'s watching for the darkness to bite.' },
+      ],
+    },
+    {
       name: "Von'Ghul", image: '/characters/Ghuli.png',
       synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
       age: "Late 20's", height: "6'2\"", class: 'Artificer',
@@ -575,45 +511,36 @@ export default function CharacterBook({
       goals: 'Unknown',
       npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
     },
-	{
-      name: 'Castor', image: '/characters/Castor.png',
-      synopsis: 'Split from Williams mind, he knows more than he lets others on.',
-      age: '21', height: "5'10\"", class: 'Warlock',
-      lore: 'Born from fractured identity and dark magic, Castor now walks as his own person. Whimsical, kind, and deeply loyal to the few he trusts.',
-      goals: 'Protect his friends and prove he deserves to exist.',
-      npcs: [
-        { name: 'Vykell', relation: 'Mentor?', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons in the swamp and dropped him off in Notriq.' },
-      ],
-    },
-    {
-      name: 'Cerci', image: '/characters/Cerci.png',
-      synopsis: 'A dhampir walking between right and wrong.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
-      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with this group is one of the few anchors keeping her tied to hope.',
-      goals: 'Unknown',
-      npcs: [
-        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—part, part reminder that she still lives in fear of a debt made many years ago." },
-        { name: 'The Fed Fang', relation: 'Old Gang', bio: 'It is said Cerci used to be a part of this gang before she met the group. They have shown nothing but ruthlessness and cruelty among the people.' },
-      ],
-    },
-    {
+	  {
       name: 'Jasper Delaney',
       image: '/characters/Jasper.png',
       synopsis: 'A cleric hailing from the Golden Isles.',
-      age: '31',
-      height: "6'2\"",
+      age: '',
+      height: '',
       class: 'Cleric',
-      lore: 'Joined the group after they already arrived in Avalon, was previously in the war as a combat healer.',
-      goals: 'Unknown',
+      lore: '',
+      goals: '',
       npcs: [],
     },
+    {
+      name: 'DM',
+      image: '/characters/DM.png',
+      synopsis: 'One Who Rules All',
+      age: '??',
+      height: '??',
+      class: 'Everything',
+      lore: 'An omnipotent god that creates and destroys at will. Able to displace time and remove it completely.',
+      goals: 'World Destruction',
+      npcs: [],
+    },
+  
     {
       name: 'Thryvaris', image: '/characters/3V.png',
       synopsis: 'A mysterious mage with that lives in a cave.',
       age: 'Unknown', height: "6'1\"", class: 'Sorcerer',
-      lore: 'Little is known of Thryvaris beyond his departure from the University and his love for painting.',
-      goals: 'To live without worry.',
-      npcs: [{ name: 'Mezzerack', relation: 'Ex-Professor', bio: 'A man that was part of the Avalon University, who had a hand in ousting Thryvaris.' }],
+      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
+      goals: 'Pursue truths lost to time.',
+      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
     },
   ];
 
@@ -625,7 +552,7 @@ export default function CharacterBook({
   const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
   const showRelationsTab = !!selectedChar && (charView === 'relations' || charView === 'npc' || charView === 'detail');
   const showNpcTab = !!selectedNpc;
-  const showWorldNpcTab = charView === 'worldnpcs' || charView === 'worldnpcdetail';
+  const showWorldNpcTab = charView === 'worldnpcs';
 
   return (
     <ShellLayout active={panelType === 'characters'}>
@@ -699,7 +626,7 @@ export default function CharacterBook({
               Adventurers
             </span>
 
-            <span style={tabButtonStyle(charView === 'worldnpcs' || charView === 'worldnpcdetail')} onMouseDown={navClick}
+            <span style={tabButtonStyle(charView === 'worldnpcs')} onMouseDown={navClick}
               onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
               role="button" tabIndex={0}>
               World NPCs
@@ -714,7 +641,7 @@ export default function CharacterBook({
 
             {showRelationsTab && (
               <span style={tabButtonStyle(charView === 'relations')} onMouseDown={navClick}
-                onClick={() => { setSelectedNpc(null); setCharView('relations'); setNpcEditMode(false); setNpcAddOpen(false); }} role="button" tabIndex={0}>
+                onClick={() => { setSelectedNpc(null); setCharView('relations'); }} role="button" tabIndex={0}>
                 NPCs
               </span>
             )}
@@ -752,7 +679,7 @@ export default function CharacterBook({
                   className="cb-card-hover"
                   style={{ ...charGridCard, transition: 'all 0.22s ease' }}
                   onMouseDown={navClick}
-                  onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); setDetailEditMode(false); }}
+                  onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
                   onMouseEnter={() => setHoveredCharName(char.name)}
                   onMouseLeave={() => setHoveredCharName(null)}
                 >
@@ -765,8 +692,8 @@ export default function CharacterBook({
             </div>
           )}
 
-          {/* WORLD NPCs LIST */}
-          {charView === 'worldnpcs' && (
+          {/* WORLD NPCs */}
+          {showWorldNpcTab && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
               <div style={{ ...lightCard, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div>
@@ -815,97 +742,28 @@ export default function CharacterBook({
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {filteredWorldNpcs.map((n) => (
-                    <div key={n.id} className="cb-npc-hover" style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
-                      onClick={() => { setViewingWorldNpc(n); setCharView('worldnpcdetail'); }}>
-                      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                        {/* Portrait thumbnail */}
-                        <div style={{
-                          width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: n.image ? `url(${n.image}) center/cover` : 'rgba(0,0,0,0.30)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                        }}>
-                          {!n.image && <span style={{ opacity: 0.35, fontSize: 18 }}>👤</span>}
+                    <div key={n.id} style={darkCard}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                            Faction: {(n.faction || '').trim() || '—'}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                            Location: {(n.location || '').trim() || '—'}
+                          </span>
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-                            <div>
-                              <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
-                              {n.summary && <div style={{ fontSize: 12, opacity: 0.72, marginTop: 3, color: THEME.creamSoft, fontStyle: 'italic' }}>{n.summary}</div>}
-                            </div>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                                {(n.faction || '').trim() || '—'}
-                              </span>
-                              <span style={{ fontSize: 11, opacity: 0.45, color: THEME.creamSoft }}>·</span>
-                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                                {(n.location || '').trim() || '—'}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: 8, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
-                            <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => openEditWorldNpc(n)}>✎ Edit</button>
-                            <button style={{ ...tinyBtn, border: '1px solid rgba(255,160,160,0.22)', color: 'rgba(255,160,160,0.85)' }}
-                              onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => deleteWorldNpc(n.id)}>🗑 Delete</button>
-                          </div>
-                        </div>
+                      </div>
+                      {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => openEditWorldNpc(n)}>✎ Edit</button>
+                        <button style={{ ...tinyBtn, border: '1px solid rgba(255,160,160,0.22)', color: 'rgba(255,160,160,0.85)' }}
+                          onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => deleteWorldNpc(n.id)}>🗑 Delete</button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* WORLD NPC DETAIL — rendered inline only when that view is active */}
-          {charView === 'worldnpcdetail' && viewingWorldNpc && (
-            <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
-              {/* Left: portrait + meta */}
-              <div style={darkCard}>
-                <div style={{
-                  width: '100%', aspectRatio: '1', borderRadius: 14,
-                  background: viewingWorldNpc.image ? `url(${viewingWorldNpc.image}) center/cover` : 'rgba(0,0,0,0.35)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: `1px solid ${THEME.lineSoft}`,
-                  boxShadow: '0 14px 36px rgba(0,0,0,0.55)',
-                  marginBottom: 14, overflow: 'hidden',
-                }}>
-                  {!viewingWorldNpc.image && <span style={{ opacity: 0.25, fontSize: 52 }}>👤</span>}
-                </div>
-                <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{viewingWorldNpc.name}</div>
-                {viewingWorldNpc.summary && <div style={{ marginTop: 5, opacity: 0.75, fontStyle: 'italic', fontSize: 12, color: THEME.creamSoft, lineHeight: 1.5 }}>{viewingWorldNpc.summary}</div>}
-                <div style={divider} />
-                {[['Faction', viewingWorldNpc.faction], ['Location', viewingWorldNpc.location]].map(([k, v]) => v ? (
-                  <div key={k} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.60, color: THEME.creamSoft, letterSpacing: 0.45 }}>{k}</div>
-                    <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2, fontSize: 13 }}>{v}</div>
-                  </div>
-                ) : null)}
-                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
-                  <button style={{ ...tinyBtn, flex: 1, textAlign: 'center', justifyContent: 'center' }} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                    onClick={() => openEditWorldNpc(viewingWorldNpc)}>✎ Edit</button>
-                </div>
-              </div>
-
-              {/* Right: bio */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={lightCard}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 14 }}>
-                    <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Bio & Notes</div>
-                    <button style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
-                      onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
-                      onClick={() => { setCharView('worldnpcs'); setViewingWorldNpc(null); }}>
-                      ← Back to Codex
-                    </button>
-                  </div>
-                  <div style={divider} />
-                  {viewingWorldNpc.bio
-                    ? <div style={{ opacity: 0.88, lineHeight: 1.75, fontSize: 13.5, color: THEME.creamSoft }}>{viewingWorldNpc.bio}</div>
-                    : <div style={{ opacity: 0.45, fontStyle: 'italic', fontSize: 13 }}>No bio written yet. Click Edit to add one.</div>
-                  }
-                </div>
-              </div>
             </div>
           )}
 
@@ -941,48 +799,13 @@ export default function CharacterBook({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <div style={darkCard}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Lore</div>
-                    <button
-                      style={{ ...tinyBtn, padding: '5px 11px', fontSize: 11, background: detailEditMode ? 'linear-gradient(180deg,rgba(176,101,0,0.50),rgba(122,55,0,0.55))' : undefined, border: detailEditMode ? `1px solid ${THEME.line}` : undefined }}
-                      onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                      onClick={() => setDetailEditMode((v) => !v)}
-                    >
-                      {detailEditMode ? '✓ Done' : '✎ Edit'}
-                    </button>
-                  </div>
-                  {detailEditMode ? (
-                    <textarea
-                      value={getCharField(selectedChar.name, 'lore', selectedChar.lore)}
-                      onChange={(e) => setCharField(selectedChar.name, 'lore', e.target.value)}
-                      placeholder="Write character lore…"
-                      rows={4}
-                      style={{ ...inputBase, resize: 'vertical', lineHeight: 1.65, minHeight: 80 }}
-                    />
-                  ) : (
-                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>
-                      {getCharField(selectedChar.name, 'lore', selectedChar.lore) || <em style={{ opacity: 0.5 }}>No lore written yet.</em>}
-                    </div>
-                  )}
+                  <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Lore</div>
+                  <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.lore}</div>
                 </div>
 
                 <div style={darkCard}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Current Goals</div>
-                  </div>
-                  {detailEditMode ? (
-                    <textarea
-                      value={getCharField(selectedChar.name, 'goals', selectedChar.goals)}
-                      onChange={(e) => setCharField(selectedChar.name, 'goals', e.target.value)}
-                      placeholder="Write character goals…"
-                      rows={2}
-                      style={{ ...inputBase, resize: 'vertical', lineHeight: 1.65, minHeight: 52 }}
-                    />
-                  ) : (
-                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>
-                      {getCharField(selectedChar.name, 'goals', selectedChar.goals) || <em style={{ opacity: 0.5 }}>No goals written yet.</em>}
-                    </div>
-                  )}
+                  <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Current Goals</div>
+                  <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.goals}</div>
                 </div>
 
                 <div style={darkCard}>
@@ -1054,162 +877,25 @@ export default function CharacterBook({
           {/* NPC RELATIONS LIST */}
           {charView === 'relations' && selectedChar && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                <div>
-                  <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
-                  <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft, marginTop: 2 }}>
-                    {getCharNpcs(selectedChar.name, selectedChar.npcs).length} entries
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  {/* Edit mode toggle */}
-                  <button
-                    style={{
-                      ...tinyBtn, padding: '7px 14px', fontSize: 12,
-                      background: npcEditMode
-                        ? 'linear-gradient(180deg, rgba(122,30,30,0.72), rgba(90,18,18,0.78))'
-                        : undefined,
-                      border: npcEditMode ? '1px solid rgba(255,160,160,0.28)' : `1px solid ${THEME.lineSoft}`,
-                      color: npcEditMode ? 'rgba(255,210,210,0.92)' : THEME.creamSoft,
-                    }}
-                    onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                    onClick={() => { setNpcEditMode((v) => !v); setNpcAddOpen(false); }}
-                  >
-                    {npcEditMode ? '✓ Done Editing' : '✎ Edit'}
-                  </button>
-                  {/* Add NPC — hidden in edit mode */}
-                  {!npcEditMode && (
-                    <button
-                      style={{ ...tinyBtn, padding: '7px 14px', fontSize: 12, border: npcAddOpen ? '1px solid rgba(255,160,160,0.30)' : `1px solid ${THEME.line}` }}
-                      onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                      onClick={() => { setNpcAddOpen((v) => !v); setNpcAddDraft({ name: '', relation: '', bio: '', image: '' }); }}
-                    >
-                      {npcAddOpen ? '✕ Cancel' : '+ Add NPC'}
-                    </button>
-                  )}
-                </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 12 }}>
+                <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
+                <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{(selectedChar.npcs || []).length} entries</div>
               </div>
 
-              {/* Inline add form */}
-              {npcAddOpen && (
-                <div style={{ ...darkCard, marginBottom: 12, border: `1px solid ${THEME.line}` }}>
-                  {/* Portrait upload row */}
-                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', marginBottom: 12 }}>
-                    <div style={{
-                      width: 64, height: 64, borderRadius: 12, flexShrink: 0,
-                      border: `1px solid ${THEME.lineSoft}`,
-                      background: npcAddDraft.image ? `url(${npcAddDraft.image}) center/cover` : 'rgba(0,0,0,0.28)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-                    }}>
-                      {!npcAddDraft.image && <span style={{ opacity: 0.35, fontSize: 20 }}>👤</span>}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={fieldLabel}>Portrait (optional)</div>
-                      <label style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 7,
-                        marginTop: 5, padding: '7px 12px', borderRadius: 10,
-                        border: `1px solid ${THEME.lineSoft}`, background: 'rgba(255,245,220,0.05)',
-                        color: THEME.creamSoft, fontSize: 12, fontWeight: 900,
-                        cursor: 'pointer', fontFamily: fontStack,
-                      }}>
-                        📂 Upload
-                        <input type="file" accept="image/*" style={{ display: 'none' }}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setNpcAddDraft((d) => ({ ...d, image: ev.target.result }));
-                            reader.readAsDataURL(file);
-                          }} />
-                      </label>
-                      {npcAddDraft.image && (
-                        <button onClick={() => setNpcAddDraft((d) => ({ ...d, image: '' }))}
-                          style={{ display: 'block', marginTop: 5, background: 'none', border: 'none', color: 'rgba(255,160,160,0.70)', fontSize: 11, cursor: 'pointer', fontFamily: fontStack }}>
-                          ✕ Remove
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <div style={fieldLabel}>Name</div>
-                      <input value={npcAddDraft.name} onChange={(e) => setNpcAddDraft((d) => ({ ...d, name: e.target.value }))}
-                        placeholder="e.g. Lord Edric" style={inputBase} />
-                    </div>
-                    <div>
-                      <div style={fieldLabel}>Relation</div>
-                      <input value={npcAddDraft.relation} onChange={(e) => setNpcAddDraft((d) => ({ ...d, relation: e.target.value }))}
-                        placeholder="e.g. Mentor" style={inputBase} />
-                    </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={fieldLabel}>Bio</div>
-                      <textarea value={npcAddDraft.bio} onChange={(e) => setNpcAddDraft((d) => ({ ...d, bio: e.target.value }))}
-                        placeholder="Short summary…" rows={3}
-                        style={{ ...inputBase, resize: 'none', lineHeight: 1.5 }} />
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
-                      onClick={() => addCharNpc(selectedChar.name, selectedChar.npcs)}>
-                      Add NPC
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {getCharNpcs(selectedChar.name, selectedChar.npcs).map((npc, idx) => (
-                  <div key={npc.id || npc.name || idx}
-                    style={{ ...darkCard, transition: 'all 0.2s ease', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                    {/* Portrait thumbnail if present */}
-                    {npc.image && (
-                      <div style={{
-                        width: 46, height: 46, borderRadius: 10, flexShrink: 0,
-                        background: `url(${npc.image}) center/cover`,
-                        border: `1px solid ${THEME.lineSoft}`,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
-                      }} />
-                    )}
-                    {/* Main content — clickable to open bio (only when not in edit mode) */}
-                    <div
-                      style={{ flex: 1, minWidth: 0, cursor: npcEditMode ? 'default' : 'pointer' }}
-                      onClick={() => { if (!npcEditMode) { setSelectedNpc(npc); setCharView('npc'); } }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                        <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
-                        <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>{npc.relation}</div>
-                      </div>
-                      <div style={{ marginTop: 6, opacity: 0.82, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>{npc.bio}</div>
+                {(selectedChar.npcs || []).map((npc) => (
+                  <div key={npc.name} className="cb-npc-hover"
+                    style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    onMouseDown={navClick}
+                    onClick={() => { setSelectedNpc(npc); setCharView('npc'); }}
+                    role="button" tabIndex={0}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
+                      <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>{npc.relation}</div>
                     </div>
-                    {/* Delete — only shown in edit mode */}
-                    {npcEditMode && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); deleteCharNpc(selectedChar.name, selectedChar.npcs, npc); }}
-                        style={{
-                          flexShrink: 0, alignSelf: 'center',
-                          background: 'linear-gradient(180deg, rgba(122,30,30,0.82), rgba(90,18,18,0.88))',
-                          border: '1px solid rgba(255,160,160,0.22)',
-                          borderRadius: 10, cursor: 'pointer',
-                          color: 'rgba(255,210,210,0.92)',
-                          fontSize: 11, fontWeight: 900,
-                          padding: '6px 12px', lineHeight: 1,
-                          fontFamily: fontStack,
-                          letterSpacing: 0.3,
-                          transition: 'all 120ms ease',
-                          boxShadow: '0 4px 14px rgba(0,0,0,0.30)',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.filter = 'brightness(1.15)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.filter = 'none'; }}
-                      >Remove</button>
-                    )}
+                    <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>{npc.bio}</div>
                   </div>
                 ))}
-                {getCharNpcs(selectedChar.name, selectedChar.npcs).length === 0 && (
-                  <div style={{ ...darkCard, opacity: 0.7, textAlign: 'center' }}>
-                    No NPCs yet. Hit <strong>+ Add NPC</strong> above.
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -1263,7 +949,7 @@ export default function CharacterBook({
               fontFamily: fontStack,
               overflow: 'hidden',
               display: 'flex', flexDirection: 'column',
-              maxHeight: 'min(680px, 90vh)',
+              maxHeight: 'min(580px, 84vh)',
             }}>
               <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
                 <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
@@ -1275,47 +961,6 @@ export default function CharacterBook({
               </div>
 
               <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
-                {/* Portrait upload */}
-                <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                  {/* Preview */}
-                  <div style={{
-                    width: 80, height: 80, borderRadius: 14, flexShrink: 0,
-                    border: `1px solid ${THEME.lineSoft}`,
-                    background: worldNpcDraft.image ? `url(${worldNpcDraft.image}) center/cover` : 'rgba(0,0,0,0.25)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    overflow: 'hidden',
-                  }}>
-                    {!worldNpcDraft.image && <span style={{ opacity: 0.4, fontSize: 22 }}>👤</span>}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={fieldLabel}>Portrait (optional)</div>
-                    <label style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 7,
-                      marginTop: 6, padding: '8px 12px', borderRadius: 12,
-                      border: `1px solid ${THEME.lineSoft}`,
-                      background: 'rgba(255,245,220,0.06)',
-                      color: THEME.creamSoft, fontSize: 12, fontWeight: 900,
-                      cursor: 'pointer', fontFamily: fontStack,
-                    }}>
-                      📂 Upload Image
-                      <input type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = (ev) => setWorldNpcDraft((d) => ({ ...d, image: ev.target.result }));
-                          reader.readAsDataURL(file);
-                        }} />
-                    </label>
-                    {worldNpcDraft.image && (
-                      <button onClick={() => setWorldNpcDraft((d) => ({ ...d, image: '' }))}
-                        style={{ display: 'block', marginTop: 6, background: 'none', border: 'none', color: 'rgba(255,160,160,0.75)', fontSize: 11, cursor: 'pointer', fontFamily: fontStack }}>
-                        ✕ Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Name</div>
                   <input value={worldNpcDraft.name} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
@@ -1324,7 +969,7 @@ export default function CharacterBook({
                 <div>
                   <div style={fieldLabel}>Faction</div>
                   <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
-                    placeholder="e.g. Church of Amira" style={inputBase} />
+                    placeholder="e.g. Church of Amiras" style={inputBase} />
                 </div>
                 <div>
                   <div style={fieldLabel}>Location</div>
@@ -1332,15 +977,10 @@ export default function CharacterBook({
                     placeholder="e.g. Avalon" style={inputBase} />
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Short Summary <span style={{ opacity: 0.5, fontWeight: 700 }}>— shown in codex list</span></div>
-                  <input value={worldNpcDraft.summary} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, summary: e.target.value }))}
-                    placeholder="e.g. A grizzled harbor captain with a dark secret" style={inputBase} />
-                </div>
-                <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Bio / Notes</div>
                   <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
-                    placeholder="Short summary, personality, hook, secrets…" rows={4}
-                    style={{ ...inputBase, resize: 'none', minHeight: 90, maxHeight: 160, lineHeight: 1.5 }} />
+                    placeholder="Short summary, personality, hook, secrets…" rows={5}
+                    style={{ ...inputBase, resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
                 </div>
               </div>
 
