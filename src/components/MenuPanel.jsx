@@ -597,8 +597,8 @@ updatedAt: p.updatedAt || null,
   };
 
   const goLore = () => {
-    // no real panel yet; keep behavior as toast
-    alert('World Lore coming soon');
+    playNav();
+    cinematicNav('worldLore');
   };
 
   const items = useMemo(
@@ -630,9 +630,9 @@ updatedAt: p.updatedAt || null,
       {
         key: 'lore',
         label: 'World Lore',
-        sub: 'Codex & setting archive (coming soon).',
+        sub: 'Codex, maps, and setting archive.',
         title: 'World Lore',
-        desc: 'Scratchpad for future codex—kept useful until the feature ships.',
+        desc: 'Browse maps, scenes, and locations. Watch the world introduction video.',
         primary: { label: 'Open', onClick: goLore },
       },
     ],
@@ -1055,16 +1055,29 @@ updatedAt: p.updatedAt || null,
                 </div>
               )}
 
-              {/* Lore scratchpad */}
+              {/* Lore panel CTA */}
               {activeKey === 'lore' && (
-                <div style={cardMini}>
-                  <div style={label}>Lore Scratchpad</div>
-                  <textarea
-                    value={notes.lore}
-                    onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
-                    placeholder="Factions, locations, mysteries…"
-                    style={{ ...textarea, marginTop: 8 }}
-                  />
+                <div style={{ display: 'grid', gap: 14 }}>
+                  <div style={cardMini}>
+                    <div style={label}>World Lore Archive</div>
+                    <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.62)', fontSize: 12, fontWeight: 900, lineHeight: 1.6 }}>
+                      Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                      <button style={actionBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={goLore}>
+                        Open World Lore
+                      </button>
+                    </div>
+                  </div>
+                  <div style={cardMini}>
+                    <div style={label}>Lore Scratchpad</div>
+                    <textarea
+                      value={notes.lore}
+                      onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
+                      placeholder="Factions, locations, mysteries…"
+                      style={{ ...textarea, marginTop: 8 }}
+                    />
+                  </div>
                 </div>
               )}
 

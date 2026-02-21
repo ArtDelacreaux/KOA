@@ -6,6 +6,7 @@ import MenuPanel from './components/MenuPanel';
 import CampaignHub from './components/CampaignHub';
 import CharacterBook from './components/CharacterBook';
 import VideoPanel from './components/VideoPanel';
+import WorldLore from './components/WorldLore';
 
 import background from './assets/background.jpeg';
 import tavernBgVideo from './assets/BackgroundLoop.mp4';
@@ -501,6 +502,12 @@ export default function TavernMenu() {
             playSilent: silentClick,
             playHover,
           }}
+        />
+
+        <WorldLore
+          panelType={panelType}
+          cinematicNav={cinematicNav}
+          playNav={playNavClick}
         />
       </div>
     </div>
