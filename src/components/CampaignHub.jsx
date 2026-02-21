@@ -429,7 +429,7 @@ export default function CampaignHub(props) {
     outline: 'none',
     fontSize: 13,
     background: 'rgba(255,255,255,0.70)',
-    color: 'rgba(255,245,220,0.92)',
+    color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
   };
 
@@ -443,7 +443,7 @@ export default function CampaignHub(props) {
     fontSize: 12,
     fontWeight: 900,
     background: 'rgba(255,255,255,0.72)',
-    color: 'rgba(255,245,220,0.92)',
+    color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
   };
 
@@ -677,7 +677,7 @@ export default function CampaignHub(props) {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <div style={{ fontSize: 26, fontWeight: 950, lineHeight: 1 }}>Party Hub</div>
-              <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 900, letterSpacing: 1.2, textTransform: 'uppercase' }}>Tonight’s Table</div>
+              <div style={{ fontSize: 12, opacity: 0.8, fontWeight: 900, letterSpacing: 1.2, textTransform: 'uppercase' }}>The Envoy's Circle</div>
             </div>
 
             {/* ✅ FlipPage only here */}
@@ -727,7 +727,7 @@ export default function CampaignHub(props) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 950 }}>Quick Launch</div>
-                    <div style={{ opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Open the table tools. Start the vibe. Begin the chaos.</div>
+                    <div style={{ opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Don't forget your character sheet!</div>
                   </div>
 
                   <span
@@ -763,7 +763,7 @@ export default function CampaignHub(props) {
                       <div style={{ fontSize: 22 }}>🎬</div>
                       <div>
                         <div style={{ fontWeight: 950, fontSize: 14 }}>Watch Party</div>
-                        <div style={{ fontSize: 12, opacity: 0.78 }}>Music / ambience / cinematic clips</div>
+                        <div style={{ fontSize: 12, opacity: 0.78 }}>Music / Videos / Friends</div>
                       </div>
                     </div>
 
@@ -822,7 +822,7 @@ export default function CampaignHub(props) {
                       fontSize: 13,
                       lineHeight: 1.5,
                       background: 'rgba(255,255,255,0.70)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                       resize: 'none',
                     }}
@@ -1332,7 +1332,7 @@ export default function CampaignHub(props) {
                 background: 'rgba(255,245,220,0.96)',
                 boxShadow: '0 30px 90px rgba(0,0,0,0.65)',
                 border: '1px solid rgba(0,0,0,0.12)',
-                color: 'rgba(255,245,220,0.92)',
+                color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                 overflow: 'hidden',
                 display: 'flex',
@@ -1367,7 +1367,7 @@ export default function CampaignHub(props) {
                       fontSize: 13,
                       fontWeight: 700,
                       background: 'rgba(255,255,255,0.72)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                     }}
                   />
@@ -1388,7 +1388,7 @@ export default function CampaignHub(props) {
                       fontSize: 13,
                       fontWeight: 800,
                       background: 'rgba(255,255,255,0.72)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                       lineHeight: 1.2,
                     }}
@@ -1414,7 +1414,7 @@ export default function CampaignHub(props) {
                       outline: 'none',
                       fontSize: 13,
                       background: 'rgba(255,255,255,0.72)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                     }}
                   />
@@ -1435,7 +1435,7 @@ export default function CampaignHub(props) {
                       outline: 'none',
                       fontSize: 13,
                       background: 'rgba(255,255,255,0.72)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                     }}
                   />
@@ -1457,7 +1457,7 @@ export default function CampaignHub(props) {
                       outline: 'none',
                       fontSize: 13,
                       background: 'rgba(255,255,255,0.72)',
-                      color: 'rgba(255,245,220,0.92)',
+                      color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                       resize: 'none',
                       minHeight: 92,
@@ -1500,7 +1500,7 @@ export default function CampaignHub(props) {
                 background: 'rgba(255,245,220,0.96)',
                 boxShadow: '0 30px 90px rgba(0,0,0,0.65)',
                 border: '1px solid rgba(0,0,0,0.12)',
-                color: 'rgba(255,245,220,0.92)',
+                color: '#2b1a0f',
     fontFamily: "Cinzel, 'Trajan Pro', Georgia, serif",
                 overflow: 'hidden',
                 display: 'flex',
