@@ -1,13 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ShellLayout from './ShellLayout';
+import { DEFAULT_CHARACTERS } from './characters';
 
 export default function CharacterBook({
   panelType,
   cinematicNav,
-
-  // shared roster (from TavernMenu)
-  characters = [],
-  setCharacters = () => {},
 
   selectedChar,
   setSelectedChar,
@@ -82,48 +79,36 @@ export default function CharacterBook({
   };
 
   /* ---------- styles ---------- */
-  const cardShell = {
-    width: 'min(1100px, 94vw)',
-    height: 'min(760px, 86vh)',
-    borderRadius: 22,
-    background: 'linear-gradient(180deg, rgba(14,10,6,0.88), rgba(8,6,3,0.94))',
-    border: `1px solid ${THEME.line}`,
-    backdropFilter: 'blur(10px)',
-    fontFamily: fontStack,
-    boxShadow: '0 22px 60px rgba(0,0,0,0.52)',
-    position: 'relative',
-    overflow: 'hidden',
-    color: THEME.creamText,
-  };
-
-  const edgeGlow = {
-    position: 'absolute',
-    inset: -2,
-    borderRadius: 24,
-    pointerEvents: 'none',
-    background: 'linear-gradient(135deg, rgba(176,101,0,0.34), rgba(255,140,60,0.18), rgba(255,80,80,0.14))',
-    filter: 'blur(18px)',
-    opacity: 0.46,
-    zIndex: 0,
-  };
-
-  const headerBar = {
-    position: 'absolute',
+  const pageHeader = {
+    position: 'sticky',
     top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 5,
-    padding: '12px 18px',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    background: `linear-gradient(180deg, rgba(10,8,6,0.72), rgba(10,8,6,0.30))`,
-    backdropFilter: 'blur(14px)',
-    borderBottom: `1px solid ${THEME.line}`,
-    boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
+    zIndex: 40,
+    padding: '26px 36px 18px',
+    background: 'linear-gradient(180deg, rgba(8,5,2,0.92) 86%, rgba(8,5,2,0.55) 95%, transparent)',
+    borderBottom: `1px solid ${THEME.lineSoft}`,
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+  };
+
+  const contentWrap = {
+    width: 'min(1180px, 94vw)',
+    margin: '0 auto',
+    padding: '18px 0 44px',
+  };
+
+  const tabsBar = {
+    marginTop: 16,
+    borderRadius: 18,
+    border: `1px solid ${THEME.lineSoft}`,
+    background: 'linear-gradient(180deg, rgba(255,245,220,0.055), rgba(255,245,220,0.02))',
+    boxShadow: '0 16px 44px rgba(0,0,0,0.42)',
+    backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
+    padding: '10px 12px',
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'center',
     gap: 10,
-    fontFamily: fontStack,
+    flexWrap: 'wrap',
   };
 
   const tabButtonStyle = (active) => ({
@@ -198,7 +183,6 @@ export default function CharacterBook({
     e.currentTarget.style.filter = 'brightness(0.98)';
   };
 
-  // Content card (dark, like MenuPanel's cardMini but darker for legibility)
   const darkCard = {
     borderRadius: 18,
     border: `1px solid ${THEME.lineSoft}`,
@@ -209,7 +193,6 @@ export default function CharacterBook({
     color: THEME.creamText,
   };
 
-  // Slightly brighter card for variety
   const lightCard = {
     ...darkCard,
     background: 'linear-gradient(180deg, rgba(40,26,12,0.82), rgba(24,16,8,0.90))',
@@ -239,18 +222,31 @@ export default function CharacterBook({
     fontFamily: fontStack,
   };
 
-  const headerH = 114;
+  const sectionDivider = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    margin: '18px 0 18px',
+  };
+  const sectionLine = {
+    flex: 1,
+    height: 1,
+    background: 'linear-gradient(to right, transparent, rgba(255,220,160,0.22), transparent)',
+  };
+  const sectionLabel = {
+    fontFamily: fontStack,
+    fontSize: 11,
+    letterSpacing: '0.22em',
+    color: 'rgba(255,220,160,0.55)',
+    textTransform: 'uppercase',
+    userSelect: 'none',
+    whiteSpace: 'nowrap',
+  };
 
-  const bodyArea = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: headerH,
-    bottom: 0,
-    padding: 18,
-    overflowY: 'auto',
-    scrollbarWidth: 'thin',
-    scrollbarColor: 'rgba(176,101,0,0.45) transparent',
+  const contentWindow = {
+    width: '100%',
+    maxWidth: 1040,
+    margin: '0 auto',
   };
 
   const charGridCard = {
@@ -303,106 +299,51 @@ export default function CharacterBook({
   const [hoveredCharName, setHoveredCharName] = useState(null);
   const [arlisFrame, setArlisFrame] = useState(0);
 
+  // ✅ FIXED: useEffect now has proper cleanup return, component return is outside
   useEffect(() => {
-    if (hoveredCharName !== 'Arlis Ghoth') {
+    if (hoveredCharName !== 'Arlis') {
       setArlisFrame(0);
       return;
     }
     const id = window.setInterval(() => {
       setArlisFrame((f) => (f === 0 ? 1 : 0));
     }, 220);
-    return () => window.clearInterval(id);
+    return () => clearInterval(id);
   }, [hoveredCharName]);
 
-  const arlisImgA = '/characters/Arlis.png';
-  const arlisImgB = '/characters/Arlis2.png';
-
-  const getCharPortrait = (char) => {
-    if (char.name !== 'Arlis') return char.image;
-    if (hoveredCharName !== 'Arlis Ghoth') return arlisImgA;
-    return arlisFrame === 0 ? arlisImgA : arlisImgB;
-  };
-
-  /* ---------- Relationship value helpers ---------- */
-  const getRelObj = (fromName, toName) => {
-    const raw = relationshipValues?.[fromName]?.[toName];
-    if (raw == null) return { score: 50, note: '', editing: false };
-    if (typeof raw === 'number') return { score: raw, note: '', editing: false };
-    return {
-      score: typeof raw.score === 'number' ? raw.score : 50,
-      note: typeof raw.note === 'string' ? raw.note : '',
-      editing: !!raw.editing,
-    };
-  };
-
-  const setRelObj = (fromName, toName, patch) => {
-    setRelationshipValues((prev) => {
-      const cur = (() => {
-        const raw = prev?.[fromName]?.[toName];
-        if (raw == null) return { score: 50, note: '', editing: false };
-        if (typeof raw === 'number') return { score: raw, note: '', editing: false };
-        return {
-          score: typeof raw.score === 'number' ? raw.score : 50,
-          note: typeof raw.note === 'string' ? raw.note : '',
-          editing: !!raw.editing,
-        };
-      })();
-      const next = { ...cur, ...patch };
-      return {
-        ...prev,
-        [fromName]: { ...(prev?.[fromName] || {}), [toName]: next },
-      };
-    });
-  };
-
-  /* ---------- World NPC Codex ---------- */
-  const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
-
-  const [worldNpcs, setWorldNpcs] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_WORLD_NPCS);
-      return raw ? JSON.parse(raw) : [];
-    } catch { return []; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch {}
-  }, [worldNpcs]);
-
-  const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
+  /* ---------- World NPC state ---------- */
+  const [worldNpcs, setWorldNpcs] = useState([]);
+  const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
+  const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
+  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
   const [npcFilterFaction, setNpcFilterFaction] = useState('All');
   const [npcFilterLocation, setNpcFilterLocation] = useState('All');
   const [npcSearch, setNpcSearch] = useState('');
 
+  /* ---------- World NPC helpers ---------- */
   const factions = useMemo(() => {
-    const set = new Set();
-    (worldNpcs || []).forEach((n) => { const f = (n.faction || '').trim(); if (f) set.add(f); });
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    const vals = (worldNpcs || []).map(n => (n.faction || '').trim()).filter(Boolean);
+    return ['All', ...Array.from(new Set(vals)).sort()];
   }, [worldNpcs]);
 
   const locations = useMemo(() => {
-    const set = new Set();
-    (worldNpcs || []).forEach((n) => { const l = (n.location || '').trim(); if (l) set.add(l); });
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    const vals = (worldNpcs || []).map(n => (n.location || '').trim()).filter(Boolean);
+    return ['All', ...Array.from(new Set(vals)).sort()];
   }, [worldNpcs]);
 
   const filteredWorldNpcs = useMemo(() => {
-    const q = (npcSearch || '').trim().toLowerCase();
-    return (worldNpcs || [])
-      .filter((n) => npcFilterFaction === 'All' || (n.faction || '') === npcFilterFaction)
-      .filter((n) => npcFilterLocation === 'All' || (n.location || '') === npcFilterLocation)
-      .filter((n) => {
-        if (!q) return true;
-        const hay = `${n.name || ''} ${n.faction || ''} ${n.location || ''} ${n.bio || ''}`.toLowerCase();
-        return hay.includes(q);
-      })
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    return (worldNpcs || []).filter(n => {
+      const matchFaction  = npcFilterFaction  === 'All' || (n.faction  || '').trim() === npcFilterFaction;
+      const matchLocation = npcFilterLocation === 'All' || (n.location || '').trim() === npcFilterLocation;
+      const q = npcSearch.toLowerCase();
+      const matchSearch   = !q
+        || (n.name     || '').toLowerCase().includes(q)
+        || (n.faction  || '').toLowerCase().includes(q)
+        || (n.location || '').toLowerCase().includes(q)
+        || (n.bio      || '').toLowerCase().includes(q);
+      return matchFaction && matchLocation && matchSearch;
+    });
   }, [worldNpcs, npcFilterFaction, npcFilterLocation, npcSearch]);
-
-  const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
-  const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
-  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
 
   const openAddWorldNpc = () => {
     setEditingWorldNpcId(null);
@@ -410,60 +351,87 @@ export default function CharacterBook({
     setWorldNpcModalOpen(true);
   };
 
-  const openEditWorldNpc = (npc) => {
-    setEditingWorldNpcId(npc.id);
-    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '' });
+  const openEditWorldNpc = (n) => {
+    setEditingWorldNpcId(n.id);
+    setWorldNpcDraft({ name: n.name || '', faction: n.faction || '', location: n.location || '', bio: n.bio || '' });
     setWorldNpcModalOpen(true);
   };
 
   const saveWorldNpc = () => {
     const name = (worldNpcDraft.name || '').trim();
-    if (!name) { alert('NPC needs a name.'); return; }
-    if (!editingWorldNpcId) {
-      const npc = {
-        id: newId(), name,
-        faction: (worldNpcDraft.faction || '').trim(),
-        location: (worldNpcDraft.location || '').trim(),
-        bio: (worldNpcDraft.bio || '').trim(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setWorldNpcs((prev) => [npc, ...(prev || [])]);
+    if (!name) return;
+    if (editingWorldNpcId) {
+      setWorldNpcs(prev => prev.map(n => n.id === editingWorldNpcId
+        ? { ...n, ...worldNpcDraft, name }
+        : n
+      ));
     } else {
-      setWorldNpcs((prev) =>
-        (prev || []).map((n) =>
-          n.id === editingWorldNpcId
-            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), updatedAt: new Date().toISOString() }
-            : n
-        )
-      );
+      setWorldNpcs(prev => [...prev, { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...worldNpcDraft, name }]);
     }
     setWorldNpcModalOpen(false);
     setEditingWorldNpcId(null);
   };
 
   const deleteWorldNpc = (id) => {
-    if (!confirm('Delete this NPC?')) return;
-    setWorldNpcs((prev) => (prev || []).filter((n) => n.id !== id));
+    setWorldNpcs(prev => prev.filter(n => n.id !== id));
   };
-  /* ---------- Data: characters ---------- */
-  // NOTE: roster is now provided by TavernMenu via props (`characters`).
 
+  /* ---------- Tab visibility ---------- */
+  const showProfileTab   = !!selectedChar;
+  const showRelationsTab = !!(selectedChar && (selectedChar.npcs || []).length > 0);
+  const showNpcTab       = !!(selectedChar && selectedNpc);
+  const showWorldNpcTab  = charView === 'worldnpcs';
+
+  /* ---------- Character roster from shared data ---------- */
+  const characters = DEFAULT_CHARACTERS;
+
+  // Arlis animation images (using public paths)
+  const arlisImgA = '/characters/Arlis.png';
+  const arlisImgB = '/characters/Arlis2.png';
+
+  /* ---------- Relationship helpers ---------- */
   const partyMateNames = useMemo(() => {
     if (!selectedChar) return [];
-    return characters.map((c) => c.name).filter((n) => n !== selectedChar.name);
+    return characters.filter(c => c.name !== selectedChar.name).map(c => c.name);
   }, [selectedChar, characters]);
 
-  const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
-  const showRelationsTab = !!selectedChar && (charView === 'relations' || charView === 'npc' || charView === 'detail');
-  const showNpcTab = !!selectedNpc;
-  const showWorldNpcTab = charView === 'worldnpcs';
+  const getRelObj = (charName, otherName) => {
+    const key = [charName, otherName].sort().join('::');
+    return (relationshipValues || {})[key] || { score: 50, note: '', editing: false };
+  };
+
+  const setRelObj = (charName, otherName, patch) => {
+    const key = [charName, otherName].sort().join('::');
+    setRelationshipValues(prev => ({
+      ...prev,
+      [key]: { ...getRelObj(charName, otherName), ...patch },
+    }));
+  };
+
+  /* ---------- Portrait helper ---------- */
+  const getCharPortrait = (char) => char.image || '';
 
   return (
     <ShellLayout active={panelType === 'characters'}>
-      <div style={cardShell}>
+      <div
+        className="cb-scrollbar"
+        style={{
+          width: '100%',
+          height: '100%',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: '0 0 44px',
+          position: 'relative',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(176,101,0,0.4) transparent',
+        }}
+      >
         <style>{`
           ::placeholder { color: rgba(255,245,220,0.55); opacity: 1; }
+          .cb-scrollbar::-webkit-scrollbar { width: 6px; }
+          .cb-scrollbar::-webkit-scrollbar-track { background: transparent; }
+          .cb-scrollbar::-webkit-scrollbar-thumb { background: rgba(176,101,0,0.4); border-radius: 999px; }
+
           .cb-rng {
             width: 100%;
             height: 6px;
@@ -503,81 +471,129 @@ export default function CharacterBook({
           }
         `}</style>
 
-        {/* Edge glow */}
-        <div style={edgeGlow} />
-
-        {/* Header */}
-        <div style={headerBar}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1, color: THEME.creamText, textShadow: '0 2px 12px rgba(0,0,0,0.65)', letterSpacing: 0.6 }}>Character Book</div>
-              <div style={{ fontSize: 11, opacity: 0.7, fontWeight: 950, letterSpacing: 2, textTransform: 'uppercase', color: THEME.creamSoft }}>Codex</div>
-            </div>
-            <button
-              style={backButton}
-              onMouseEnter={btnHover}
-              onMouseLeave={btnLeave}
-              onMouseDown={(e) => { btnDown(e); navClick(); }}
-              onClick={() => cinematicNav('menu')}
-            >
-              ← Back to Menu
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            <span style={tabButtonStyle(charView === 'grid')} onMouseDown={navClick}
-              onClick={() => { setCharView('grid'); setSelectedChar(null); setSelectedNpc(null); }}
-              role="button" tabIndex={0}>
-              Adventurers
-            </span>
-
-            <span style={tabButtonStyle(charView === 'worldnpcs')} onMouseDown={navClick}
-              onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
-              role="button" tabIndex={0}>
-              World NPCs
-            </span>
-
-            {showProfileTab && (
-              <span style={tabButtonStyle(charView === 'detail')} onMouseDown={navClick}
-                onClick={() => setCharView('detail')} role="button" tabIndex={0}>
-                Profile
-              </span>
-            )}
-
-            {showRelationsTab && (
-              <span style={tabButtonStyle(charView === 'relations')} onMouseDown={navClick}
-                onClick={() => { setSelectedNpc(null); setCharView('relations'); }} role="button" tabIndex={0}>
-                NPCs
-              </span>
-            )}
-
-            {showNpcTab && (
-              <span style={tabButtonStyle(charView === 'npc')} onMouseDown={navClick}
-                onClick={() => setCharView('npc')} role="button" tabIndex={0}>
-                NPC Bio
-              </span>
-            )}
-
-            {selectedChar && (
+        {/* ── HEADER (matches WorldLore) ── */}
+        <div style={pageHeader}>
+          <div style={{ width: 'min(1180px, 94vw)', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
               <button
-                style={{ ...backButton, marginLeft: 'auto', padding: '8px 14px', fontSize: 12 }}
+                style={{ ...goldBtn, padding: '10px 16px', borderRadius: 16 }}
                 onMouseEnter={btnHover}
                 onMouseLeave={btnLeave}
                 onMouseDown={(e) => { btnDown(e); navClick(); }}
-                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('grid'); }}
+                onClick={() => cinematicNav('menu')}
               >
-                Back to Grid
+                ← Return
               </button>
-            )}
+            </div>
+
+            <div style={{ textAlign: 'center', lineHeight: 1.1 }}>
+              <div style={{ fontSize: 11, fontWeight: 950, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(255,220,160,0.62)' }}>
+                ✦ Adventurer Registry ✦
+              </div>
+              <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: 2.2, color: THEME.creamText, textShadow: '0 2px 14px rgba(0,0,0,0.65)' }}>
+                CHARACTER BOOK
+              </div>
+            </div>
+
+            <div />
+          </div>
+
+          <div style={{ width: 'min(1180px, 94vw)', margin: '0 auto' }}>
+            <div style={tabsBar}>
+              <span
+                style={tabButtonStyle(charView === 'grid')}
+                onMouseDown={navClick}
+                onClick={() => { setCharView('grid'); setSelectedChar(null); setSelectedNpc(null); }}
+                role="button"
+                tabIndex={0}
+              >
+                Adventurers
+              </span>
+
+              <span
+                style={tabButtonStyle(charView === 'worldnpcs')}
+                onMouseDown={navClick}
+                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
+                role="button"
+                tabIndex={0}
+              >
+                World NPCs
+              </span>
+
+              {showProfileTab && (
+                <span
+                  style={tabButtonStyle(charView === 'detail')}
+                  onMouseDown={navClick}
+                  onClick={() => setCharView('detail')}
+                  role="button"
+                  tabIndex={0}
+                >
+                  Profile
+                </span>
+              )}
+
+              {showRelationsTab && (
+                <span
+                  style={tabButtonStyle(charView === 'relations')}
+                  onMouseDown={navClick}
+                  onClick={() => { setSelectedNpc(null); setCharView('relations'); }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  NPCs
+                </span>
+              )}
+
+              {showNpcTab && (
+                <span
+                  style={tabButtonStyle(charView === 'npc')}
+                  onMouseDown={navClick}
+                  onClick={() => setCharView('npc')}
+                  role="button"
+                  tabIndex={0}
+                >
+                  NPC Bio
+                </span>
+              )}
+
+              {selectedChar && (
+                <button
+                  style={{ ...backButton, marginLeft: 'auto', padding: '8px 14px', fontSize: 12 }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={(e) => { btnDown(e); navClick(); }}
+                  onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('grid'); }}
+                >
+                  Back to Grid
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div style={bodyArea}>
+        {/* ── CONTENT ── */}
+        <div style={contentWrap}>
+          <div style={sectionDivider}>
+            <div style={sectionLine} />
+            <span style={sectionLabel}>
+              ◈&nbsp;
+              {charView === 'grid'
+                ? 'Adventurers'
+                : charView === 'worldnpcs'
+                  ? 'World NPC Codex'
+                  : charView === 'relations'
+                    ? 'NPCs'
+                    : charView === 'npc'
+                      ? 'NPC Bio'
+                      : 'Profile'}
+              &nbsp;◈
+            </span>
+            <div style={sectionLine} />
+          </div>
 
           {/* GRID */}
           {charView === 'grid' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
               {characters.map((char) => (
                 <div
                   key={char.name}
@@ -677,7 +693,7 @@ export default function CharacterBook({
             <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
               <div style={darkCard}>
                 <img
-                  src={selectedChar.name === 'Arlis Ghoth' ? (hoveredCharName === 'Arlis Ghoth' ? (arlisFrame === 0 ? arlisImgA : arlisImgB) : arlisImgA) : selectedChar.image}
+                  src={selectedChar.name === 'Arlis' ? (hoveredCharName === 'Arlis' ? (arlisFrame === 0 ? arlisImgA : arlisImgB) : arlisImgA) : selectedChar.image}
                   alt={selectedChar.name}
                   style={{ width: '100%', height: 310, objectFit: 'cover', borderRadius: 14, boxShadow: '0 14px 36px rgba(0,0,0,0.55)' }}
                   onMouseEnter={() => setHoveredCharName(selectedChar.name)}
@@ -719,16 +735,11 @@ export default function CharacterBook({
                       <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Party Relationship Tree</div>
                       <div style={{ opacity: 0.72, marginTop: 5, fontSize: 12, color: THEME.creamSoft }}>How {selectedChar.name} feels about the party.</div>
                     </div>
-                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                      onMouseDown={(e) => { btnDown(e); navClick(); }}
-                      onClick={() => { setSelectedNpc(null); setCharView('relations'); }}>
-                      View NPCs
-                    </button>
                   </div>
 
                   <div style={divider} />
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
                     {partyMateNames.length === 0 ? (
                       <div style={{ opacity: 0.72 }}>No other party members found.</div>
                     ) : partyMateNames.map((otherName) => {
@@ -736,27 +747,27 @@ export default function CharacterBook({
                       const { score: value, note, editing: isEditing } = rel;
                       return (
                         <div key={otherName} style={{
-                          padding: 12, borderRadius: 14,
+                          padding: 10, borderRadius: 14,
                           background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
                           border: `1px solid ${THEME.lineSoft}`,
                           boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
                         }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                            <div style={{ fontWeight: 950, fontSize: 13, color: THEME.creamText }}>{otherName}</div>
+                            <div style={{ fontWeight: 950, fontSize: 12.5, color: THEME.creamText }}>{otherName}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ fontWeight: 950, color: relTempColor(value), fontSize: 13 }}>{value}</div>
+                              <div style={{ fontWeight: 950, color: relTempColor(value), fontSize: 12.5 }}>{value}</div>
                               <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
                                 onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
                             </div>
                           </div>
 
                           <input className="cb-rng"
-                            style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 10 }}
+                            style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 8 }}
                             type="range" min={0} max={100} value={value}
                             onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
                           />
 
-                          <div style={{ marginTop: 10, opacity: 0.88, lineHeight: 1.45 }}>
+                          <div style={{ marginTop: 8, opacity: 0.88, lineHeight: 1.45, fontSize: 12.5 }}>
                             {isEditing ? (
                               <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
                                 onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
@@ -831,80 +842,163 @@ export default function CharacterBook({
               </div>
             </div>
           )}
-        </div>
 
-        {/* WORLD NPC MODAL */}
+        </div> {/* ✅ closes contentWrap */}
+
+        {/* WORLD NPC MODAL — inside scrollable div so position:absolute covers the panel */}
         {worldNpcModalOpen && (
           <div
             style={{
-              position: 'absolute', inset: 0, zIndex: 30,
+              position: 'absolute',
+              inset: 0,
+              zIndex: 30,
               background: 'rgba(0,0,0,0.70)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
               backdropFilter: 'blur(4px)',
             }}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcModalOpen(false); }}
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setWorldNpcModalOpen(false);
+            }}
           >
-            <div style={{
-              width: 'min(640px, 94vw)',
-              borderRadius: 22,
-              background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-              boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-              border: `1px solid ${THEME.line}`,
-              color: THEME.creamText,
-              fontFamily: fontStack,
-              overflow: 'hidden',
-              display: 'flex', flexDirection: 'column',
-              maxHeight: 'min(580px, 84vh)',
-            }}>
-              <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
-                <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
-                <button style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
-                  onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
-                  onClick={() => setWorldNpcModalOpen(false)}>
+            <div
+              style={{
+                width: 'min(640px, 94vw)',
+                borderRadius: 22,
+                background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+                boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+                border: `1px solid ${THEME.line}`,
+                color: THEME.creamText,
+                fontFamily: fontStack,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: 'min(580px, 84vh)',
+              }}
+            >
+              <div
+                style={{
+                  padding: '14px 18px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                  borderBottom: `1px solid ${THEME.lineSoft}`,
+                }}
+              >
+                <div style={{ fontSize: 17, fontWeight: 950 }}>
+                  {editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}
+                </div>
+                <button
+                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={btnDown}
+                  onClick={() => setWorldNpcModalOpen(false)}
+                >
                   Close
                 </button>
               </div>
 
-              <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
+              <div
+                style={{
+                  padding: '14px 18px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 12,
+                  alignContent: 'start',
+                  overflowY: 'auto',
+                }}
+              >
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Name</div>
-                  <input value={worldNpcDraft.name} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder="e.g. Captain Rell" style={{ ...inputBase, fontWeight: 900 }} />
+                  <input
+                    value={worldNpcDraft.name}
+                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="e.g. Captain Rell"
+                    style={{ ...inputBase, fontWeight: 900 }}
+                  />
                 </div>
+
                 <div>
                   <div style={fieldLabel}>Faction</div>
-                  <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
-                    placeholder="e.g. Church of Amiras" style={inputBase} />
+                  <input
+                    value={worldNpcDraft.faction}
+                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
+                    placeholder="e.g. Church of Amiras"
+                    style={inputBase}
+                  />
                 </div>
+
                 <div>
                   <div style={fieldLabel}>Location</div>
-                  <input value={worldNpcDraft.location} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
-                    placeholder="e.g. Avalon" style={inputBase} />
+                  <input
+                    value={worldNpcDraft.location}
+                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
+                    placeholder="e.g. Avalon"
+                    style={inputBase}
+                  />
                 </div>
+
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Bio / Notes</div>
-                  <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
-                    placeholder="Short summary, personality, hook, secrets…" rows={5}
-                    style={{ ...inputBase, resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
+                  <textarea
+                    value={worldNpcDraft.bio}
+                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
+                    placeholder="Short summary, personality, hook, secrets…"
+                    rows={5}
+                    style={{
+                      ...inputBase,
+                      resize: 'none',
+                      minHeight: 110,
+                      maxHeight: 180,
+                      lineHeight: 1.5,
+                    }}
+                  />
                 </div>
               </div>
 
-              <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
+              <div
+                style={{
+                  padding: '12px 18px',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 10,
+                  borderTop: `1px solid ${THEME.lineSoft}`,
+                }}
+              >
                 {editingWorldNpcId && (
-                  <button style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
-                    onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
-                    onClick={() => { setWorldNpcModalOpen(false); setEditingWorldNpcId(null); }}>
+                  <button
+                    style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                    onMouseEnter={btnHover}
+                    onMouseLeave={btnLeave}
+                    onMouseDown={btnDown}
+                    onClick={() => {
+                      setWorldNpcModalOpen(false);
+                      setEditingWorldNpcId(null);
+                    }}
+                  >
                     Cancel
                   </button>
                 )}
-                <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={saveWorldNpc}>
+
+                <button
+                  style={goldBtn}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={btnDown}
+                  onClick={saveWorldNpc}
+                >
                   {editingWorldNpcId ? 'Save Changes' : 'Add NPC'}
                 </button>
               </div>
             </div>
           </div>
         )}
-      </div>
+
+      </div> {/* ✅ closes cb-scrollbar div */}
     </ShellLayout>
   );
 }

@@ -199,7 +199,7 @@ export default function VideoPanel({
                 fontWeight: 900,
               }}
             >
-              ✦ &nbsp; THEATER OF MEMORY &nbsp; ✦
+              ✦ &nbsp; Avalon Cinema &nbsp; ✦
             </div>
             <h1
               style={{
@@ -212,7 +212,7 @@ export default function VideoPanel({
                 textShadow: '0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
               }}
             >
-              CINEMATICS
+              THEATER
             </h1>
           </div>
 
