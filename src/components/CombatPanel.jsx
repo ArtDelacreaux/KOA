@@ -8,13 +8,13 @@ const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return N
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 const ADVENTURERS = [
-  { name: 'William Spicer',   role: 'Fiend Warlock',      ac: 15, hp: 40, maxHP: 40 },
-  { name: 'Arlis Ghoth',      role: 'Cleric',              ac: 17, hp: 38, maxHP: 38 },
-  { name: 'Thryvaris Bria',   role: 'Sorcerer',            ac: 14, hp: 32, maxHP: 32 },
-  { name: 'Fen',              role: 'Barbarian',           ac: 16, hp: 58, maxHP: 58 },
-  { name: "Von'Ghul",         role: 'Artificer',           ac: 18, hp: 44, maxHP: 44 },
-  { name: 'Castor',           role: 'Warlock',             ac: 15, hp: 36, maxHP: 36 },
-  { name: 'Cerci VonDonovon', role: 'Dhampir Spellblade',  ac: 16, hp: 42, maxHP: 42 },
+  { name: 'William Spicer',   role: 'Warlock',             ac: 15, hp: 115, maxHP: 115 },
+  { name: 'Arlis Ghoth',      role: 'Cleric',              ac: 17, hp: 38,  maxHP: 38 },
+  { name: 'Thryvaris Bria',   role: 'Sorcerer',            ac: 14, hp: 32,  maxHP: 32 },
+  { name: 'Fen',              role: 'Barbarian',           ac: 16, hp: 58,  maxHP: 58 },
+  { name: "Von'Ghul",         role: 'Artificer',           ac: 18, hp: 44,  maxHP: 44 },
+  { name: 'Castor',           role: 'Warlock',             ac: 15, hp: 36,  maxHP: 36 },
+  { name: 'Cerci VonDonovon', role: 'Monk',                ac: 16, hp: 42,  maxHP: 42 },
 ];
 
 // ── SVG silhouettes (inline, no external deps) ────────────────────────────
@@ -736,7 +736,7 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
         {/* ── HEADER ── */}
         <div style={{
           position:'absolute', left:PAD, right:PAD, top:PAD, height:HUD_H,
-          display:'grid', gridTemplateColumns:'200px 1fr 200px', alignItems:'center', gap:10,
+          display:'grid', gridTemplateColumns:'440px 1fr 200px', alignItems:'center', gap:10,
           padding:'0 14px', borderRadius:16, border:'1px solid rgba(255,220,160,0.09)',
           background:'linear-gradient(180deg,rgba(18,14,10,0.85),rgba(10,8,6,0.65))',
           backdropFilter:'blur(12px)', boxShadow:'0 12px 26px rgba(0,0,0,0.42)', zIndex:8,
@@ -749,7 +749,9 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
           </div>
 
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-            <div style={{
+            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); sortByInitiative(); }}>Sort</button>
+            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
+			<div style={{
               height:40, padding:'0 16px', borderRadius:999, border:'1px solid rgba(255,220,160,0.12)',
               background:'rgba(0,0,0,0.28)', color:'var(--koa-cream)',
               display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
@@ -757,9 +759,8 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
               <span style={{ color:'rgba(255,220,160,0.65)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.18em' }}>Round</span>
               <span style={{ fontSize:20, fontWeight:950 }}>{encounter.round}</span>
             </div>
-            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
             <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
-            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); sortByInitiative(); }}>Sort</button>
+            
             <button style={btn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); cinematicNav('menu'); }}>Back</button>
           </div>
           <div/>
@@ -775,23 +776,30 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
 
           {/* ── LEFT: Initiative list ── */}
           <div style={{ ...glass, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-            {/* Header — nowrap to prevent button cutoff */}
-            <div style={{
-              padding:'8px 8px', flexShrink:0,
-              borderBottom:'1px solid rgba(255,220,160,0.08)',
-              display:'flex', alignItems:'center', justifyContent:'space-between', gap:5,
-              flexWrap:'nowrap',
-            }}>
-              <div style={{ color:'rgba(255,245,220,0.78)', fontWeight:950, fontSize:11, letterSpacing:'0.10em', textTransform:'uppercase', userSelect:'none', whiteSpace:'nowrap' }}>
-                Initiative
-              </div>
-              {/* Buttons in a row that won't wrap or clip */}
-              <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                <button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                <button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
-              </div>
-            </div>
+            {/* Header — stack title + buttons so nothing gets clipped */}
+				<div style={{
+				  padding:'8px 8px', flexShrink:0,
+				  borderBottom:'1px solid rgba(255,220,160,0.08)',
+				  display:'flex', flexDirection:'column', gap:6,
+				}}>
+				  <div style={{
+					color:'rgba(255,245,220,0.78)',
+					fontWeight:950,
+					fontSize:11,
+					letterSpacing:'0.10em',
+					textTransform:'uppercase',
+					userSelect:'none',
+					whiteSpace:'nowrap',
+				  }}>
+					Initiative
+				  </div>
+
+				  <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+					<button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+					<button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+					<button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+				  </div>
+				</div>
 
             {/* Rows */}
             <div style={{ flex:1, overflowY:'auto', padding:'5px 6px', display:'flex', flexDirection:'column', gap:3 }}>
