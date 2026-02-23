@@ -459,29 +459,7 @@ export default function CharacterBook({
         { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect." },
       ],
     },
-    {
-      name: 'Cerci', image: '/characters/Cerci.png',
-      synopsis: 'A dhampir walking between night and dawn.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
-      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
-      goals: 'Find belonging beyond the shadows of her past.',
-      npcs: [
-        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
-        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
-      ],
-    },
-    {
-      name: 'Fen', image: '/characters/Fen.png',
-      synopsis: 'A relentless warrior of iron will.',
-      age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
-      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
-      goals: 'Protect the party at any cost.',
-      npcs: [
-        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
-        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
-      ],
-    },
-    {
+	{
       name: 'Arlis', image: arlisImgA,
       synopsis: 'A cunning and graceful adventurer.',
       age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
@@ -492,7 +470,36 @@ export default function CharacterBook({
         { name: 'Jasper Delancey', relation: 'Childhood Friend (Cover Story)', bio: 'Their parents think they\'re courting. In reality: a mutually useful disguise with complicated edges.' },
       ],
     },
-    {
+	{
+      name: 'Thryvaris', 
+	  image: '/characters/3V.png',
+      synopsis: 'A mysterious mage with that lives in a cave.',
+      age: 'Unknown', height: "6'1\"", 
+	  class: 'Sorcerer',
+      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
+      goals: 'Pursue truths lost to time.',
+      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
+    },
+	{
+      name: 'Fen', image: '/characters/Fen.png',
+      synopsis: 'A relentless warrior of iron will.',
+      age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
+      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
+      goals: 'Protect the party at any cost.',
+      npcs: [
+        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
+        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
+      ],
+    },
+	{
+      name: "Von'Ghul", image: '/characters/Ghuli.png',
+      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
+      age: "Late 20's", height: "6'2\"", class: 'Artificer',
+      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
+      goals: 'Unknown',
+      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
+    },
+	{
       name: 'Castor', image: '/characters/Castor.png',
       synopsis: 'Split from Williams mind, he knows more than he lets others on.',
       age: '21', height: "5'10\"", class: 'Warlock',
@@ -504,12 +511,15 @@ export default function CharacterBook({
       ],
     },
     {
-      name: "Von'Ghul", image: '/characters/Ghuli.png',
-      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
-      age: "Late 20's", height: "6'2\"", class: 'Artificer',
-      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
-      goals: 'Unknown',
-      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
+      name: 'Cerci', image: '/characters/Cerci.png',
+      synopsis: 'A dhampir walking between night and dawn.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
+      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
+      goals: 'Find belonging beyond the shadows of her past.',
+      npcs: [
+        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
+        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
+      ],
     },
 	  {
       name: 'Jasper Delaney',
@@ -532,15 +542,6 @@ export default function CharacterBook({
       lore: 'An omnipotent god that creates and destroys at will. Able to displace time and remove it completely.',
       goals: 'World Destruction',
       npcs: [],
-    },
-  
-    {
-      name: 'Thryvaris', image: '/characters/3V.png',
-      synopsis: 'A mysterious mage with that lives in a cave.',
-      age: 'Unknown', height: "6'1\"", class: 'Sorcerer',
-      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
-      goals: 'Pursue truths lost to time.',
-      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
     },
   ];
 
