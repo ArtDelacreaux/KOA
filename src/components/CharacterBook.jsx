@@ -446,9 +446,9 @@ export default function CharacterBook({
   /* ---------- Data: characters ---------- */
   const characters = [
     {
-      name: 'William',
+      name: 'William Spicer',
       image: '/characters/Will.png',
-      synopsis: 'A warlock bound to shadow and fate.',
+      synopsis: '.',
       age: '22', height: "5'11\"", class: 'Fiend Warlock',
       lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
       goals: 'Protect those he loves and uncover the truth behind his cursed power.',
@@ -460,7 +460,8 @@ export default function CharacterBook({
       ],
     },
 	{
-      name: 'Arlis', image: arlisImgA,
+      name: 'Arlis Ghoth', 
+	  image: arlisImgA,
       synopsis: 'A cunning and graceful adventurer.',
       age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
       lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
@@ -471,7 +472,7 @@ export default function CharacterBook({
       ],
     },
 	{
-      name: 'Thryvaris', 
+      name: 'Thryvaris Bria', 
 	  image: '/characters/3V.png',
       synopsis: 'A mysterious mage with that lives in a cave.',
       age: 'Unknown', height: "6'1\"", 
@@ -506,12 +507,12 @@ export default function CharacterBook({
       lore: 'Born from fractured identity and dark magic, Castor walks as his own person—protective, intense, and deeply loyal to the few he trusts.',
       goals: 'Protect his friends and prove he deserves to exist.',
       npcs: [
-        { name: 'Vykell', relation: 'Mentor (Monster Hunter)', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
-        { name: "Von'Ghul", relation: 'Brother-in-Arms', bio: 'A wary guardian with a soft spot he pretends doesn\'t exist. He\'s watching for the darkness to bite.' },
+        { name: 'Vykell', relation: 'Mentor', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
       ],
     },
     {
-      name: 'Cerci', image: '/characters/Cerci.png',
+      name: 'Cerci VonDonovon', 
+	  image: '/characters/Cerci.png',
       synopsis: 'A dhampir walking between night and dawn.',
       age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
       lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',

@@ -561,6 +561,20 @@ updatedAt: p.updatedAt || null,
       );
     }
 
+    if (name === 'combat') {
+      return (
+        <svg {...common}>
+          <path d="M20 4l-6 6" />
+          <path d="M14 10l-2-2" />
+          <path d="M10 14l2 2" />
+          <path d="M4 20l6-6" />
+          <path d="M8 8l8 8" />
+          <path d="M16 8l4-4" />
+          <path d="M8 16l-4 4" />
+        </svg>
+      );
+    }
+
     return (
       <svg {...common}>
         <path d="M4 19a2 2 0 0 0 2 2h12" />
@@ -576,6 +590,10 @@ updatedAt: p.updatedAt || null,
   const goCampaign = () => {
     playNav();
     cinematicNav('campaign');
+  };
+    const goCombat = () => {
+    playNav();
+    cinematicNav('combat');
   };
 
   const goCharacters = (view = 'grid') => {
@@ -601,6 +619,8 @@ updatedAt: p.updatedAt || null,
     cinematicNav('worldLore');
   };
 
+
+
   const items = useMemo(
     () => [
       {
@@ -610,6 +630,14 @@ updatedAt: p.updatedAt || null,
         title: 'Session Brief',
         desc: 'Keep the table oriented. Update these before you hit Continue.',
         primary: { label: 'Continue', onClick: goCampaign },
+      },
+	  {
+        key: 'combat',
+        label: 'Combat',
+        sub: 'Initiative, HP, slots, and statuses.',
+        title: 'Combat Tracker',
+        desc: 'Run encounters fast. Add/drop combatants mid-fight and track conditions.',
+        primary: { label: 'Open Combat Tracker', onClick: goCombat },
       },
       {
         key: 'characters',

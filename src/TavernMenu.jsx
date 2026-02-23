@@ -1,21 +1,24 @@
 // ===== TAVERN MENU — ROOT CONTROLLER (RESTORED FX + FIXED LAYOUT + NAV-ONLY SFX) =====
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 
+//Components Pages
 import AudioHUD from './components/AudioHUD';
 import MenuPanel from './components/MenuPanel';
 import CampaignHub from './components/CampaignHub';
 import CharacterBook from './components/CharacterBook';
 import VideoPanel from './components/VideoPanel';
 import WorldLore from './components/WorldLore';
+import CombatPanel from './components/CombatPanel';
 
+//Assets
 import background from './assets/background.jpeg';
 import tavernBgVideo from './assets/BackgroundLoop.mp4';
 import tavernMusic from './assets/music.mp3';
 import fireCrackle from './assets/fire_crackle.mp3';
-import pageFlip from './assets/PageFlip.mp3';
 import koaTitle from './assets/koaTitle.png';
 
 // ✅ SFX
+import pageFlip from './assets/PageFlip.mp3';
 import hoverSfx from './assets/Hover.mp3';
 import buttonSfx from './assets/Button.mp3';
 import menuOpenSfx from './assets/MenuOpen.mp3';
@@ -467,6 +470,12 @@ export default function TavernMenu() {
             playHover,
           }}
         />
+		<CombatPanel
+		    panelType={panelType}
+		    cinematicNav={cinematicNav}
+		    playNav={playNavClick}
+		    playHover={playHover}
+			/>
 
         <CharacterBook
           {...{
