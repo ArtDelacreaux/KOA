@@ -320,24 +320,51 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
         )}
       </div>
 
-      {/* Name tag */}
+      {/* Name tag + status */}
       <div style={{
-        background: isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.62)',
+        background: isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)',
         border: `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`,
-        backdropFilter: 'blur(8px)',
-        borderRadius: 8, padding: '2px 8px', zIndex: 3,
-        maxWidth: size + 20, textAlign: 'center',
+        backdropFilter: 'blur(10px)',
+        borderRadius: 8, padding: '3px 8px 4px', zIndex: 3,
+        maxWidth: size + 30, textAlign: 'center',
       }}>
         <div style={{
           color: c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)',
           fontWeight: 950, fontSize: 10, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: size + 10,
+          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: size + 20,
           textDecoration: c.dead ? 'line-through' : 'none',
         }}>{c.name}</div>
-        {/* Tiny HP bar under name */}
+        {/* HP bar */}
         <div style={{ height: 2, borderRadius: 999, background: 'rgba(255,255,255,0.10)', marginTop: 2, overflow: 'hidden', width: '100%' }}>
           <div style={{ height: '100%', width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct), borderRadius: 999 }} />
         </div>
+        {/* Status badges */}
+        {c.status && c.status.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center', marginTop: 3 }}>
+            {c.status.slice(0, 4).map(s => (
+              <span key={s} style={{
+                fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
+                padding: '1px 4px', borderRadius: 4,
+                background: 'rgba(180,120,20,0.35)',
+                border: '1px solid rgba(255,200,80,0.30)',
+                color: 'rgba(255,220,120,0.92)',
+                whiteSpace: 'nowrap',
+              }}>{s}</span>
+            ))}
+            {c.status.length > 4 && (
+              <span style={{ fontSize: 8, color: 'rgba(255,220,120,0.60)', fontWeight: 900 }}>+{c.status.length - 4}</span>
+            )}
+          </div>
+        )}
+        {/* Concentration indicator */}
+        {c.concentration && (
+          <div style={{
+            marginTop: 2, fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
+            color: 'rgba(160,200,255,0.85)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            maxWidth: size + 20,
+          }}>⚬ {c.concentration}</div>
+        )}
       </div>
 
       {/* Dead skull */}
@@ -515,7 +542,7 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
-  const pcDock = useMemo(() => combatants.filter(c => c.side === 'PC' || c.side === 'Ally'), [combatants]);
+  // pcDock removed — bottom cards replaced by battlefield tokens
 
   const sortByInitiative = () => {
     setEncounter(prev => {
@@ -648,7 +675,6 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
   };
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
-  const DOCK_H = 112;
   const HUD_H  = 60;
   const PAD    = 14;
 
@@ -739,11 +765,11 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
           <div/>
         </div>
 
-        {/* ── MAIN LAYOUT ── */}
+        {/* ── MAIN LAYOUT — battlefield fills all space below header ── */}
         <div style={{
           position:'absolute', left:PAD, right:PAD,
           top: PAD + HUD_H + 10,
-          bottom: PAD + DOCK_H + 12,
+          bottom: PAD,
           display:'grid', gridTemplateColumns:'250px 1fr', gap:12, zIndex:4, minHeight:0,
         }}>
 
@@ -851,84 +877,6 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
               playNav={playNav}
             />
           </div>
-        </div>
-
-        {/* ── FLOATING DOCK — truly transparent, cards float on battlefield ── */}
-        {/* Gradient scrim so cards read against the scene */}
-        <div style={{
-          position:'absolute', left:0, right:0, bottom:0,
-          height: DOCK_H + PAD + 60, pointerEvents:'none', zIndex:6,
-          background:'linear-gradient(to bottom,transparent 0%,rgba(0,0,0,0.55) 50%,rgba(0,0,0,0.75) 100%)',
-        }}/>
-
-        <div style={{
-          position:'absolute', left:PAD, right:PAD, bottom:PAD,
-          height:DOCK_H, zIndex:7,
-          display:'flex', gap:10, alignItems:'stretch',
-          overflowX:'auto', overflowY:'hidden',
-          // Hide scrollbar
-          msOverflowStyle:'none', scrollbarWidth:'none',
-        }}>
-          {pcDock.length === 0 ? (
-            <div style={{ color:'rgba(255,245,220,0.40)', fontWeight:900, fontSize:12, display:'flex', alignItems:'center', paddingLeft:4 }}>
-              Add PCs or Allies — they appear here as floating cards.
-            </div>
-          ) : pcDock.map(c => {
-            const isTarget = c.id === selectedId;
-            const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
-            const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
-            const pct = max > 0 ? (hp / max) * 100 : 0;
-
-            return (
-              <div key={c.id}
-                onMouseEnter={playHover}
-                onClick={() => { playNav(); openEditorFor(c.id); }}
-                title="Click to edit"
-                style={{
-                  minWidth:185, maxWidth:220, flex:'0 0 auto',
-                  height:'100%', borderRadius:14,
-                  border:`1px solid ${isTarget ? 'rgba(255,210,130,0.50)' : 'rgba(255,255,255,0.09)'}`,
-                  background: isTarget
-                    ? 'rgba(20,16,10,0.92)' : 'rgba(12,10,8,0.86)',
-                  backdropFilter:'blur(22px)',
-                  boxShadow: isTarget
-                    ? `0 10px 36px rgba(0,0,0,0.75),0 0 0 1px ${sideAccent(c.side)}40,0 -4px 20px ${sideAccent(c.side)}20`
-                    : '0 6px 22px rgba(0,0,0,0.58)',
-                  cursor:'pointer', userSelect:'none',
-                  padding:'10px 12px',
-                  display:'flex', flexDirection:'column', justifyContent:'space-between',
-                  borderTop:`2px solid ${sideAccent(c.side)}`,
-                }}>
-                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                  <div style={{
-                    width:34, height:34, borderRadius:9, flexShrink:0,
-                    background: sideBg(c.side),
-                    border:`1px solid ${sideAccent(c.side)}50`,
-                    display:'flex', alignItems:'center', justifyContent:'center',
-                    color:'#fff', fontWeight:950, fontSize:13,
-                    textShadow:'0 1px 6px rgba(0,0,0,0.60)',
-                  }}>{initials(c.name)}</div>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</div>
-                    <div style={{ color:'rgba(255,220,160,0.52)', fontWeight:900, fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                      {c.role || (c.side==='PC' ? 'Adventurer' : 'Ally')}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div style={{ height:4, borderRadius:999, background:'rgba(255,255,255,0.07)', overflow:'hidden', marginBottom:6 }}>
-                    <div style={{ height:'100%', width:`${clamp(pct,0,100)}%`, background:hpGradient(pct), borderRadius:999, transition:'width 280ms ease' }}/>
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:'rgba(255,245,220,0.68)', fontWeight:900 }}>
-                    <span>HP {c.hp==='' ? '—' : c.hp}{max ? `/${max}` : ''}</span>
-                    <span>AC {c.ac==='' ? '—' : c.ac}</span>
-                    <span style={{ color:'rgba(255,220,100,0.62)' }}>⚡{c.init}</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         {/* ── ADD MODAL ── */}
@@ -1051,7 +999,8 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
                       {d>0?`+${d}`:d}
                     </button>
                   ))}
-                  <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>Close</button>
+                  <div style={{ width:1, height:20, background:'rgba(255,220,160,0.15)', margin:'0 2px' }}/>       
+                  <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                 </div>
               </div>
 
@@ -1133,11 +1082,15 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
 
                 <div style={divider}/>
                 <div style={{ display:'flex', gap:10 }}>
+				<button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
+                    Remove
+                  </button>
                   <button style={sBtn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
                     {selected.dead ? 'Revive' : 'Mark Dead'}
                   </button>
-                  <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
-                    Remove
+				  <div style={{ width:1, height:20, background:'rgba(255,220,160,0.15)', margin:'0 2px' }}/>
+				  <button style={sBtn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>
+                    ✓ Done
                   </button>
                 </div>
               </div>
