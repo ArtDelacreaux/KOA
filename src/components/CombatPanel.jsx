@@ -7,15 +7,6 @@ const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-const ADVENTURERS = [
-  { name: 'William Spicer',   role: 'Warlock',             ac: 15, hp: 115, maxHP: 115 },
-  { name: 'Arlis Ghoth',      role: 'Cleric',              ac: 17, hp: 38,  maxHP: 38 },
-  { name: 'Thryvaris Bria',   role: 'Sorcerer',            ac: 14, hp: 32,  maxHP: 32 },
-  { name: 'Fen',              role: 'Barbarian',           ac: 16, hp: 58,  maxHP: 58 },
-  { name: "Von'Ghul",         role: 'Artificer',           ac: 18, hp: 44,  maxHP: 44 },
-  { name: 'Castor',           role: 'Warlock',             ac: 15, hp: 36,  maxHP: 36 },
-  { name: 'Cerci VonDonovon', role: 'Monk',                ac: 16, hp: 42,  maxHP: 42 },
-];
 
 // ── SVG silhouettes (inline, no external deps) ────────────────────────────
 
@@ -522,7 +513,21 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CombatPanel({ panelType, cinematicNav, playNav = () => {}, playHover = () => {} }) {
+export default function CombatPanel({ panelType, cinematicNav, characters = [], playNav = () => {}, playHover = () => {} }) {
+
+  // ✅ Adventurers are now derived from the shared Character Book roster (single source of truth)
+  const adventurers = useMemo(() => {
+    return (characters || [])
+      .filter((c) => c && c.combat)
+      .map((c) => ({
+        name: c.name,
+        role: c.role || c.class || '',
+        ac: typeof c.ac === 'number' ? c.ac : 0,
+        hp: typeof c.hp === 'number' ? c.hp : 0,
+        maxHP: typeof c.maxHP === 'number' ? c.maxHP : (typeof c.hp === 'number' ? c.hp : 0),
+      }));
+  }, [characters]);
+
   const active = panelType === 'combat';
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
@@ -530,7 +535,14 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
   const [editorOpen, setEditorOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', role:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
-  const [adventurerPick, setAdventurerPick] = useState(ADVENTURERS[0]?.name || '');
+  const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
+
+  // ensure pick stays valid if roster changes
+  useEffect(() => {
+    if (!adventurers.length) return;
+    const ok = adventurers.some((a) => a.name === adventurerPick);
+    if (!ok) setAdventurerPick(adventurers[0].name);
+  }, [adventurers, adventurerPick]);
   const [adventurerSide, setAdventurerSide] = useState('PC');
 
   const hydrated = useRef(false);
@@ -581,7 +593,7 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
   };
 
   const addAdventurer = () => {
-    const adv = ADVENTURERS.find(a => a.name === adventurerPick);
+    const adv = adventurers.find(a => a.name === adventurerPick);
     if (!adv) return;
     const existingNames = new Set(combatants.map(x => x.name));
     addCombatant({
@@ -909,7 +921,7 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 85px', gap:10, marginBottom:12 }}>
                     <div><div style={lbl}>Adventurer</div>
                       <select style={{ ...inp, cursor:'pointer' }} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
-                        {ADVENTURERS.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                        {adventurers.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
                       </select>
                     </div>
                     <div><div style={lbl}>Side</div>
@@ -918,7 +930,7 @@ export default function CombatPanel({ panelType, cinematicNav, playNav = () => {
                       </select>
                     </div>
                   </div>
-                  {(() => { const adv = ADVENTURERS.find(a => a.name===adventurerPick); return adv ? (
+                  {(() => { const adv = adventurers.find(a => a.name===adventurerPick); return adv ? (
                     <div style={{ padding:'9px 12px', borderRadius:10, border:'1px solid rgba(255,220,160,0.10)', background:'rgba(0,0,0,0.28)', marginBottom:14, fontSize:12, color:'rgba(255,245,220,0.68)', fontWeight:900, lineHeight:1.7 }}>
                       <div style={{ color:'var(--koa-cream)', fontWeight:950 }}>{adv.name}</div>
                       <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>

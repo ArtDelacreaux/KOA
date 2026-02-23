@@ -17,6 +17,9 @@ import tavernMusic from './assets/music.mp3';
 import fireCrackle from './assets/fire_crackle.mp3';
 import koaTitle from './assets/koaTitle.png';
 
+// Shared roster (Character Book + Combat)
+import { DEFAULT_CHARACTERS } from './data/characters';
+
 // ✅ SFX
 import pageFlip from './assets/PageFlip.mp3';
 import hoverSfx from './assets/Hover.mp3';
@@ -63,6 +66,9 @@ export default function TavernMenu() {
   const [selectedNpc, setSelectedNpc] = useState(null);
 
   const [campaignTab, setCampaignTab] = useState('launcher');
+
+  // ✅ Shared party roster (single source of truth)
+  const [characters, setCharacters] = useLocalStorageState('koa:characters:v2', DEFAULT_CHARACTERS);
 
   const [quests, setQuests] = useLocalStorageState('koa:quests:v2', []);
   const [questModalOpen, setQuestModalOpen] = useState(false);
@@ -471,15 +477,18 @@ export default function TavernMenu() {
           }}
         />
 		<CombatPanel
-		    panelType={panelType}
-		    cinematicNav={cinematicNav}
-		    playNav={playNavClick}
-		    playHover={playHover}
-			/>
+          panelType={panelType}
+          cinematicNav={cinematicNav}
+          characters={characters}
+          playNav={playNavClick}
+          playHover={playHover}
+        />
 
         <CharacterBook
           {...{
             panelType,
+            characters,
+            setCharacters,
             cinematicNav,
             selectedChar,
             setSelectedChar,
