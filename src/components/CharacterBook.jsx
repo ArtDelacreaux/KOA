@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
-import { DEFAULT_CHARACTERS } from './characters';
 
 export default function CharacterBook({
   panelType,
@@ -27,6 +26,21 @@ export default function CharacterBook({
   playClick = null,
 }) {
   const navClick = playNav || playClick || (() => {});
+
+  /* ---------- header measurement (prevents dead space above content) ---------- */
+  const headerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(156);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height || 0);
+      if (h) setHeaderH(h);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [selectedChar, selectedNpc, charView]);
 
   /* ---------- theme (matches MenuPanel) ---------- */
   const THEME = {
@@ -79,36 +93,51 @@ export default function CharacterBook({
   };
 
   /* ---------- styles ---------- */
-  const pageHeader = {
-    position: 'sticky',
+  // Full-panel shell (match WorldLore: header sits at the very top)
+  // IMPORTANT: Keep background transparent so we don't darken your global tavern backdrop.
+  const cardShell = {
+    width: '100%',
+    height: '100%',
+    borderRadius: 0,
+    background: 'transparent',
+    border: 'none',
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
+    fontFamily: fontStack,
+    boxShadow: 'none',
+    position: 'relative',
+    overflow: 'hidden',
+    color: THEME.creamText,
+  };
+
+  const edgeGlow = {
+    position: 'absolute',
+    inset: -2,
+    borderRadius: 0,
+    pointerEvents: 'none',
+    background: 'linear-gradient(135deg, rgba(176,101,0,0.34), rgba(255,140,60,0.18), rgba(255,80,80,0.14))',
+    filter: 'blur(18px)',
+    opacity: 0.18,
+    zIndex: 0,
+  };
+
+  const headerBar = {
+    position: 'absolute',
     top: 0,
-    zIndex: 40,
-    padding: '26px 36px 18px',
-    background: 'linear-gradient(180deg, rgba(8,5,2,0.92) 86%, rgba(8,5,2,0.55) 95%, transparent)',
-    borderBottom: `1px solid ${THEME.lineSoft}`,
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-  };
-
-  const contentWrap = {
-    width: 'min(1180px, 94vw)',
-    margin: '0 auto',
-    padding: '18px 0 44px',
-  };
-
-  const tabsBar = {
-    marginTop: 16,
-    borderRadius: 18,
-    border: `1px solid ${THEME.lineSoft}`,
-    background: 'linear-gradient(180deg, rgba(255,245,220,0.055), rgba(255,245,220,0.02))',
-    boxShadow: '0 16px 44px rgba(0,0,0,0.42)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    padding: '10px 12px',
+    left: 0,
+    right: 0,
+    zIndex: 5,
+    padding: '12px 18px',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    background: `linear-gradient(180deg, rgba(10,8,6,0.72), rgba(10,8,6,0.30))`,
+    backdropFilter: 'blur(14px)',
+    borderBottom: `1px solid ${THEME.line}`,
+    boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
     display: 'flex',
-    alignItems: 'center',
+    flexDirection: 'column',
     gap: 10,
-    flexWrap: 'wrap',
+    fontFamily: fontStack,
   };
 
   const tabButtonStyle = (active) => ({
@@ -183,6 +212,7 @@ export default function CharacterBook({
     e.currentTarget.style.filter = 'brightness(0.98)';
   };
 
+  // Content card (dark, like MenuPanel's cardMini but darker for legibility)
   const darkCard = {
     borderRadius: 18,
     border: `1px solid ${THEME.lineSoft}`,
@@ -193,6 +223,7 @@ export default function CharacterBook({
     color: THEME.creamText,
   };
 
+  // Slightly brighter card for variety
   const lightCard = {
     ...darkCard,
     background: 'linear-gradient(180deg, rgba(40,26,12,0.82), rgba(24,16,8,0.90))',
@@ -221,32 +252,18 @@ export default function CharacterBook({
     fontSize: 13,
     fontFamily: fontStack,
   };
+  // Space reserved for the header is measured dynamically via headerRef.
 
-  const sectionDivider = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 14,
-    margin: '18px 0 18px',
-  };
-  const sectionLine = {
-    flex: 1,
-    height: 1,
-    background: 'linear-gradient(to right, transparent, rgba(255,220,160,0.22), transparent)',
-  };
-  const sectionLabel = {
-    fontFamily: fontStack,
-    fontSize: 11,
-    letterSpacing: '0.22em',
-    color: 'rgba(255,220,160,0.55)',
-    textTransform: 'uppercase',
-    userSelect: 'none',
-    whiteSpace: 'nowrap',
-  };
-
-  const contentWindow = {
-    width: '100%',
-    maxWidth: 1040,
-    margin: '0 auto',
+  const bodyArea = {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: headerH,
+    bottom: 0,
+    padding: 14,
+    overflowY: 'auto',
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'rgba(176,101,0,0.45) transparent',
   };
 
   const charGridCard = {
@@ -299,7 +316,6 @@ export default function CharacterBook({
   const [hoveredCharName, setHoveredCharName] = useState(null);
   const [arlisFrame, setArlisFrame] = useState(0);
 
-  // ✅ FIXED: useEffect now has proper cleanup return, component return is outside
   useEffect(() => {
     if (hoveredCharName !== 'Arlis') {
       setArlisFrame(0);
@@ -308,42 +324,98 @@ export default function CharacterBook({
     const id = window.setInterval(() => {
       setArlisFrame((f) => (f === 0 ? 1 : 0));
     }, 220);
-    return () => clearInterval(id);
+    return () => window.clearInterval(id);
   }, [hoveredCharName]);
 
-  /* ---------- World NPC state ---------- */
-  const [worldNpcs, setWorldNpcs] = useState([]);
-  const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
-  const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
-  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
+  const arlisImgA = '/characters/Arlis.png';
+  const arlisImgB = '/characters/Arlis2.png';
+
+  const getCharPortrait = (char) => {
+    if (char.name !== 'Arlis') return char.image;
+    if (hoveredCharName !== 'Arlis') return arlisImgA;
+    return arlisFrame === 0 ? arlisImgA : arlisImgB;
+  };
+
+  /* ---------- Relationship value helpers ---------- */
+  const getRelObj = (fromName, toName) => {
+    const raw = relationshipValues?.[fromName]?.[toName];
+    if (raw == null) return { score: 50, note: '', editing: false };
+    if (typeof raw === 'number') return { score: raw, note: '', editing: false };
+    return {
+      score: typeof raw.score === 'number' ? raw.score : 50,
+      note: typeof raw.note === 'string' ? raw.note : '',
+      editing: !!raw.editing,
+    };
+  };
+
+  const setRelObj = (fromName, toName, patch) => {
+    setRelationshipValues((prev) => {
+      const cur = (() => {
+        const raw = prev?.[fromName]?.[toName];
+        if (raw == null) return { score: 50, note: '', editing: false };
+        if (typeof raw === 'number') return { score: raw, note: '', editing: false };
+        return {
+          score: typeof raw.score === 'number' ? raw.score : 50,
+          note: typeof raw.note === 'string' ? raw.note : '',
+          editing: !!raw.editing,
+        };
+      })();
+      const next = { ...cur, ...patch };
+      return {
+        ...prev,
+        [fromName]: { ...(prev?.[fromName] || {}), [toName]: next },
+      };
+    });
+  };
+
+  /* ---------- World NPC Codex ---------- */
+  const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
+
+  const [worldNpcs, setWorldNpcs] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LS_WORLD_NPCS);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch {}
+  }, [worldNpcs]);
+
+  const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
   const [npcFilterFaction, setNpcFilterFaction] = useState('All');
   const [npcFilterLocation, setNpcFilterLocation] = useState('All');
   const [npcSearch, setNpcSearch] = useState('');
 
-  /* ---------- World NPC helpers ---------- */
   const factions = useMemo(() => {
-    const vals = (worldNpcs || []).map(n => (n.faction || '').trim()).filter(Boolean);
-    return ['All', ...Array.from(new Set(vals)).sort()];
+    const set = new Set();
+    (worldNpcs || []).forEach((n) => { const f = (n.faction || '').trim(); if (f) set.add(f); });
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [worldNpcs]);
 
   const locations = useMemo(() => {
-    const vals = (worldNpcs || []).map(n => (n.location || '').trim()).filter(Boolean);
-    return ['All', ...Array.from(new Set(vals)).sort()];
+    const set = new Set();
+    (worldNpcs || []).forEach((n) => { const l = (n.location || '').trim(); if (l) set.add(l); });
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [worldNpcs]);
 
   const filteredWorldNpcs = useMemo(() => {
-    return (worldNpcs || []).filter(n => {
-      const matchFaction  = npcFilterFaction  === 'All' || (n.faction  || '').trim() === npcFilterFaction;
-      const matchLocation = npcFilterLocation === 'All' || (n.location || '').trim() === npcFilterLocation;
-      const q = npcSearch.toLowerCase();
-      const matchSearch   = !q
-        || (n.name     || '').toLowerCase().includes(q)
-        || (n.faction  || '').toLowerCase().includes(q)
-        || (n.location || '').toLowerCase().includes(q)
-        || (n.bio      || '').toLowerCase().includes(q);
-      return matchFaction && matchLocation && matchSearch;
-    });
+    const q = (npcSearch || '').trim().toLowerCase();
+    return (worldNpcs || [])
+      .filter((n) => npcFilterFaction === 'All' || (n.faction || '') === npcFilterFaction)
+      .filter((n) => npcFilterLocation === 'All' || (n.location || '') === npcFilterLocation)
+      .filter((n) => {
+        if (!q) return true;
+        const hay = `${n.name || ''} ${n.faction || ''} ${n.location || ''} ${n.bio || ''}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [worldNpcs, npcFilterFaction, npcFilterLocation, npcSearch]);
+
+  const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
+  const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
+  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
 
   const openAddWorldNpc = () => {
     setEditingWorldNpcId(null);
@@ -351,87 +423,164 @@ export default function CharacterBook({
     setWorldNpcModalOpen(true);
   };
 
-  const openEditWorldNpc = (n) => {
-    setEditingWorldNpcId(n.id);
-    setWorldNpcDraft({ name: n.name || '', faction: n.faction || '', location: n.location || '', bio: n.bio || '' });
+  const openEditWorldNpc = (npc) => {
+    setEditingWorldNpcId(npc.id);
+    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '' });
     setWorldNpcModalOpen(true);
   };
 
   const saveWorldNpc = () => {
     const name = (worldNpcDraft.name || '').trim();
-    if (!name) return;
-    if (editingWorldNpcId) {
-      setWorldNpcs(prev => prev.map(n => n.id === editingWorldNpcId
-        ? { ...n, ...worldNpcDraft, name }
-        : n
-      ));
+    if (!name) { alert('NPC needs a name.'); return; }
+    if (!editingWorldNpcId) {
+      const npc = {
+        id: newId(), name,
+        faction: (worldNpcDraft.faction || '').trim(),
+        location: (worldNpcDraft.location || '').trim(),
+        bio: (worldNpcDraft.bio || '').trim(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setWorldNpcs((prev) => [npc, ...(prev || [])]);
     } else {
-      setWorldNpcs(prev => [...prev, { id: Date.now().toString(36) + Math.random().toString(36).slice(2), ...worldNpcDraft, name }]);
+      setWorldNpcs((prev) =>
+        (prev || []).map((n) =>
+          n.id === editingWorldNpcId
+            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), updatedAt: new Date().toISOString() }
+            : n
+        )
+      );
     }
     setWorldNpcModalOpen(false);
     setEditingWorldNpcId(null);
   };
 
   const deleteWorldNpc = (id) => {
-    setWorldNpcs(prev => prev.filter(n => n.id !== id));
+    if (!confirm('Delete this NPC?')) return;
+    setWorldNpcs((prev) => (prev || []).filter((n) => n.id !== id));
   };
 
-  /* ---------- Tab visibility ---------- */
-  const showProfileTab   = !!selectedChar;
-  const showRelationsTab = !!(selectedChar && (selectedChar.npcs || []).length > 0);
-  const showNpcTab       = !!(selectedChar && selectedNpc);
-  const showWorldNpcTab  = charView === 'worldnpcs';
+  /* ---------- Data: characters ---------- */
+  const characters = [
+    {
+      name: 'William Spicer',
+      image: '/characters/Will.png',
+      synopsis: '.',
+      age: '22', height: "5'11\"", class: 'Fiend Warlock',
+      lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
+      goals: 'Protect those he loves and uncover the truth behind his cursed power.',
+      npcs: [
+        { name: 'Darius Blanc', relation: 'Father', bio: 'A strict man who despised magic. His death during the Oakhaven raid left a scar on William that never healed.' },
+        { name: 'Eleanore VanFalen', relation: 'Mother', bio: 'William was told she died in childbirth. The truth is… complicated, and the trail always feels intentionally blurred.' },
+        { name: 'Tarzos Spicer', relation: 'Savior / Guardian', bio: 'The one who saved William during the raid, at a devastating cost. Left behind a tarot card: The Fool.' },
+        { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect." },
+      ],
+    },
+    {
+      name: 'Arlis Ghoth',
+      image: arlisImgA,
+      synopsis: 'A cunning and graceful adventurer.',
+      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
+      lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
+      goals: 'Reveal the truth of her heart—and survive the journey.',
+      npcs: [
+        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.' },
+        { name: 'Jasper Delancey', relation: 'Childhood Friend (Cover Story)', bio: 'Their parents think they\'re courting. In reality: a mutually useful disguise with complicated edges.' },
+      ],
+    },
+    {
+      name: 'Thryvaris Bria',
+      image: '/characters/3V.png',
+      synopsis: 'A mysterious mage with that lives in a cave.',
+      age: 'Unknown', height: "6'1\"",
+      class: 'Sorcerer',
+      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
+      goals: 'Pursue truths lost to time.',
+      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
+    },
+    {
+      name: 'Fen', image: '/characters/Fen.png',
+      synopsis: 'A relentless warrior of iron will.',
+      age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
+      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
+      goals: 'Protect the party at any cost.',
+      npcs: [
+        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
+        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
+      ],
+    },
+    {
+      name: "Von'Ghul", image: '/characters/Ghuli.png',
+      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
+      age: "Late 20's", height: "6'2\"", class: 'Artificer',
+      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
+      goals: 'Unknown',
+      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
+    },
+    {
+      name: 'Castor', image: '/characters/Castor.png',
+      synopsis: 'Split from Williams mind, he knows more than he lets others on.',
+      age: '21', height: "5'10\"", class: 'Warlock',
+      lore: 'Born from fractured identity and dark magic, Castor walks as his own person—protective, intense, and deeply loyal to the few he trusts.',
+      goals: 'Protect his friends and prove he deserves to exist.',
+      npcs: [
+        { name: 'Vykell', relation: 'Mentor', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
+      ],
+    },
+    {
+      name: 'Cerci VonDonovon',
+      image: '/characters/Cerci.png',
+      synopsis: 'A dhampir walking between night and dawn.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
+      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
+      goals: 'Find belonging beyond the shadows of her past.',
+      npcs: [
+        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
+        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
+      ],
+    },
+    {
+      name: 'Jasper Delaney',
+      image: '/characters/Jasper.png',
+      synopsis: 'A cleric hailing from the Golden Isles.',
+      age: '',
+      height: '',
+      class: 'Cleric',
+      lore: '',
+      goals: '',
+      npcs: [],
+    },
+    {
+      name: 'DM',
+      image: '/characters/DM.png',
+      synopsis: 'One Who Rules All',
+      age: '??',
+      height: '??',
+      class: 'Everything',
+      lore: 'An omnipotent god that creates and destroys at will. Able to displace time and remove it completely.',
+      goals: 'World Destruction',
+      npcs: [],
+    },
+  ];
 
-  /* ---------- Character roster from shared data ---------- */
-  const characters = DEFAULT_CHARACTERS;
-
-  // Arlis animation images (using public paths)
-  const arlisImgA = '/characters/Arlis.png';
-  const arlisImgB = '/characters/Arlis2.png';
-
-  /* ---------- Relationship helpers ---------- */
   const partyMateNames = useMemo(() => {
     if (!selectedChar) return [];
-    return characters.filter(c => c.name !== selectedChar.name).map(c => c.name);
+    return characters.map((c) => c.name).filter((n) => n !== selectedChar.name);
   }, [selectedChar, characters]);
 
-  const getRelObj = (charName, otherName) => {
-    const key = [charName, otherName].sort().join('::');
-    return (relationshipValues || {})[key] || { score: 50, note: '', editing: false };
-  };
-
-  const setRelObj = (charName, otherName, patch) => {
-    const key = [charName, otherName].sort().join('::');
-    setRelationshipValues(prev => ({
-      ...prev,
-      [key]: { ...getRelObj(charName, otherName), ...patch },
-    }));
-  };
-
-  /* ---------- Portrait helper ---------- */
-  const getCharPortrait = (char) => char.image || '';
+  const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
+  const showRelationsTab = !!selectedChar && (charView === 'relations' || charView === 'npc' || charView === 'detail');
+  const showNpcTab = !!selectedNpc;
+  const showWorldNpcTab = charView === 'worldnpcs';
 
   return (
-    <ShellLayout active={panelType === 'characters'}>
-      <div
-        className="cb-scrollbar"
-        style={{
-          width: '100%',
-          height: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '0 0 44px',
-          position: 'relative',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(176,101,0,0.4) transparent',
-        }}
-      >
+    <ShellLayout
+      active={panelType === 'characters'}
+      style={{ alignItems: 'stretch', justifyContent: 'stretch' }}
+    >
+      <div style={cardShell}>
         <style>{`
           ::placeholder { color: rgba(255,245,220,0.55); opacity: 1; }
-          .cb-scrollbar::-webkit-scrollbar { width: 6px; }
-          .cb-scrollbar::-webkit-scrollbar-track { background: transparent; }
-          .cb-scrollbar::-webkit-scrollbar-thumb { background: rgba(176,101,0,0.4); border-radius: 999px; }
-
           .cb-rng {
             width: 100%;
             height: 6px;
@@ -471,534 +620,543 @@ export default function CharacterBook({
           }
         `}</style>
 
-        {/* ── HEADER (matches WorldLore) ── */}
-        <div style={pageHeader}>
-          <div style={{ width: 'min(1180px, 94vw)', margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-              <button
-                style={{ ...goldBtn, padding: '10px 16px', borderRadius: 16 }}
-                onMouseEnter={btnHover}
-                onMouseLeave={btnLeave}
-                onMouseDown={(e) => { btnDown(e); navClick(); }}
-                onClick={() => cinematicNav('menu')}
-              >
-                ← Return
-              </button>
-            </div>
+        {/* Edge glow */}
+        <div style={edgeGlow} />
 
-            <div style={{ textAlign: 'center', lineHeight: 1.1 }}>
-              <div style={{ fontSize: 11, fontWeight: 950, letterSpacing: '0.28em', textTransform: 'uppercase', color: 'rgba(255,220,160,0.62)' }}>
-                ✦ Adventurer Registry ✦
+        {/* Header */}
+        <div ref={headerRef} style={{
+          ...headerBar,
+          padding: '44px 36px 16px',
+          gap: 12,
+          background: 'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))',
+          borderBottom: `1px solid ${THEME.lineSoft}`,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+            position: 'relative',
+            zIndex: 1,
+          }}>
+            <button
+              onClick={() => { navClick(); cinematicNav('menu'); }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
+                e.currentTarget.style.color = THEME.creamText;
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = THEME.line;
+                e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+              style={{
+                background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                padding: '9px 18px',
+                borderRadius: 14,
+                cursor: 'pointer',
+                fontSize: 12,
+                letterSpacing: '0.14em',
+                fontFamily: fontStack,
+                fontWeight: 950,
+                backdropFilter: 'blur(10px)',
+                transition: 'all 150ms ease',
+                boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
+                userSelect: 'none',
+              }}
+            >
+              ← RETURN
+            </button>
+
+            <div style={{ textAlign: 'center', flex: 1, minWidth: 240 }}>
+              <div style={{
+                fontSize: 10,
+                letterSpacing: '0.38em',
+                color: 'rgba(255,220,160,0.45)',
+                marginBottom: 10,
+                marginTop: -6,
+                fontFamily: fontStack,
+                textTransform: 'uppercase',
+                userSelect: 'none',
+              }}>
+                ✦ &nbsp; CODEX OF THE PARTY &nbsp; ✦
               </div>
-              <div style={{ fontSize: 36, fontWeight: 950, letterSpacing: 2.2, color: THEME.creamText, textShadow: '0 2px 14px rgba(0,0,0,0.65)' }}>
+              <div style={{
+                margin: 0,
+                fontFamily: fontStack,
+                fontSize: 'clamp(1.35rem, 2.6vw, 2.05rem)',
+                fontWeight: 950,
+                color: THEME.creamText,
+                letterSpacing: '0.18em',
+                textShadow: '0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
+                lineHeight: 1.05,
+              }}>
                 CHARACTER BOOK
               </div>
             </div>
 
-            <div />
+            {/* Spacer to balance */}
+            <div style={{ width: 120 }} />
           </div>
 
-          <div style={{ width: 'min(1180px, 94vw)', margin: '0 auto' }}>
-            <div style={tabsBar}>
+          {/* Context tabs (only show when applicable) */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
+            {showProfileTab && (
               <span
-                style={tabButtonStyle(charView === 'grid')}
+                style={tabButtonStyle(charView === 'detail')}
                 onMouseDown={navClick}
-                onClick={() => { setCharView('grid'); setSelectedChar(null); setSelectedNpc(null); }}
+                onClick={() => setCharView('detail')}
                 role="button"
                 tabIndex={0}
               >
-                Adventurers
+                Profile
               </span>
+            )}
 
+            {showRelationsTab && (
               <span
-                style={tabButtonStyle(charView === 'worldnpcs')}
+                style={tabButtonStyle(charView === 'relations')}
                 onMouseDown={navClick}
-                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
+                onClick={() => { setSelectedNpc(null); setCharView('relations'); }}
                 role="button"
                 tabIndex={0}
               >
-                World NPCs
+                NPCs
               </span>
+            )}
 
-              {showProfileTab && (
-                <span
-                  style={tabButtonStyle(charView === 'detail')}
-                  onMouseDown={navClick}
-                  onClick={() => setCharView('detail')}
-                  role="button"
-                  tabIndex={0}
-                >
-                  Profile
-                </span>
-              )}
+            {showNpcTab && (
+              <span
+                style={tabButtonStyle(charView === 'npc')}
+                onMouseDown={navClick}
+                onClick={() => setCharView('npc')}
+                role="button"
+                tabIndex={0}
+              >
+                NPC Bio
+              </span>
+            )}
 
-              {showRelationsTab && (
-                <span
-                  style={tabButtonStyle(charView === 'relations')}
-                  onMouseDown={navClick}
-                  onClick={() => { setSelectedNpc(null); setCharView('relations'); }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  NPCs
-                </span>
-              )}
-
-              {showNpcTab && (
-                <span
-                  style={tabButtonStyle(charView === 'npc')}
-                  onMouseDown={navClick}
-                  onClick={() => setCharView('npc')}
-                  role="button"
-                  tabIndex={0}
-                >
-                  NPC Bio
-                </span>
-              )}
-
-              {selectedChar && (
-                <button
-                  style={{ ...backButton, marginLeft: 'auto', padding: '8px 14px', fontSize: 12 }}
-                  onMouseEnter={btnHover}
-                  onMouseLeave={btnLeave}
-                  onMouseDown={(e) => { btnDown(e); navClick(); }}
-                  onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('grid'); }}
-                >
-                  Back to Grid
-                </button>
-              )}
-            </div>
+            {selectedChar && (
+              <button
+                style={{ ...backButton, marginLeft: 'auto', padding: '8px 14px', fontSize: 12 }}
+                onMouseEnter={btnHover}
+                onMouseLeave={btnLeave}
+                onMouseDown={(e) => { btnDown(e); navClick(); }}
+                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('grid'); }}
+              >
+                Back to Grid
+              </button>
+            )}
           </div>
         </div>
 
-        {/* ── CONTENT ── */}
-        <div style={contentWrap}>
-          <div style={sectionDivider}>
-            <div style={sectionLine} />
-            <span style={sectionLabel}>
-              ◈&nbsp;
-              {charView === 'grid'
-                ? 'Adventurers'
-                : charView === 'worldnpcs'
-                  ? 'World NPC Codex'
-                  : charView === 'relations'
-                    ? 'NPCs'
-                    : charView === 'npc'
-                      ? 'NPC Bio'
-                      : 'Profile'}
-              &nbsp;◈
-            </span>
-            <div style={sectionLine} />
-          </div>
+        {/* Body */}
+        <div style={bodyArea}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-          {/* GRID */}
-          {charView === 'grid' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-              {characters.map((char) => (
-                <div
-                  key={char.name}
-                  className="cb-card-hover"
-                  style={{ ...charGridCard, transition: 'all 0.22s ease' }}
-                  onMouseDown={navClick}
-                  onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
-                  onMouseEnter={() => setHoveredCharName(char.name)}
-                  onMouseLeave={() => setHoveredCharName(null)}
-                >
-                  <img src={getCharPortrait(char)} alt={char.name}
-                    style={{ width: '100%', height: 'auto', objectFit: 'contain', borderRadius: 12, marginBottom: 10, boxShadow: '0 10px 26px rgba(0,0,0,0.45)', display: 'block' }} />
-                  <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{char.name}</div>
-                  <div style={{ opacity: 0.72, marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: THEME.creamSoft }}>{char.synopsis}</div>
-                </div>
-              ))}
+            {/* Buttons (below header, above content) — NOT sticky, no overlay bar */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              margin: '6px 0 14px',
+            }}>
+              <button
+                type="button"
+                style={{
+                  ...tabButtonStyle(charView !== 'worldnpcs'),
+                  padding: '10px 14px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  letterSpacing: '0.16em',
+				  fontWeight: 900,
+				  fontFamily: fontStack,
+				  cursor: 'pointer',
+				  border: charView !== 'worldnpcs'
+					? '1px solid rgba(255,220,160,0.35)'
+					: '1px solid rgba(255,220,160,0.18)',
+				  background: charView !== 'worldnpcs'
+					? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
+					: 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
+				  color: 'rgba(255,245,220,0.92)',
+				  boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+				  transition: 'all 150ms ease',
+                }}
+				onMouseEnter={btnHover}
+				onMouseLeave={btnLeave}
+                onMouseDown={navClick}
+                onClick={() => { setCharView('grid'); setSelectedChar(null); setSelectedNpc(null); }}
+              >
+                Adventurers
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...tabButtonStyle(charView === 'worldnpcs'),
+                  padding: '10px 14px',
+                  borderRadius: 999,
+                  fontSize: 12,
+                  letterSpacing: '0.16em',
+				  fontWeight: 900,
+				  fontFamily: fontStack,
+				  cursor: 'pointer',
+				  border: charView !== 'worldnpcs'
+					? '1px solid rgba(255,220,160,0.35)'
+					: '1px solid rgba(255,220,160,0.18)',
+				  background: charView !== 'worldnpcs'
+					? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
+					: 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
+				  color: 'rgba(255,245,220,0.92)',
+				  boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+				  transition: 'all 150ms ease',
+                }}
+				onMouseEnter={btnHover}
+				onMouseLeave={btnLeave}
+                onMouseDown={navClick}
+                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
+              >
+                World NPCs
+              </button>
             </div>
-          )}
 
-          {/* WORLD NPCs */}
-          {showWorldNpcTab && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-              <div style={{ ...lightCard, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>World NPC Codex</div>
-                  <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4, color: THEME.creamSoft }}>NPCs you meet in the world — not tied to any one player.</div>
-                </div>
-                <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
-                  + Add NPC
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
-                {[
-                  { label: 'Faction', val: npcFilterFaction, set: setNpcFilterFaction, opts: factions },
-                  { label: 'Location', val: npcFilterLocation, set: setNpcFilterLocation, opts: locations },
-                ].map(({ label: lbl, val, set, opts }) => (
-                  <div key={lbl} style={darkCard}>
-                    <div style={fieldLabel}>{lbl}</div>
-                    <select value={val} onChange={(e) => set(e.target.value)} style={{ ...inputBase, fontWeight: 850 }}>
-                      {opts.map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
+            {/* GRID */}
+            {charView === 'grid' && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+                {characters.map((char) => (
+                  <div
+                    key={char.name}
+                    className="cb-card-hover"
+                    style={{ ...charGridCard, transition: 'all 0.22s ease' }}
+                    onMouseDown={navClick}
+                    onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
+                    onMouseEnter={() => setHoveredCharName(char.name)}
+                    onMouseLeave={() => setHoveredCharName(null)}
+                  >
+                    <img src={getCharPortrait(char)} alt={char.name}
+                      style={{ width: '100%', height: 'auto', objectFit: 'contain', borderRadius: 12, marginBottom: 10, boxShadow: '0 10px 26px rgba(0,0,0,0.45)', display: 'block' }} />
+                    <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{char.name}</div>
+                    <div style={{ opacity: 0.72, marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: THEME.creamSoft }}>{char.synopsis}</div>
                   </div>
                 ))}
-                <div style={darkCard}>
-                  <div style={fieldLabel}>Search</div>
-                  <input value={npcSearch} onChange={(e) => setNpcSearch(e.target.value)}
-                    placeholder="Name, faction, location, bio…" style={inputBase} />
-                </div>
               </div>
+            )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft }}>
-                  Showing <strong style={{ color: THEME.creamText }}>{filteredWorldNpcs.length}</strong> of <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>
+            {/* WORLD NPCs */}
+            {showWorldNpcTab && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                <div style={{ ...lightCard, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>World NPC Codex</div>
+                    <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4, color: THEME.creamSoft }}>NPCs you meet in the world — not tied to any one player.</div>
+                  </div>
+                  <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
+                    + Add NPC
+                  </button>
                 </div>
-                <button style={{ ...tinyBtn, opacity: 0.9 }} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                  onClick={() => { setNpcFilterFaction('All'); setNpcFilterLocation('All'); setNpcSearch(''); }}>
-                  Clear Filters
-                </button>
-              </div>
 
-              {filteredWorldNpcs.length === 0 ? (
-                <div style={darkCard}>
-                  <div style={{ fontWeight: 950, marginBottom: 6 }}>No NPCs match your filters.</div>
-                  <div style={{ lineHeight: 1.6, opacity: 0.8 }}>Try clearing filters, or add your first World NPC.</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
+                  {[
+                    { label: 'Faction', val: npcFilterFaction, set: setNpcFilterFaction, opts: factions },
+                    { label: 'Location', val: npcFilterLocation, set: setNpcFilterLocation, opts: locations },
+                  ].map(({ label: lbl, val, set, opts }) => (
+                    <div key={lbl} style={darkCard}>
+                      <div style={fieldLabel}>{lbl}</div>
+                      <select value={val} onChange={(e) => set(e.target.value)} style={{ ...inputBase, fontWeight: 850 }}>
+                        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                  <div style={darkCard}>
+                    <div style={fieldLabel}>Search</div>
+                    <input value={npcSearch} onChange={(e) => setNpcSearch(e.target.value)}
+                      placeholder="Name, faction, location, bio…" style={inputBase} />
+                  </div>
                 </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {filteredWorldNpcs.map((n) => (
-                    <div key={n.id} style={darkCard}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                        <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                            Faction: {(n.faction || '').trim() || '—'}
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                            Location: {(n.location || '').trim() || '—'}
-                          </span>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft }}>
+                    Showing <strong style={{ color: THEME.creamText }}>{filteredWorldNpcs.length}</strong> of <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>
+                  </div>
+                  <button style={{ ...tinyBtn, opacity: 0.9 }} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
+                    onClick={() => { setNpcFilterFaction('All'); setNpcFilterLocation('All'); setNpcSearch(''); }}>
+                    Clear Filters
+                  </button>
+                </div>
+
+                {filteredWorldNpcs.length === 0 ? (
+                  <div style={darkCard}>
+                    <div style={{ fontWeight: 950, marginBottom: 6 }}>No NPCs match your filters.</div>
+                    <div style={{ lineHeight: 1.6, opacity: 0.8 }}>Try clearing filters, or add your first World NPC.</div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {filteredWorldNpcs.map((n) => (
+                      <div key={n.id} style={darkCard}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                          <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
+                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                              Faction: {(n.faction || '').trim() || '—'}
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                              Location: {(n.location || '').trim() || '—'}
+                            </span>
+                          </div>
+                        </div>
+                        {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                          <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => openEditWorldNpc(n)}>✎ Edit</button>
+                          <button style={{ ...tinyBtn, border: '1px solid rgba(255,160,160,0.22)', color: 'rgba(255,160,160,0.85)' }}
+                            onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => deleteWorldNpc(n.id)}>🗑 Delete</button>
                         </div>
                       </div>
-                      {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
-                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                        <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => openEditWorldNpc(n)}>✎ Edit</button>
-                        <button style={{ ...tinyBtn, border: '1px solid rgba(255,160,160,0.22)', color: 'rgba(255,160,160,0.85)' }}
-                          onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => deleteWorldNpc(n.id)}>🗑 Delete</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DETAIL */}
+            {charView === 'detail' && selectedChar && (
+              <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
+                <div style={darkCard}>
+                  <img
+                    src={selectedChar.name === 'Arlis' ? (hoveredCharName === 'Arlis' ? (arlisFrame === 0 ? arlisImgA : arlisImgB) : arlisImgA) : selectedChar.image}
+                    alt={selectedChar.name}
+                    style={{ width: '100%', height: 310, objectFit: 'cover', borderRadius: 14, boxShadow: '0 14px 36px rgba(0,0,0,0.55)' }}
+                    onMouseEnter={() => setHoveredCharName(selectedChar.name)}
+                    onMouseLeave={() => setHoveredCharName(null)}
+                  />
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 21, fontWeight: 950, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{selectedChar.name}</div>
+                    <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.5, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.synopsis}</div>
+                    <div style={divider} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
+                        <div key={k}>
+                          <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>{k}</div>
+                          <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{v}</div>
+                        </div>
+                      ))}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Class</div>
+                        <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{selectedChar.class}</div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={darkCard}>
+                    <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Lore</div>
+                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.lore}</div>
+                  </div>
+
+                  <div style={darkCard}>
+                    <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Current Goals</div>
+                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.goals}</div>
+                  </div>
+
+                  <div style={darkCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Party Relationship Tree</div>
+                        <div style={{ opacity: 0.72, marginTop: 5, fontSize: 12, color: THEME.creamSoft }}>How {selectedChar.name} feels about the party.</div>
+                      </div>
+                      <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+                        onMouseDown={(e) => { btnDown(e); navClick(); }}
+                        onClick={() => { setSelectedNpc(null); setCharView('relations'); }}>
+                        View NPCs
+                      </button>
+                    </div>
+
+                    <div style={divider} />
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                      {partyMateNames.length === 0 ? (
+                        <div style={{ opacity: 0.72 }}>No other party members found.</div>
+                      ) : partyMateNames.map((otherName) => {
+                        const rel = getRelObj(selectedChar.name, otherName);
+                        const { score: value, note, editing: isEditing } = rel;
+                        return (
+                          <div key={otherName} style={{
+                            padding: 12, borderRadius: 14,
+                            background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
+                            border: `1px solid ${THEME.lineSoft}`,
+                            boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                              <div style={{ fontWeight: 950, fontSize: 13, color: THEME.creamText }}>{otherName}</div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ fontWeight: 950, color: relTempColor(value), fontSize: 13 }}>{value}</div>
+                                <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
+                                  onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
+                              </div>
+                            </div>
+
+                            <input className="cb-rng"
+                              style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 10 }}
+                              type="range" min={0} max={100} value={value}
+                              onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
+                            />
+
+                            <div style={{ marginTop: 10, opacity: 0.88, lineHeight: 1.45 }}>
+                              {isEditing ? (
+                                <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
+                                  onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
+                                  onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
+                                  rows={2}
+                                  style={{ ...inputBase, minHeight: 64, resize: 'vertical', lineHeight: 1.5 }}
+                                />
+                              ) : (
+                                <div style={{ opacity: note ? 0.88 : 0.5, fontStyle: note ? 'normal' : 'italic', fontSize: 12, color: THEME.creamSoft }}>
+                                  {note || 'No notes yet. Click ✎ to add one.'}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* NPC RELATIONS LIST */}
+            {charView === 'relations' && selectedChar && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 12 }}>
+                  <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
+                  <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{(selectedChar.npcs || []).length} entries</div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {(selectedChar.npcs || []).map((npc) => (
+                    <div key={npc.name} className="cb-npc-hover"
+                      style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                      onMouseDown={navClick}
+                      onClick={() => { setSelectedNpc(npc); setCharView('npc'); }}
+                      role="button" tabIndex={0}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                        <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
+                        <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>{npc.relation}</div>
+                      </div>
+                      <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>{npc.bio}</div>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* DETAIL */}
-          {charView === 'detail' && selectedChar && (
-            <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
-              <div style={darkCard}>
-                <img
-                  src={selectedChar.name === 'Arlis' ? (hoveredCharName === 'Arlis' ? (arlisFrame === 0 ? arlisImgA : arlisImgB) : arlisImgA) : selectedChar.image}
-                  alt={selectedChar.name}
-                  style={{ width: '100%', height: 310, objectFit: 'cover', borderRadius: 14, boxShadow: '0 14px 36px rgba(0,0,0,0.55)' }}
-                  onMouseEnter={() => setHoveredCharName(selectedChar.name)}
-                  onMouseLeave={() => setHoveredCharName(null)}
-                />
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontSize: 21, fontWeight: 950, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{selectedChar.name}</div>
-                  <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.5, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.synopsis}</div>
+            {/* NPC DETAIL */}
+            {charView === 'npc' && selectedChar && selectedNpc && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                <div style={lightCard}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                    <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText }}>{selectedNpc.name}</div>
+                    <div style={{ opacity: 0.72, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>
+                      {selectedNpc.relation} of {selectedChar.name}
+                    </div>
+                  </div>
                   <div style={divider} />
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
-                      <div key={k}>
-                        <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>{k}</div>
-                        <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{v}</div>
-                      </div>
-                    ))}
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Class</div>
-                      <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{selectedChar.class}</div>
-                    </div>
+                  <div style={{ opacity: 0.88, lineHeight: 1.7, fontSize: 13.5, color: THEME.creamSoft }}>{selectedNpc.bio}</div>
+
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+                      onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('relations')}>
+                      ← Back to NPCs
+                    </button>
+                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+                      onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('detail')}>
+                      ← Back to {selectedChar.name}
+                    </button>
                   </div>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={darkCard}>
-                  <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Lore</div>
-                  <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.lore}</div>
-                </div>
-
-                <div style={darkCard}>
-                  <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Current Goals</div>
-                  <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.goals}</div>
-                </div>
-
-                <div style={darkCard}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Party Relationship Tree</div>
-                      <div style={{ opacity: 0.72, marginTop: 5, fontSize: 12, color: THEME.creamSoft }}>How {selectedChar.name} feels about the party.</div>
-                    </div>
-                  </div>
-
-                  <div style={divider} />
-
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
-                    {partyMateNames.length === 0 ? (
-                      <div style={{ opacity: 0.72 }}>No other party members found.</div>
-                    ) : partyMateNames.map((otherName) => {
-                      const rel = getRelObj(selectedChar.name, otherName);
-                      const { score: value, note, editing: isEditing } = rel;
-                      return (
-                        <div key={otherName} style={{
-                          padding: 10, borderRadius: 14,
-                          background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
-                          border: `1px solid ${THEME.lineSoft}`,
-                          boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                            <div style={{ fontWeight: 950, fontSize: 12.5, color: THEME.creamText }}>{otherName}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ fontWeight: 950, color: relTempColor(value), fontSize: 12.5 }}>{value}</div>
-                              <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                                onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
-                            </div>
-                          </div>
-
-                          <input className="cb-rng"
-                            style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 8 }}
-                            type="range" min={0} max={100} value={value}
-                            onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
-                          />
-
-                          <div style={{ marginTop: 8, opacity: 0.88, lineHeight: 1.45, fontSize: 12.5 }}>
-                            {isEditing ? (
-                              <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
-                                onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
-                                onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
-                                rows={2}
-                                style={{ ...inputBase, minHeight: 64, resize: 'vertical', lineHeight: 1.5 }}
-                              />
-                            ) : (
-                              <div style={{ opacity: note ? 0.88 : 0.5, fontStyle: note ? 'normal' : 'italic', fontSize: 12, color: THEME.creamSoft }}>
-                                {note || 'No notes yet. Click ✎ to add one.'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* NPC RELATIONS LIST */}
-          {charView === 'relations' && selectedChar && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 12 }}>
-                <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
-                <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{(selectedChar.npcs || []).length} entries</div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(selectedChar.npcs || []).map((npc) => (
-                  <div key={npc.name} className="cb-npc-hover"
-                    style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
-                    onMouseDown={navClick}
-                    onClick={() => { setSelectedNpc(npc); setCharView('npc'); }}
-                    role="button" tabIndex={0}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                      <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
-                      <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>{npc.relation}</div>
-                    </div>
-                    <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>{npc.bio}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* NPC DETAIL */}
-          {charView === 'npc' && selectedChar && selectedNpc && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-              <div style={lightCard}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                  <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText }}>{selectedNpc.name}</div>
-                  <div style={{ opacity: 0.72, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>
-                    {selectedNpc.relation} of {selectedChar.name}
-                  </div>
-                </div>
-                <div style={divider} />
-                <div style={{ opacity: 0.88, lineHeight: 1.7, fontSize: 13.5, color: THEME.creamSoft }}>{selectedNpc.bio}</div>
-
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                  <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                    onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('relations')}>
-                    ← Back to NPCs
-                  </button>
-                  <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                    onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('detail')}>
-                    ← Back to {selectedChar.name}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div> {/* ✅ closes contentWrap */}
-
-        {/* WORLD NPC MODAL — inside scrollable div so position:absolute covers the panel */}
+        {/* WORLD NPC MODAL */}
         {worldNpcModalOpen && (
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 30,
+              position: 'absolute', inset: 0, zIndex: 30,
               background: 'rgba(0,0,0,0.70)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
               backdropFilter: 'blur(4px)',
             }}
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setWorldNpcModalOpen(false);
-            }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcModalOpen(false); }}
           >
-            <div
-              style={{
-                width: 'min(640px, 94vw)',
-                borderRadius: 22,
-                background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-                boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-                border: `1px solid ${THEME.line}`,
-                color: THEME.creamText,
-                fontFamily: fontStack,
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                maxHeight: 'min(580px, 84vh)',
-              }}
-            >
-              <div
-                style={{
-                  padding: '14px 18px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 10,
-                  borderBottom: `1px solid ${THEME.lineSoft}`,
-                }}
-              >
-                <div style={{ fontSize: 17, fontWeight: 950 }}>
-                  {editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}
-                </div>
-                <button
-                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
-                  onMouseEnter={btnHover}
-                  onMouseLeave={btnLeave}
-                  onMouseDown={btnDown}
-                  onClick={() => setWorldNpcModalOpen(false)}
-                >
+            <div style={{
+              width: 'min(640px, 94vw)',
+              borderRadius: 22,
+              background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+              boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+              border: `1px solid ${THEME.line}`,
+              color: THEME.creamText,
+              fontFamily: fontStack,
+              overflow: 'hidden',
+              display: 'flex', flexDirection: 'column',
+              maxHeight: 'min(580px, 84vh)',
+            }}>
+              <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
+                <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
+                <button style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
+                  onClick={() => setWorldNpcModalOpen(false)}>
                   Close
                 </button>
               </div>
 
-              <div
-                style={{
-                  padding: '14px 18px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 12,
-                  alignContent: 'start',
-                  overflowY: 'auto',
-                }}
-              >
+              <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Name</div>
-                  <input
-                    value={worldNpcDraft.name}
-                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder="e.g. Captain Rell"
-                    style={{ ...inputBase, fontWeight: 900 }}
-                  />
+                  <input value={worldNpcDraft.name} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="e.g. Captain Rell" style={{ ...inputBase, fontWeight: 900 }} />
                 </div>
-
                 <div>
                   <div style={fieldLabel}>Faction</div>
-                  <input
-                    value={worldNpcDraft.faction}
-                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
-                    placeholder="e.g. Church of Amiras"
-                    style={inputBase}
-                  />
+                  <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
+                    placeholder="e.g. Church of Amiras" style={inputBase} />
                 </div>
-
                 <div>
                   <div style={fieldLabel}>Location</div>
-                  <input
-                    value={worldNpcDraft.location}
-                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
-                    placeholder="e.g. Avalon"
-                    style={inputBase}
-                  />
+                  <input value={worldNpcDraft.location} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
+                    placeholder="e.g. Avalon" style={inputBase} />
                 </div>
-
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Bio / Notes</div>
-                  <textarea
-                    value={worldNpcDraft.bio}
-                    onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
-                    placeholder="Short summary, personality, hook, secrets…"
-                    rows={5}
-                    style={{
-                      ...inputBase,
-                      resize: 'none',
-                      minHeight: 110,
-                      maxHeight: 180,
-                      lineHeight: 1.5,
-                    }}
-                  />
+                  <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
+                    placeholder="Short summary, personality, hook, secrets…" rows={5}
+                    style={{ ...inputBase, resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
                 </div>
               </div>
 
-              <div
-                style={{
-                  padding: '12px 18px',
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: 10,
-                  borderTop: `1px solid ${THEME.lineSoft}`,
-                }}
-              >
+              <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
                 {editingWorldNpcId && (
-                  <button
-                    style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
-                    onMouseEnter={btnHover}
-                    onMouseLeave={btnLeave}
-                    onMouseDown={btnDown}
-                    onClick={() => {
-                      setWorldNpcModalOpen(false);
-                      setEditingWorldNpcId(null);
-                    }}
-                  >
+                  <button style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                    onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
+                    onClick={() => { setWorldNpcModalOpen(false); setEditingWorldNpcId(null); }}>
                     Cancel
                   </button>
                 )}
-
-                <button
-                  style={goldBtn}
-                  onMouseEnter={btnHover}
-                  onMouseLeave={btnLeave}
-                  onMouseDown={btnDown}
-                  onClick={saveWorldNpc}
-                >
+                <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={saveWorldNpc}>
                   {editingWorldNpcId ? 'Save Changes' : 'Add NPC'}
                 </button>
               </div>
             </div>
           </div>
         )}
-
-      </div> {/* ✅ closes cb-scrollbar div */}
+      </div>
     </ShellLayout>
   );
 }
