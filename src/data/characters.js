@@ -15,13 +15,13 @@ export const DEFAULT_CHARACTERS = [
     hp: 115,
     maxHP: 115,
     image: '/characters/Will.png',
-    synopsis: '.',
+    synopsis: 'Treads the line between faithful servant, and a heart still searching for something worth saving',
     age: '22',
     height: "5'11\"",
-    class: 'Fiend Warlock',
+    class: 'Warlock, Paladin',
     lore:
       'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
-    goals: 'Protect those he loves and uncover the truth behind his cursed power.',
+    goals: 'Protect the woman he loves and uncover the truth behind his cursed power.',
     npcs: [
       {
         name: 'Darius Blanc',
@@ -31,17 +31,17 @@ export const DEFAULT_CHARACTERS = [
       {
         name: 'Eleanore VanFalen',
         relation: 'Mother',
-        bio: 'William was told she died in childbirth. The truth is… complicated, and the trail always feels intentionally blurred.',
+        bio: 'William was told she died in childbirth. The truth has been shrouded in mystery, and the trail always feels intentionally blurred by his father and Ryken.',
       },
       {
         name: 'Tarzos Spicer',
-        relation: 'Savior / Guardian',
-        bio: 'The one who saved William during the raid, at a devastating cost. Left behind a tarot card: The Fool.',
+        relation: 'Savior / Mentor',
+        bio: 'The one who saved William during the raid, at a devastating cost. He visited William annually only during the Magic Parade in Oakhaven. The reason why a prolific mage would spend his time in this town was unknown. This fact never bothered William though, as he enjoyed his summers spending it watching Tarzos practice his spells.',
       },
       {
         name: 'Ryken',
         relation: 'Patron',
-        bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect.",
+        bio: "A force of bargain and consequence. Ryken offered his power in exchange for a life of servitude towards his dark will. William battles his morals as he tries to find balance in between what he must do, and what he believes. ",
       },
     ],
   },
@@ -178,23 +178,18 @@ export const DEFAULT_CHARACTERS = [
     hp: 42,
     maxHP: 42,
     image: '/characters/Cerci.png',
-    synopsis: 'A dhampir walking between night and dawn.',
+    synopsis: 'A dhampir walking between right and wrong',
     age: 'Appears early-20s',
     height: "5'6\"",
-    class: 'Dhampir Spellblade',
+    class: 'Monk, Rougue',
     lore:
       "Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.",
     goals: 'Find belonging beyond the shadows of her past.',
     npcs: [
       {
         name: 'Bingo',
-        relation: 'Circus Companion',
-        bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival.",
-      },
-      {
-        name: 'The Night Court (Rumor)',
-        relation: 'Unseen Watchers',
-        bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.',
+        relation: 'Circus Ex-Boss',
+        bio: "A familiar face from Cerci's circus years—past comfort, part reminder that her debt will follow her.",
       },
     ],
   },

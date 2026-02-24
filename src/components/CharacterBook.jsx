@@ -9,7 +9,7 @@ import arlisTheme    from '../assets/music/Arlis.mp3';
 //import fenTheme      from '../assets/music/Fen.mp3';
 import vonghulTheme  from '../assets/music/VonGhul.mp3';
 import castorTheme   from '../assets/music/Castor.mp3';
-//import cerciTheme    from '../assets/music/Cerci.mp3';
+import cerciTheme    from '../assets/music/Cerci.mp3';
 //import jasperTheme   from '../assets/music/Jasper.mp3';
 
 // Map character name → imported audio module
@@ -20,7 +20,7 @@ const CHAR_MUSIC_MAP = {
   //'Fen':              fenTheme,
   "Von'Ghul":         vonghulTheme,
   'Castor':           castorTheme,
-  //'Cerci VonDonovon': cerciTheme,
+  'Cerci VonDonovon': cerciTheme,
   //'Jasper Delancey':  jasperTheme,
 };
 
@@ -47,6 +47,10 @@ export default function CharacterBook({
   playNav = null,
   // legacy prop name (kept for backwards-compat)
   playClick = null,
+
+  // ambient audio control (tavern music + fire) passed from TavernMenu
+  pauseAmbient,
+  resumeAmbient,
 }) {
   const navClick = playNav || playClick || (() => {});
 
@@ -159,8 +163,21 @@ export default function CharacterBook({
     if (panelType !== 'characters') {
       const a = charAudioRef.current;
       if (a) { a.pause(); setCharSongOn(false); }
+      // Restore ambient when leaving the character book
+      resumeAmbient?.();
     }
   }, [panelType]);
+
+  // Pause/resume ambient based on whether we're viewing a character profile
+  useEffect(() => {
+    const onProfile = panelType === 'characters' && ['detail', 'relations', 'npc'].includes(charView) && !!selectedChar && !!charSongSrc;
+    if (onProfile) {
+      pauseAmbient?.();
+    } else {
+      resumeAmbient?.();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelType, charView, selectedChar, charSongSrc]);
 
   // Keep volume in sync
   useEffect(() => {
@@ -1164,15 +1181,7 @@ const applyWorldNpcCrop = () => {
                             boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
                           }}
                         >
-                          {/* Single persistent audio element — src swapped via useEffect */}
-                          <audio
-                            ref={charAudioRef}
-                            preload="auto"
-                            onLoadedMetadata={(e) => setCharSongDur(e.currentTarget.duration || 0)}
-                            onTimeUpdate={(e) => setCharSongTime(e.currentTarget.currentTime || 0)}
-                            onEnded={() => setCharSongOn(false)}
-                            onError={() => setCharSongOn(false)}
-                          />
+                          {/* Single persistent audio element — lives outside this block, see below */}
 
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
                             <div>
@@ -1658,6 +1667,17 @@ const applyWorldNpcCrop = () => {
           </div>
         )}
       </div>
+
+      {/* Persistent audio element — outside all conditionals so it never unmounts */}
+      <audio
+        ref={charAudioRef}
+        preload="auto"
+        onLoadedMetadata={(e) => setCharSongDur(e.currentTarget.duration || 0)}
+        onTimeUpdate={(e) => setCharSongTime(e.currentTarget.currentTime || 0)}
+        onEnded={() => setCharSongOn(false)}
+        onError={() => setCharSongOn(false)}
+        style={{ display: 'none' }}
+      />
     </ShellLayout>
   );
 }

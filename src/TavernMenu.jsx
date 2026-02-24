@@ -209,6 +209,18 @@ export default function TavernMenu() {
     fireRef.current.play().catch(() => {});
     setMusicOn(true);
   };
+  
+  const pauseAmbient = () => {
+    if (musicRef.current) musicRef.current.pause();
+    if (fireRef.current)  fireRef.current.pause();
+  };
+
+  const resumeAmbient = () => {
+    // Only resume if audio was on to begin with
+    if (!musicOn) return;
+    if (musicRef.current) musicRef.current.play().catch(() => {});
+    if (fireRef.current)  fireRef.current.play().catch(() => {});
+  };
 
 
   const FADE_TOTAL_MS = 260;
@@ -503,6 +515,8 @@ export default function TavernMenu() {
             playNav: playNavClick,
             playSilent: silentClick,
             playHover,
+            pauseAmbient,
+            resumeAmbient,
           }}
         />
 
