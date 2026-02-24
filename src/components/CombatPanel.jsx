@@ -269,6 +269,24 @@ const hpGradient = (pct) =>
   : pct > 30 ? 'linear-gradient(90deg,rgba(190,130,20,0.90),rgba(230,170,30,0.85))'
   : 'linear-gradient(90deg,rgba(180,40,40,0.90),rgba(220,60,60,0.85))';
 
+// ── Crop Image helper ─────────────────────────────────────────────────────
+function CropImage({ src, imgRef, cropBox, zoom, offset, onLoad }) {
+  if (!src) return null;
+  const img = imgRef.current;
+  const iw = img?.naturalWidth || 1;
+  const ih = img?.naturalHeight || 1;
+  const base = Math.max(cropBox / iw, cropBox / ih);
+  const scale = base * zoom;
+  const rw = iw * scale;
+  const rh = ih * scale;
+  const left = (cropBox / 2) - (rw / 2) + offset.x;
+  const top  = (cropBox / 2) - (rh / 2) + offset.y;
+  return (
+    <img ref={imgRef} src={src} alt="crop" onLoad={onLoad} draggable={false}
+      style={{ position:'absolute', left, top, width:rw, height:rh, pointerEvents:'none', userSelect:'none' }} />
+  );
+}
+
 // ── Battlefield Token ──────────────────────────────────────────────────────
 function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90, flipped = false }) {
   const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
@@ -482,7 +500,7 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
       {/* ENEMIES — upper half, facing toward us, spread horizontally */}
       {enemies.length > 0 && (
         <div style={{
-          position: 'absolute', left: 0, right: 0, top: '30%', //Adjust the TOP to position
+          position: 'absolute', left: 0, right: 0, top: '18%',
           display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
           gap: Math.max(8, 60 - enemies.length * 6),
           flexWrap: 'wrap', padding: '0 40px', zIndex: 3,
@@ -517,7 +535,7 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
       {/* PCs — lower half, facing away (backs shown), larger (closer) */}
       {pcs.length > 0 && (
         <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: '5%', //Adjust BOTTOM to position
+          position: 'absolute', left: 0, right: 0, bottom: '10%',
           display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
           gap: Math.max(10, 64 - pcs.length * 6),
           flexWrap: 'wrap', padding: '0 40px', zIndex: 3,
@@ -578,6 +596,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   // ── Battle Background state ─────────────────────────────────────────────
   const [battleBg, setBattleBg] = useState(null);
+
+  // ── Image Crop state ────────────────────────────────────────────────────
+  const CROP_BOX = 260;
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+  const cropImgRef = useRef(null);
+  const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
   // ensure pick stays valid if roster changes
   useEffect(() => {
@@ -718,13 +745,64 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
   const openEditorFor = (id) => { setSelectedId(id); setEditorOpen(true); };
 
-  // image upload helper
+  // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file || !selected) return;
+    if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
-    reader.onload = (ev) => setSelectedField({ customImage: ev.target.result });
+    reader.onload = (ev) => {
+      setCropSrc(ev.target.result);
+      setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
+      setCropOpen(true);
+    };
     reader.readAsDataURL(file);
+    // reset input so same file can be re-picked
+    e.target.value = '';
+  };
+
+  const clampCropOffset = (zoom = cropZoom) => {
+    const img = cropImgRef.current;
+    if (!img) return;
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const base = Math.max(CROP_BOX / iw, CROP_BOX / ih);
+    const scale = base * zoom;
+    const rw = iw * scale;
+    const rh = ih * scale;
+    const maxX = Math.max(0, (rw - CROP_BOX) / 2);
+    const maxY = Math.max(0, (rh - CROP_BOX) / 2);
+    setCropOffset(o => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
+  };
+
+  const applyCrop = () => {
+    const img = cropImgRef.current;
+    if (!img) return;
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const base = Math.max(CROP_BOX / iw, CROP_BOX / ih);
+    const scale = base * cropZoom;
+    const rw = iw * scale;
+    const rh = ih * scale;
+    const imgLeft = (CROP_BOX / 2) - (rw / 2) + cropOffset.x;
+    const imgTop  = (CROP_BOX / 2) - (rh / 2) + cropOffset.y;
+    let sx = (-imgLeft) / scale;
+    let sy = (-imgTop)  / scale;
+    const sw = CROP_BOX / scale;
+    const sh = CROP_BOX / scale;
+    sx = clamp(sx, 0, Math.max(0, iw - sw));
+    sy = clamp(sy, 0, Math.max(0, ih - sh));
+    const out = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = out; canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+    setSelectedField({ customImage: canvas.toDataURL('image/png') });
+    setCropOpen(false);
   };
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
@@ -1131,23 +1209,36 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     )}
                     <div>
                       <div style={lbl}>Custom Image</div>
-                      <label style={{
-                        display:'inline-block', padding:'5px 12px', borderRadius:8,
-                        background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,220,160,0.14)',
-                        color:'rgba(255,245,220,0.75)', fontSize:11, fontWeight:950, cursor:'pointer',
-                        fontFamily:fontStack, userSelect:'none',
-                      }}>
-                        Upload Image
-                        <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload}/>
-                      </label>
-                      {selected.customImage && (
-                        <button onClick={() => setSelectedField({ customImage:'' })}
-                          style={{ marginLeft:8, padding:'5px 10px', borderRadius:8, border:'none',
-                            background:'rgba(180,40,40,0.40)', color:'rgba(255,200,200,0.90)',
-                            cursor:'pointer', fontSize:11, fontFamily:fontStack }}>
-                          Remove
-                        </button>
-                      )}
+                      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                        {/* Preview circle */}
+                        {selected.customImage && (
+                          <div style={{
+                            width:48, height:48, borderRadius:'50%', overflow:'hidden', flexShrink:0,
+                            border:'2px solid rgba(255,220,160,0.30)',
+                            background:'rgba(0,0,0,0.40)',
+                          }}>
+                            <img src={selected.customImage} alt="token preview"
+                              style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                          </div>
+                        )}
+                        <label style={{
+                          display:'inline-block', padding:'5px 12px', borderRadius:8,
+                          background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,220,160,0.14)',
+                          color:'rgba(255,245,220,0.75)', fontSize:11, fontWeight:950, cursor:'pointer',
+                          fontFamily:fontStack, userSelect:'none',
+                        }}>
+                          {selected.customImage ? 'Replace Image' : 'Upload & Crop'}
+                          <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload}/>
+                        </label>
+                        {selected.customImage && (
+                          <button onClick={() => setSelectedField({ customImage:'' })}
+                            style={{ padding:'5px 10px', borderRadius:8, border:'none',
+                              background:'rgba(180,40,40,0.40)', color:'rgba(255,200,200,0.90)',
+                              cursor:'pointer', fontSize:11, fontFamily:fontStack }}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1173,6 +1264,95 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </button>
                   <button style={sBtn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
                     {selected.dead ? 'Revive' : 'Mark dead'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── IMAGE CROP MODAL ── */}
+        {cropOpen && (
+          <div style={{ ...modalBack, zIndex:30, backdropFilter:'blur(4px)' }}
+            onMouseDown={e => { if (e.target===e.currentTarget) setCropOpen(false); }}>
+            <div style={{
+              width:'min(720px,96vw)', borderRadius:18, overflow:'hidden',
+              border:'1px solid rgba(255,220,160,0.18)',
+              background:'linear-gradient(180deg,rgba(18,12,6,0.98),rgba(8,6,4,0.98))',
+              backdropFilter:'blur(18px)', boxShadow:'0 30px 80px rgba(0,0,0,0.80)',
+              display:'flex', flexDirection:'column',
+            }}>
+              {/* Header */}
+              <div style={{ padding:'0 16px', height:50, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
+                <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:14, letterSpacing:0.3 }}>Crop Token Image</div>
+                <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => setCropOpen(false)}>✕ Cancel</button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding:20, display:'grid', gridTemplateColumns:'1fr 220px', gap:20, alignItems:'start' }}>
+
+                {/* Crop canvas */}
+                <div style={{ display:'flex', justifyContent:'center' }}>
+                  <div
+                    style={{
+                      width: CROP_BOX, height: CROP_BOX, borderRadius: '50%',
+                      border: '3px solid rgba(255,210,80,0.55)',
+                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.62)',
+                      overflow: 'hidden', position: 'relative',
+                      cursor: 'grab', userSelect: 'none', touchAction: 'none',
+                    }}
+                    onMouseDown={e => {
+                      cropDragRef.current = { dragging:true, sx:e.clientX, sy:e.clientY, ox:cropOffset.x, oy:cropOffset.y };
+                      e.preventDefault();
+                    }}
+                    onMouseMove={e => {
+                      if (!cropDragRef.current.dragging) return;
+                      const dx = e.clientX - cropDragRef.current.sx;
+                      const dy = e.clientY - cropDragRef.current.sy;
+                      setCropOffset({ x: cropDragRef.current.ox + dx, y: cropDragRef.current.oy + dy });
+                    }}
+                    onMouseUp={() => { cropDragRef.current.dragging = false; clampCropOffset(); }}
+                    onMouseLeave={() => { if (cropDragRef.current.dragging) { cropDragRef.current.dragging = false; clampCropOffset(); } }}
+                    onWheel={e => {
+                      e.preventDefault();
+                      const next = clamp(cropZoom + (e.deltaY < 0 ? 0.08 : -0.08), 0.5, 4);
+                      setCropZoom(next);
+                      clampCropOffset(next);
+                    }}
+                  >
+                    <CropImage
+                      src={cropSrc}
+                      imgRef={cropImgRef}
+                      cropBox={CROP_BOX}
+                      zoom={cropZoom}
+                      offset={cropOffset}
+                      onLoad={() => clampCropOffset()}
+                    />
+                  </div>
+                </div>
+
+                {/* Controls */}
+                <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+                  <div>
+                    <div style={lbl}>Zoom</div>
+                    <input type="range" min="0.5" max="4" step="0.01"
+                      value={cropZoom}
+                      onChange={e => { const z = parseFloat(e.target.value); setCropZoom(z); clampCropOffset(z); }}
+                      style={{ width:'100%', accentColor:'rgba(200,150,40,0.90)' }}
+                    />
+                    <div style={{ color:'rgba(255,220,160,0.50)', fontSize:10, marginTop:4, fontWeight:900 }}>
+                      {Math.round(cropZoom * 100)}%
+                    </div>
+                  </div>
+
+                  <div style={{ color:'rgba(255,245,220,0.45)', fontSize:11, fontWeight:900, lineHeight:1.6 }}>
+                    Drag to reposition.<br/>Scroll or use slider to zoom.
+                  </div>
+
+                  <button style={{ ...btn('gold'), width:'100%' }}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); applyCrop(); }}>
+                    ✓ Apply Crop
                   </button>
                 </div>
               </div>

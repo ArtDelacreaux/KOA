@@ -25,19 +25,22 @@ const TABS = [
 */
 const GALLERY = {
   maps: [
-    { id: 1, title: 'The Known World',      src: '', description: 'Full overworld map of the campaign setting.' },
-    { id: 2, title: 'The Northern Reaches', src: '', description: 'Detailed map of the frozen northern territories.' },
-    { id: 3, title: 'The Undercroft',        src: '', description: 'Underground network of tunnels and ancient ruins.' },
+    { id: 1, title: 'The Continent of Atria',  src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
+    { id: 2, title: 'The Shattered Canyon',    src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
   ],
   scenes: [
-    { id: 1, title: 'The First Awakening', src: '', description: 'Where the party first came together.' },
-    { id: 2, title: 'Battle of Ashenveil', src: '', description: 'The decisive clash at the burning forest edge.' },
+    { id: 1, title: 'The Well',            src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
+    { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
     { id: 3, title: "The Oracle's Vision", src: '', description: 'A dream sequence revealing the ancient prophecy.' },
   ],
   locations: [
-    { id: 1, title: 'Thornwall Keep',      src: '', description: 'The fortress city at the edge of civilization.' },
-    { id: 2, title: 'The Wandering Bazaar', src: '', description: 'A magical marketplace that appears without warning.' },
-    { id: 3, title: 'Ruins of Eld Maran',  src: '', description: 'Ancient city swallowed by the jungle centuries ago.' },
+    { id: 1, title: 'The City of Qonza',      src: 'lore/Qonza.webp', description: 'Crescent moon city with a cruel justice system.' },
+    { id: 2, title: 'The City of Williwack', src: 'lore/Williwack.jpg', description: 'A desert kingdom that borders the World Spear.' },
+    { id: 3, title: 'The City of Avalon',      src: 'lore/avalonsky.jpg', description: 'Overview of the Center Kingdom' },
+	{ id: 4, title: 'The City of Metlos',      src: 'lore/Metlos.jpg', description: 'Overview of Metlos' },
+	{ id: 5, title: 'The Village of Orum',      src: 'lore/orum.png', description: 'Overview of Orum' },
+	{ id: 6, title: 'The City of Buston',      src: 'lore/Buston.jpg', description: 'Overview of Buston' },
+	{ id: 7, title: 'The Village of SkulPol',      src: 'lore/skolpol.jpg', description: 'Overview of Buston' },
   ],
 };
 
