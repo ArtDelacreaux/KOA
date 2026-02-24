@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 /*
   WorldLore — Knights of Atria
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'maps',      label: 'Maps',      icon: '🗺️' },
   { id: 'scenes',    label: 'Scenes',    icon: '🎨' },
   { id: 'locations', label: 'Locations', icon: '🏰' },
+  { id: 'factions',  label: 'Factions',  icon: '⚜️' },
 ];
 
 /*
@@ -29,18 +30,23 @@ const GALLERY = {
     { id: 2, title: 'The Shattered Canyon',    src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
   ],
   scenes: [
-    { id: 1, title: 'The Well',            src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
+    { id: 1, title: 'The Well',                 src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
     { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
-    { id: 3, title: "The Oracle's Vision", src: '', description: 'A dream sequence revealing the ancient prophecy.' },
+    { id: 3, title: "The Oracle's Vision",      src: '', description: 'A dream sequence revealing the ancient prophecy.' },
   ],
   locations: [
     { id: 1, title: 'The City of Qonza',      src: 'lore/Qonza.webp', description: 'Crescent moon city with a cruel justice system.' },
-    { id: 2, title: 'The City of Williwack', src: 'lore/Williwack.jpg', description: 'A desert kingdom that borders the World Spear.' },
-    { id: 3, title: 'The City of Avalon',      src: 'lore/avalonsky.jpg', description: 'Overview of the Center Kingdom' },
-	{ id: 4, title: 'The City of Metlos',      src: 'lore/Metlos.jpg', description: 'Overview of Metlos' },
-	{ id: 5, title: 'The Village of Orum',      src: 'lore/orum.png', description: 'Overview of Orum' },
-	{ id: 6, title: 'The City of Buston',      src: 'lore/Buston.jpg', description: 'Overview of Buston' },
-	{ id: 7, title: 'The Village of SkulPol',      src: 'lore/skolpol.jpg', description: 'Overview of Buston' },
+    { id: 2, title: 'The City of Williwack',  src: 'lore/Williwack.jpg', description: 'A desert kingdom that borders the World Spear.' },
+    { id: 3, title: 'The City of Avalon',     src: 'lore/avalonsky.jpg', description: 'Overview of the Center Kingdom' },
+	{ id: 4, title: 'The City of Metlos',     src: 'lore/Metlos.jpg', description: 'Overview of Metlos' },
+	{ id: 5, title: 'The Village of Orum',    src: 'lore/orum.png', description: 'Overview of Orum' },
+	{ id: 6, title: 'The City of Buston',     src: 'lore/Buston.jpg', description: 'Overview of Buston' },
+	{ id: 7, title: 'The Village of SkulPol', src: 'lore/skolpol.jpg', description: 'Overview of Buston' },
+  ],
+  factions: [
+    { id: 1, title: 'The Velvet Rose',           src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
+    { id: 2, title: 'The Red Fang',              src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
+	{ id: 3, title: 'Ryken Church Followers',    src: 'lore/rykenf.webp', description: 'Detailed map of the Shattered Canyon.' },
   ],
 };
 
@@ -100,8 +106,17 @@ function SectionDivider({ label }) {
   );
 }
 
+
+
 function ImageCard({ item, onClick }) {
   const [hovered, setHovered] = useState(false);
+
+  // Allow per-card preview control:
+  // item.pos: 'center top' etc
+  // item.fit: 'cover' or 'contain'
+  const pos = item.pos || 'center';
+  const fit = item.fit || 'cover';
+
   return (
     <div
       onClick={() => onClick(item)}
@@ -129,7 +144,7 @@ function ImageCard({ item, onClick }) {
         width: '100%',
         aspectRatio: '16/9',
         background: item.src
-          ? `url(${item.src}) center/cover no-repeat`
+          ? `url(${item.src}) ${pos} / ${fit} no-repeat`
           : 'linear-gradient(135deg, rgba(30,20,8,0.95), rgba(60,38,12,0.7))',
         display: 'flex',
         alignItems: 'center',
@@ -185,10 +200,66 @@ function ImageCard({ item, onClick }) {
 }
 
 function Lightbox({ item, onClose }) {
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef({ startX: 0, startY: 0, panX: 0, panY: 0 });
+
+  // Reset zoom/pan when opening a new item
+  useEffect(() => {
+    if (!item) return;
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setDragging(false);
+  }, [item]);
+
   if (!item) return null;
+
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const setZoomClamped = (val) => setZoom(clamp(val, 1, 5));
+
+  const onWheel = (e) => {
+    if (!item?.src) return;
+    e.preventDefault();
+
+    const delta = e.deltaY > 0 ? -0.12 : 0.12;
+    setZoomClamped(+(zoom + delta).toFixed(2));
+  };
+
+  const startDrag = (e) => {
+    if (!item?.src) return;
+    setDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      panX: pan.x,
+      panY: pan.y,
+    };
+  };
+
+  const moveDrag = (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    setPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy });
+  };
+
+  const endDrag = () => setDragging(false);
+
+  const resetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const zoomIn = () => setZoomClamped(+(zoom + 0.25).toFixed(2));
+  const zoomOut = () => setZoomClamped(+(zoom - 0.25).toFixed(2));
+
   return (
     <div
       onClick={onClose}
+      onMouseMove={moveDrag}
+      onMouseUp={endDrag}
+      onMouseLeave={endDrag}
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.88)',
@@ -205,7 +276,7 @@ function Lightbox({ item, onClose }) {
           background: 'linear-gradient(180deg, rgba(22,16,8,0.98), rgba(12,9,4,0.99))',
           border: `1px solid rgba(255,220,160,0.4)`,
           borderRadius: 22,
-          maxWidth: 860,
+          maxWidth: 980,
           width: '100%',
           overflow: 'hidden',
           boxShadow: '0 0 80px rgba(0,0,0,0.8), 0 0 40px rgba(176,101,0,0.12)',
@@ -218,42 +289,161 @@ function Lightbox({ item, onClose }) {
           borderBottom: `1px solid ${THEME.lineSoft}`,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           background: 'rgba(255,245,220,0.04)',
+          gap: 12,
+          flexWrap: 'wrap',
         }}>
           <span style={{ fontFamily: fontStack, color: THEME.creamText, fontSize: 15, fontWeight: 900, letterSpacing: '0.1em' }}>
             {item.title}
           </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'rgba(255,245,220,0.06)',
-              border: `1px solid ${THEME.line}`,
-              color: 'rgba(255,220,160,0.8)',
-              cursor: 'pointer',
-              borderRadius: 10,
-              width: 32, height: 32,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 14, fontFamily: fontStack,
-              transition: 'background 150ms ease',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,245,220,0.12)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,245,220,0.06)'}
-          >✕</button>
+
+          {/* Zoom controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+            <button
+              onClick={zoomOut}
+              disabled={!item.src || zoom <= 1}
+              style={{
+                opacity: !item.src || zoom <= 1 ? 0.35 : 1,
+                background: 'rgba(255,245,220,0.06)',
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                cursor: !item.src || zoom <= 1 ? 'not-allowed' : 'pointer',
+                borderRadius: 10,
+                width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, fontFamily: fontStack, fontWeight: 900,
+              }}
+              title="Zoom out"
+            >−</button>
+
+            <input
+              type="range"
+              min={1}
+              max={5}
+              step={0.05}
+              value={zoom}
+              disabled={!item.src}
+              onChange={(e) => setZoomClamped(parseFloat(e.target.value))}
+              style={{
+                width: 160,
+                accentColor: 'rgba(176,101,0,0.85)',
+                opacity: item.src ? 1 : 0.35,
+              }}
+              title="Zoom"
+            />
+
+            <button
+              onClick={zoomIn}
+              disabled={!item.src || zoom >= 5}
+              style={{
+                opacity: !item.src || zoom >= 5 ? 0.35 : 1,
+                background: 'rgba(255,245,220,0.06)',
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                cursor: !item.src || zoom >= 5 ? 'not-allowed' : 'pointer',
+                borderRadius: 10,
+                width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 16, fontFamily: fontStack, fontWeight: 900,
+              }}
+              title="Zoom in"
+            >+</button>
+
+            <button
+              onClick={resetView}
+              disabled={!item.src}
+              style={{
+                opacity: item.src ? 1 : 0.35,
+                background: 'rgba(255,245,220,0.06)',
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                cursor: item.src ? 'pointer' : 'not-allowed',
+                borderRadius: 10,
+                height: 32,
+                padding: '0 10px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontFamily: fontStack, fontWeight: 900,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+              title="Reset view"
+            >Reset</button>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,245,220,0.06)',
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                cursor: 'pointer',
+                borderRadius: 10,
+                width: 32, height: 32,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontFamily: fontStack,
+              }}
+              title="Close"
+            >✕</button>
+          </div>
         </div>
 
         {/* Image */}
-        <div style={{
-          width: '100%', aspectRatio: '16/9',
-          background: item.src
-            ? `url(${item.src}) center/contain no-repeat #0a0805`
-            : 'linear-gradient(135deg, rgba(30,20,8,0.95), rgba(50,32,10,0.8))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {!item.src && (
+        <div
+          onWheel={onWheel}
+          style={{
+            width: '100%',
+            height: 'min(70vh, 560px)',
+            background: '#0a0805',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+            userSelect: 'none',
+          }}
+        >
+          {item.src ? (
+            <img
+              src={item.src}
+              alt={item.title}
+              draggable={false}
+              onMouseDown={startDrag}
+              onDoubleClick={resetView}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '100%',
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: 'center center',
+                cursor: dragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default'),
+                transition: dragging ? 'none' : 'transform 80ms ease',
+                willChange: 'transform',
+                pointerEvents: 'auto',
+              }}
+            />
+          ) : (
             <div style={{ textAlign: 'center', opacity: 0.28 }}>
               <div style={{ fontSize: '3.5rem' }}>🖼️</div>
               <div style={{ color: 'rgba(255,220,160,0.7)', fontSize: '0.7rem', letterSpacing: '0.15em', marginTop: 10, fontFamily: fontStack }}>
                 IMAGE NOT YET ASSIGNED
               </div>
+            </div>
+          )}
+
+          {/* Small hint */}
+          {item.src && (
+            <div style={{
+              position: 'absolute',
+              bottom: 12,
+              right: 14,
+              fontSize: 11,
+              fontFamily: fontStack,
+              letterSpacing: '0.12em',
+              color: 'rgba(255,220,160,0.35)',
+              background: 'rgba(0,0,0,0.35)',
+              border: `1px solid rgba(255,220,160,0.18)`,
+              borderRadius: 12,
+              padding: '6px 10px',
+              backdropFilter: 'blur(6px)',
+            }}>
+              Wheel: Zoom • Drag: Pan • Double-click: Reset
             </div>
           )}
         </div>
