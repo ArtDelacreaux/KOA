@@ -6,22 +6,22 @@ import ShellLayout from './ShellLayout';
 import williamTheme  from '../assets/music/William.mp3';
 import arlisTheme    from '../assets/music/Arlis.mp3';
 //import thryvTheme    from '../assets/music/Thryvaris.mp3';
-//import fenTheme      from '../assets/music/Fen.mp3';
+import fenTheme      from '../assets/music/Fen.mp3';
 import vonghulTheme  from '../assets/music/VonGhul.mp3';
 import castorTheme   from '../assets/music/Castor.mp3';
 import cerciTheme    from '../assets/music/Cerci.mp3';
-//import jasperTheme   from '../assets/music/Jasper.mp3';
+import jasperTheme   from '../assets/music/Jasper.mp3';
 
 // Map character name → imported audio module
 const CHAR_MUSIC_MAP = {
   'William Spicer':   williamTheme,
   'Arlis Ghoth':      arlisTheme,
   //'Thryvaris Bria':   thryvTheme,
-  //'Fen':              fenTheme,
+  'Fen':              fenTheme,
   "Von'Ghul":         vonghulTheme,
   'Castor':           castorTheme,
   'Cerci VonDonovon': cerciTheme,
-  //'Jasper Delancey':  jasperTheme,
+  'Jasper Delancey':  jasperTheme,
 };
 
 export default function CharacterBook({
@@ -655,7 +655,7 @@ const applyWorldNpcCrop = () => {
     {
       name: 'William Spicer',
       image: '/characters/Will.png',
-      synopsis: '.',
+      synopsis: 'I will bring down a god.',
       age: '22', height: "5'11\"", class: 'Fiend Warlock',
       lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
       goals: 'Protect those he loves and uncover the truth behind his cursed power.',
@@ -670,7 +670,7 @@ const applyWorldNpcCrop = () => {
       name: 'Arlis Ghoth',
       image: arlisImgA,
       synopsis: 'A cunning and graceful adventurer.',
-      age: 'Mid-20s', height: "5'7\"", class: 'Cleric',
+      age: '24', height: "5'8\"", class: 'Cleric',
       lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
       goals: 'Reveal the truth of her heart—and survive the journey.',
       npcs: [
@@ -682,7 +682,7 @@ const applyWorldNpcCrop = () => {
       name: 'Thryvaris Bria',
       image: '/characters/3V.png',
       synopsis: 'A mysterious mage with that lives in a cave.',
-      age: 'Unknown', height: "6'1\"",
+      age: "Early 20's", height: "6'1\"",
       class: 'Sorcerer',
       lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
       goals: 'Pursue truths lost to time.',
@@ -730,14 +730,14 @@ const applyWorldNpcCrop = () => {
       ],
     },
     {
-      name: 'Jasper Delaney',
+      name: 'Jasper Delancey',
       image: '/characters/Jasper.png',
       synopsis: 'A cleric hailing from the Golden Isles.',
-      age: '',
-      height: '',
+      age: '30',
+      height: "6'1\"",
       class: 'Cleric',
-      lore: '',
-      goals: '',
+      lore: 'Joined the Envoy of Avalon entourage much later.',
+      goals: 'Unknown',
       npcs: [],
     },
     {
@@ -894,55 +894,7 @@ const applyWorldNpcCrop = () => {
           </div>
 
           {/* Context tabs (only show when applicable) */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            {showProfileTab && (
-              <span
-                style={tabButtonStyle(charView === 'detail')}
-                onMouseDown={navClick}
-                onClick={() => setCharView('detail')}
-                role="button"
-                tabIndex={0}
-              >
-                Profile
-              </span>
-            )}
-
-            {showRelationsTab && (
-              <span
-                style={tabButtonStyle(charView === 'relations')}
-                onMouseDown={navClick}
-                onClick={() => { setSelectedNpc(null); setCharView('relations'); }}
-                role="button"
-                tabIndex={0}
-              >
-                NPCs
-              </span>
-            )}
-
-            {showNpcTab && (
-              <span
-                style={tabButtonStyle(charView === 'npc')}
-                onMouseDown={navClick}
-                onClick={() => setCharView('npc')}
-                role="button"
-                tabIndex={0}
-              >
-                NPC Bio
-              </span>
-            )}
-
-            {selectedChar && (
-              <button
-                style={{ ...backButton, marginLeft: 'auto', padding: '8px 14px', fontSize: 12 }}
-                onMouseEnter={btnHover}
-                onMouseLeave={btnLeave}
-                onMouseDown={(e) => { btnDown(e); navClick(); }}
-                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('grid'); }}
-              >
-                Back to Grid
-              </button>
-            )}
-          </div>
+          
         </div>
 
         {/* Body */}
