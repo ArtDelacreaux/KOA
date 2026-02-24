@@ -415,17 +415,102 @@ export default function CharacterBook({
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
-  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '' });
+  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '', image: '' });
+
+  // Image cropper (simple, no external libs)
+  const [worldNpcCropOpen, setWorldNpcCropOpen] = useState(false);
+  const [worldNpcCropSrc, setWorldNpcCropSrc] = useState('');
+  const [worldNpcCropZoom, setWorldNpcCropZoom] = useState(1);
+  const [worldNpcCropOffset, setWorldNpcCropOffset] = useState({ x: 0, y: 0 });
+  const worldNpcCropImgRef = useRef(null);
+  const worldNpcCropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0, iw: 0, ih: 0 });
+  const WORLD_NPC_CROP_BOX = 260; // px
+
+
+
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+
+const clampCropOffset = () => {
+  const img = worldNpcCropImgRef.current;
+  if (!img) return;
+  const iw = img.naturalWidth || 1;
+  const ih = img.naturalHeight || 1;
+  const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
+  const scale = base * worldNpcCropZoom;
+  const rw = iw * scale;
+  const rh = ih * scale;
+  const maxX = Math.max(0, (rw - WORLD_NPC_CROP_BOX) / 2);
+  const maxY = Math.max(0, (rh - WORLD_NPC_CROP_BOX) / 2);
+  setWorldNpcCropOffset((o) => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
+};
+
+const onWorldNpcImagePick = (file) => {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+    if (!dataUrl) return;
+    // Open cropper first (user confirms before it becomes the NPC image)
+    setWorldNpcCropSrc(dataUrl);
+    setWorldNpcCropZoom(1);
+    setWorldNpcCropOffset({ x: 0, y: 0 });
+    setWorldNpcCropOpen(true);
+  };
+  reader.readAsDataURL(file);
+};
+
+const applyWorldNpcCrop = () => {
+  const img = worldNpcCropImgRef.current;
+  if (!img) return;
+
+  const iw = img.naturalWidth || 1;
+  const ih = img.naturalHeight || 1;
+
+  const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
+  const scale = base * worldNpcCropZoom;
+
+  const rw = iw * scale;
+  const rh = ih * scale;
+
+  const imgLeft = (WORLD_NPC_CROP_BOX / 2) - (rw / 2) + worldNpcCropOffset.x;
+  const imgTop = (WORLD_NPC_CROP_BOX / 2) - (rh / 2) + worldNpcCropOffset.y;
+
+  // Source rect in original image coords that maps to the crop box
+  let sx = (-imgLeft) / scale;
+  let sy = (-imgTop) / scale;
+  const sw = WORLD_NPC_CROP_BOX / scale;
+  const sh = WORLD_NPC_CROP_BOX / scale;
+
+  // Clamp to bounds
+  sx = clamp(sx, 0, Math.max(0, iw - sw));
+  sy = clamp(sy, 0, Math.max(0, ih - sh));
+
+  const out = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = out;
+  canvas.height = out;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  setWorldNpcDraft((d) => ({ ...d, image: dataUrl }));
+  setWorldNpcCropOpen(false);
+};
 
   const openAddWorldNpc = () => {
     setEditingWorldNpcId(null);
-    setWorldNpcDraft({ name: '', faction: '', location: '', bio: '' });
+    setWorldNpcDraft({ name: '', faction: '', location: '', bio: '', image: '' });
     setWorldNpcModalOpen(true);
   };
 
   const openEditWorldNpc = (npc) => {
     setEditingWorldNpcId(npc.id);
-    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '' });
+    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '', image: npc.image || '' });
     setWorldNpcModalOpen(true);
   };
 
@@ -438,6 +523,7 @@ export default function CharacterBook({
         faction: (worldNpcDraft.faction || '').trim(),
         location: (worldNpcDraft.location || '').trim(),
         bio: (worldNpcDraft.bio || '').trim(),
+        image: (worldNpcDraft.image || ''),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -446,7 +532,7 @@ export default function CharacterBook({
       setWorldNpcs((prev) =>
         (prev || []).map((n) =>
           n.id === editingWorldNpcId
-            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), updatedAt: new Date().toISOString() }
+            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), image: (worldNpcDraft.image || ''), updatedAt: new Date().toISOString() }
             : n
         )
       );
@@ -898,25 +984,53 @@ export default function CharacterBook({
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {filteredWorldNpcs.map((n) => (
-                      <div key={n.id} style={darkCard}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <div key={n.id} className="cb-npc-hover" style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                      onMouseDown={navClick}
+                      onClick={() => openEditWorldNpc(n)}
+                      role="button" tabIndex={0}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220 }}>
+                          {n.image ? (
+                            <img
+                              src={n.image}
+                              alt={n.name || 'NPC'}
+                              style={{
+                                width: 44,
+                                height: 44,
+                                objectFit: 'cover',
+                                borderRadius: 12,
+                                border: `1px solid ${THEME.lineSoft}`,
+                                boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
+                                flex: '0 0 auto',
+                              }}
+                            />
+                          ) : (
+                            <div
+                              aria-hidden
+                              style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 12,
+                                border: `1px solid ${THEME.lineSoft}`,
+                                background: 'linear-gradient(180deg, rgba(30,20,10,0.70), rgba(18,12,6,0.78))',
+                                boxShadow: '0 10px 22px rgba(0,0,0,0.30)',
+                                flex: '0 0 auto',
+                              }}
+                            />
+                          )}
                           <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
-                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                              Faction: {(n.faction || '').trim() || '—'}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                              Location: {(n.location || '').trim() || '—'}
-                            </span>
-                          </div>
                         </div>
-                        {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
-                        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                          <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => openEditWorldNpc(n)}>✎ Edit</button>
-                          <button style={{ ...tinyBtn, border: '1px solid rgba(255,160,160,0.22)', color: 'rgba(255,160,160,0.85)' }}
-                            onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave} onClick={() => deleteWorldNpc(n.id)}>🗑 Delete</button>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                            Faction: {(n.faction || '').trim() || '—'}
+                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                            Location: {(n.location || '').trim() || '—'}
+                          </span>
                         </div>
                       </div>
+                        {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
+</div>
                     ))}
                   </div>
                 )}
@@ -1116,7 +1230,28 @@ export default function CharacterBook({
                   Close
                 </button>
               </div>
-
+				{worldNpcDraft.image && (
+				  <div
+					style={{
+					  marginTop: 10,
+					  paddingLeft: 20, // 👈 move it slightly right
+					}}
+				  >
+					<img
+					  src={worldNpcDraft.image}
+					  alt="NPC"
+					  style={{
+						width: 110,
+						height: 110,
+						objectFit: 'cover',
+						borderRadius: 14,
+						border: `1px solid ${THEME.lineSoft}`,
+						boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+						display: 'block',
+					  }}
+					/>
+				  </div>
+				)}
               <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Name</div>
@@ -1133,6 +1268,31 @@ export default function CharacterBook({
                   <input value={worldNpcDraft.location} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
                     placeholder="e.g. Avalon" style={inputBase} />
                 </div>
+                
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={fieldLabel}>Image (optional)</div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => onWorldNpcImagePick(e.target.files && e.target.files[0])}
+                      style={{ ...inputBase, padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                    />
+                    {worldNpcDraft.image && (
+                      <button
+                        type="button"
+                        style={{ ...tinyBtn, opacity: 0.95 }}
+                        onMouseEnter={tinyBtnHover}
+                        onMouseLeave={tinyBtnLeave}
+                        onClick={() => setWorldNpcDraft((d) => ({ ...d, image: '' }))}
+                      >
+                        Remove Image
+                      </button>
+                    )}
+                  </div>
+
+                </div>
+
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Bio / Notes</div>
                   <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
@@ -1153,6 +1313,159 @@ export default function CharacterBook({
                   {editingWorldNpcId ? 'Save Changes' : 'Add NPC'}
                 </button>
               </div>
+
+
+{/* WORLD NPC IMAGE CROP */}
+{worldNpcCropOpen && (
+  <div
+    style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 40,
+      background: 'rgba(0,0,0,0.72)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+      backdropFilter: 'blur(4px)',
+    }}
+    onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcCropOpen(false); }}
+  >
+    <div style={{
+      width: 'min(720px, 96vw)',
+      borderRadius: 22,
+      background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+      boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+      border: `1px solid ${THEME.line}`,
+      color: THEME.creamText,
+      fontFamily: fontStack,
+      overflow: 'hidden',
+      display: 'flex',
+      flexDirection: 'column',
+    }}>
+      <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
+        <div style={{ fontSize: 16, fontWeight: 950 }}>Crop Image</div>
+        <button
+          style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+          onMouseEnter={btnHover}
+          onMouseLeave={btnLeave}
+          onMouseDown={(e) => { btnDown(e); navClick(); }}
+          onClick={() => setWorldNpcCropOpen(false)}
+        >
+          Close
+        </button>
+      </div>
+
+      <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div
+            style={{
+              width: WORLD_NPC_CROP_BOX,
+              height: WORLD_NPC_CROP_BOX,
+              borderRadius: 18,
+              border: `1px solid ${THEME.lineSoft}`,
+              background: 'linear-gradient(180deg, rgba(10,8,6,0.55), rgba(10,8,6,0.25))',
+              boxShadow: '0 18px 46px rgba(0,0,0,0.55)',
+              overflow: 'hidden',
+              position: 'relative',
+              touchAction: 'none',
+              userSelect: 'none',
+            }}
+            onMouseDown={(e) => {
+              const img = worldNpcCropImgRef.current;
+              if (!img) return;
+              worldNpcCropDragRef.current.dragging = true;
+              worldNpcCropDragRef.current.sx = e.clientX;
+              worldNpcCropDragRef.current.sy = e.clientY;
+              worldNpcCropDragRef.current.ox = worldNpcCropOffset.x;
+              worldNpcCropDragRef.current.oy = worldNpcCropOffset.y;
+              e.preventDefault();
+            }}
+            onMouseMove={(e) => {
+              if (!worldNpcCropDragRef.current.dragging) return;
+              const dx = e.clientX - worldNpcCropDragRef.current.sx;
+              const dy = e.clientY - worldNpcCropDragRef.current.sy;
+              setWorldNpcCropOffset({ x: worldNpcCropDragRef.current.ox + dx, y: worldNpcCropDragRef.current.oy + dy });
+            }}
+            onMouseUp={() => { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); }}
+            onMouseLeave={() => { if (worldNpcCropDragRef.current.dragging) { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); } }}
+          >
+            <img
+              ref={worldNpcCropImgRef}
+              src={worldNpcCropSrc}
+              alt="Crop"
+              onLoad={() => { clampCropOffset(); }}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropZoom})`,
+                transformOrigin: 'center center',
+                willChange: 'transform',
+                userSelect: 'none',
+                pointerEvents: 'none',
+                maxWidth: 'none',
+                maxHeight: 'none',
+              }}
+              draggable={false}
+            />
+
+            {/* subtle corner marks */}
+            <div style={{
+              position: 'absolute',
+              inset: 10,
+              borderRadius: 14,
+              border: '1px dashed rgba(255,220,160,0.18)',
+              pointerEvents: 'none',
+            }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ ...darkCard, padding: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.8, marginBottom: 8 }}>Zoom</div>
+            <input
+              className="cb-rng"
+              type="range"
+              min={1}
+              max={2.5}
+              step={0.01}
+              value={worldNpcCropZoom}
+              onChange={(e) => { setWorldNpcCropZoom(parseFloat(e.target.value) || 1); }}
+              onMouseUp={clampCropOffset}
+              onTouchEnd={clampCropOffset}
+              style={{ color: 'rgba(255,220,160,0.9)', accentColor: 'rgba(255,220,160,0.9)', background: 'rgba(255,245,220,0.12)' }}
+            />
+            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.72, color: THEME.creamSoft }}>
+              Drag the image to position it inside the frame.
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button
+              style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+              onMouseEnter={btnHover}
+              onMouseLeave={btnLeave}
+              onMouseDown={(e) => { btnDown(e); navClick(); }}
+              onClick={() => setWorldNpcCropOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              style={goldBtn}
+              onMouseEnter={btnHover}
+              onMouseLeave={btnLeave}
+              onMouseDown={(e) => { btnDown(e); navClick(); }}
+              onClick={applyWorldNpcCrop}
+            >
+              Use Cropped Image
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
             </div>
           </div>
         )}
