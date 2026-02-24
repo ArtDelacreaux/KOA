@@ -122,7 +122,7 @@ export default function CharacterBook({
   const [charSongOn,  setCharSongOn]  = useState(false);
   const [charSongTime, setCharSongTime] = useState(0);
   const [charSongDur,  setCharSongDur]  = useState(0);
-  const [charSongVol,  setCharSongVol]  = useState(0.03);
+  const [charSongVol,  setCharSongVol]  = useState(0.50);
 
   // Derive src without useMemo so it never lags a render cycle
   const charSongSrc = selectedChar ? (CHAR_MUSIC_MAP[selectedChar.name] || null) : null;
