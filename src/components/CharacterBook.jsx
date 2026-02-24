@@ -1,6 +1,29 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 
+// Character theme music — one import per character
+// Place each MP3 in: src/assets/music/<filename>
+import williamTheme  from '../assets/music/William.mp3';
+import arlisTheme    from '../assets/music/Arlis.mp3';
+//import thryvTheme    from '../assets/music/Thryvaris.mp3';
+//import fenTheme      from '../assets/music/Fen.mp3';
+import vonghulTheme  from '../assets/music/VonGhul.mp3';
+import castorTheme   from '../assets/music/Castor.mp3';
+//import cerciTheme    from '../assets/music/Cerci.mp3';
+//import jasperTheme   from '../assets/music/Jasper.mp3';
+
+// Map character name → imported audio module
+const CHAR_MUSIC_MAP = {
+  'William Spicer':   williamTheme,
+  'Arlis Ghoth':      arlisTheme,
+  //'Thryvaris Bria':   thryvTheme,
+  //'Fen':              fenTheme,
+  "Von'Ghul":         vonghulTheme,
+  'Castor':           castorTheme,
+  //'Cerci VonDonovon': cerciTheme,
+  //'Jasper Delancey':  jasperTheme,
+};
+
 export default function CharacterBook({
   panelType,
   cinematicNav,
@@ -90,6 +113,70 @@ export default function CharacterBook({
     const t = Math.max(0, Math.min(100, Number(v) || 0));
     const c = relTempColor(t);
     return `linear-gradient(90deg, ${c} 0%, ${c} ${t}%, rgba(255,245,220,0.12) ${t}%, rgba(255,245,220,0.12) 100%)`;
+  };
+
+
+  /* ---------- CHARACTER THEME PLAYER ---------- */
+  // Single persistent <audio> element — never remounted, src swapped manually.
+  const charAudioRef = useRef(null);
+  const [charSongOn,  setCharSongOn]  = useState(false);
+  const [charSongTime, setCharSongTime] = useState(0);
+  const [charSongDur,  setCharSongDur]  = useState(0);
+  const [charSongVol,  setCharSongVol]  = useState(0.03);
+
+  // Derive src without useMemo so it never lags a render cycle
+  const charSongSrc = selectedChar ? (CHAR_MUSIC_MAP[selectedChar.name] || null) : null;
+
+  const fmtTime = (sec) => {
+    const s = Math.max(0, Math.floor(Number(sec) || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+
+  // Swap track and auto-play whenever the selected character changes
+  useEffect(() => {
+    const a = charAudioRef.current;
+    if (!a) return;
+    a.pause();
+    setCharSongOn(false);
+    setCharSongTime(0);
+    setCharSongDur(0);
+    if (!charSongSrc) { a.src = ''; return; }
+    a.src = charSongSrc;
+    a.volume = charSongVol;
+    // Auto-play as soon as enough data is buffered
+    const onCanPlay = () => {
+      a.play().then(() => setCharSongOn(true)).catch(() => setCharSongOn(false));
+      a.removeEventListener('canplay', onCanPlay);
+    };
+    a.addEventListener('canplay', onCanPlay);
+    a.load();
+    return () => a.removeEventListener('canplay', onCanPlay);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charSongSrc]);
+
+  // Stop when leaving the character book entirely
+  useEffect(() => {
+    if (panelType !== 'characters') {
+      const a = charAudioRef.current;
+      if (a) { a.pause(); setCharSongOn(false); }
+    }
+  }, [panelType]);
+
+  // Keep volume in sync
+  useEffect(() => {
+    const a = charAudioRef.current;
+    if (a) a.volume = Math.max(0, Math.min(1, Number(charSongVol) || 0));
+  }, [charSongVol]);
+
+  const toggleCharSong = () => {
+    const a = charAudioRef.current;
+    if (!a || !charSongSrc) return;
+    if (a.paused) {
+      a.play().then(() => setCharSongOn(true)).catch(() => setCharSongOn(false));
+    } else {
+      a.pause();
+      setCharSongOn(false);
+    }
   };
 
   /* ---------- styles ---------- */
@@ -1062,6 +1149,107 @@ const applyWorldNpcCrop = () => {
                       <div style={{ gridColumn: '1 / -1' }}>
                         <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Class</div>
                         <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{selectedChar.class}</div>
+                      </div>
+
+                      {/* Character Theme Song (start with Von'Ghul) */}
+                      {/* Character Theme Song (Von'Ghul for now) */}
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div style={divider} />
+                        <div
+                          style={{
+                            padding: 12,
+                            borderRadius: 14,
+                            background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
+                            border: `1px solid ${THEME.lineSoft}`,
+                            boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
+                          }}
+                        >
+                          {/* Single persistent audio element — src swapped via useEffect */}
+                          <audio
+                            ref={charAudioRef}
+                            preload="auto"
+                            onLoadedMetadata={(e) => setCharSongDur(e.currentTarget.duration || 0)}
+                            onTimeUpdate={(e) => setCharSongTime(e.currentTarget.currentTime || 0)}
+                            onEnded={() => setCharSongOn(false)}
+                            onError={() => setCharSongOn(false)}
+                          />
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>
+                                Theme
+                              </div>
+
+                              {charSongSrc ? (
+                                <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>
+                                  {fmtTime(charSongTime)} / {fmtTime(charSongDur)}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft, marginTop: 2, opacity: 0.85 }}>
+                                  No theme assigned.
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              disabled={!charSongSrc}
+                              style={{
+                                ...tinyBtn,
+                                padding: '8px 12px',
+                                opacity: charSongSrc ? 1 : 0.45,
+                                cursor: charSongSrc ? 'pointer' : 'not-allowed',
+                              }}
+                              onMouseEnter={(e) => { if (charSongSrc) tinyBtnHover(e); }}
+                              onMouseLeave={(e) => { if (charSongSrc) tinyBtnLeave(e); }}
+                              onMouseDown={(e) => { if (charSongSrc) navClick(e); }}
+                              onClick={(e) => { e.preventDefault(); if (charSongSrc) toggleCharSong(); }}
+                            >
+                              {charSongOn ? 'Pause' : 'Play'}
+                            </button>
+                          </div>
+
+                          <input
+                            className="cb-rng"
+                            type="range"
+                            min={0}
+                            max={Math.max(1, Math.floor(charSongDur || 1))}
+                            value={Math.min(charSongTime, charSongDur || 0)}
+                            disabled={!charSongSrc}
+                            onChange={(e) => {
+                              const a = charAudioRef.current;
+                              if (!a) return;
+                              const t = Number(e.target.value) || 0;
+                              a.currentTime = t;
+                              setCharSongTime(t);
+                            }}
+                            style={{
+                              color: THEME.creamText,
+                              accentColor: THEME.creamText,
+                              background: `linear-gradient(90deg, rgba(255,245,220,0.75) 0%, rgba(255,245,220,0.75) ${(Math.min(charSongTime, charSongDur || 0) / Math.max(1, charSongDur || 1)) * 100}%, rgba(255,245,220,0.14) ${(Math.min(charSongTime, charSongDur || 0) / Math.max(1, charSongDur || 1)) * 100}%, rgba(255,245,220,0.14) 100%)`,
+                              marginTop: 10,
+                              opacity: charSongSrc ? 1 : 0.55,
+                            }}
+                          />
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, opacity: charSongSrc ? 1 : 0.55 }}>
+                            <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Vol</div>
+                            <input
+                              className="cb-rng"
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              value={charSongVol}
+                              disabled={!charSongSrc}
+                              onChange={(e) => setCharSongVol(parseFloat(e.target.value))}
+                              style={{
+                                color: THEME.creamText,
+                                accentColor: THEME.creamText,
+                                background: `linear-gradient(90deg, rgba(255,245,220,0.75) 0%, rgba(255,245,220,0.75) ${Math.round((Number(charSongVol) || 0) * 100)}%, rgba(255,245,220,0.14) ${Math.round((Number(charSongVol) || 0) * 100)}%, rgba(255,245,220,0.14) 100%)`,
+                              }}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
