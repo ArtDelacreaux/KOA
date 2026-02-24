@@ -7,6 +7,15 @@ const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
+const ADVENTURERS = [
+  { name: 'William Spicer',   role: 'Warlock',             ac: 15, hp: 115, maxHP: 115 },
+  { name: 'Arlis Ghoth',      role: 'Cleric',              ac: 17, hp: 38,  maxHP: 38 },
+  { name: 'Thryvaris Bria',   role: 'Sorcerer',            ac: 14, hp: 32,  maxHP: 32 },
+  { name: 'Fen',              role: 'Barbarian',           ac: 16, hp: 58,  maxHP: 58 },
+  { name: "Von'Ghul",         role: 'Artificer',           ac: 18, hp: 44,  maxHP: 44 },
+  { name: 'Castor',           role: 'Warlock',             ac: 15, hp: 36,  maxHP: 36 },
+  { name: 'Cerci VonDonovon', role: 'Monk',                ac: 16, hp: 42,  maxHP: 42 },
+];
 
 // ── SVG silhouettes (inline, no external deps) ────────────────────────────
 
@@ -513,21 +522,7 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CombatPanel({ panelType, cinematicNav, characters = [], playNav = () => {}, playHover = () => {} }) {
-
-  // ✅ Adventurers are now derived from the shared Character Book roster (single source of truth)
-  const adventurers = useMemo(() => {
-    return (characters || [])
-      .filter((c) => c && c.combat)
-      .map((c) => ({
-        name: c.name,
-        role: c.role || c.class || '',
-        ac: typeof c.ac === 'number' ? c.ac : 0,
-        hp: typeof c.hp === 'number' ? c.hp : 0,
-        maxHP: typeof c.maxHP === 'number' ? c.maxHP : (typeof c.hp === 'number' ? c.hp : 0),
-      }));
-  }, [characters]);
-
+export default function CombatPanel({ panelType, cinematicNav, playNav = () => {}, playHover = () => {} }) {
   const active = panelType === 'combat';
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
@@ -535,14 +530,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [editorOpen, setEditorOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', role:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
-  const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
-
-  // ensure pick stays valid if roster changes
-  useEffect(() => {
-    if (!adventurers.length) return;
-    const ok = adventurers.some((a) => a.name === adventurerPick);
-    if (!ok) setAdventurerPick(adventurers[0].name);
-  }, [adventurers, adventurerPick]);
+  const [adventurerPick, setAdventurerPick] = useState(ADVENTURERS[0]?.name || '');
   const [adventurerSide, setAdventurerSide] = useState('PC');
 
   const hydrated = useRef(false);
@@ -593,7 +581,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const addAdventurer = () => {
-    const adv = adventurers.find(a => a.name === adventurerPick);
+    const adv = ADVENTURERS.find(a => a.name === adventurerPick);
     if (!adv) return;
     const existingNames = new Set(combatants.map(x => x.name));
     addCombatant({
@@ -677,14 +665,89 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
   const openEditorFor = (id) => { setSelectedId(id); setEditorOpen(true); };
 
-  // image upload helper
-  const handleImageUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !selected) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setSelectedField({ customImage: ev.target.result });
-    reader.readAsDataURL(file);
+  // image upload helper (opens a quick cropper before applying)
+const [cropOpen, setCropOpen] = useState(false);
+const [cropSrc, setCropSrc] = useState('');
+const [cropZoom, setCropZoom] = useState(1);
+const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
+const cropImgRef = useRef(null);
+const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+const CROP_BOX = 260; // px
+
+const clampCropOffset = () => {
+  const img = cropImgRef.current;
+  if (!img) return;
+  const iw = img.naturalWidth || 1;
+  const ih = img.naturalHeight || 1;
+  const base = Math.max(CROP_BOX / iw, CROP_BOX / ih); // cover
+  const scale = base * cropZoom;
+  const rw = iw * scale;
+  const rh = ih * scale;
+  const maxX = Math.max(0, (rw - CROP_BOX) / 2);
+  const maxY = Math.max(0, (rh - CROP_BOX) / 2);
+  setCropOffset((o) => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
+};
+
+const applyCropToSelected = () => {
+  if (!selected) return;
+  const img = cropImgRef.current;
+  if (!img) return;
+
+  const iw = img.naturalWidth || 1;
+  const ih = img.naturalHeight || 1;
+  const base = Math.max(CROP_BOX / iw, CROP_BOX / ih); // cover
+  const scale = base * cropZoom;
+
+  const rw = iw * scale;
+  const rh = ih * scale;
+
+  const imgLeft = (CROP_BOX / 2) - (rw / 2) + cropOffset.x;
+  const imgTop  = (CROP_BOX / 2) - (rh / 2) + cropOffset.y;
+
+  let sx = (-imgLeft) / scale;
+  let sy = (-imgTop) / scale;
+  let sw = CROP_BOX / scale;
+  let sh = CROP_BOX / scale;
+
+  sx = clamp(sx, 0, Math.max(0, iw - sw));
+  sy = clamp(sy, 0, Math.max(0, ih - sh));
+
+  const out = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = out;
+  canvas.height = out;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+
+  const dataUrl = canvas.toDataURL('image/png');
+  setSelectedField({ customImage: dataUrl });
+  setCropOpen(false);
+};
+
+const handleImageUpload = (e) => {
+  const file = e.target.files?.[0];
+  if (!file || !selected) return;
+  if (!file.type || !file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const dataUrl = ev?.target?.result;
+    if (typeof dataUrl !== 'string') return;
+    setCropSrc(dataUrl);
+    setCropZoom(1);
+    setCropOffset({ x: 0, y: 0 });
+    setCropOpen(true);
   };
+  reader.readAsDataURL(file);
+
+  // allow picking the same file again
+  try { e.target.value = ''; } catch {}
+};
+
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
   const HUD_H  = 60;
@@ -921,7 +984,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 85px', gap:10, marginBottom:12 }}>
                     <div><div style={lbl}>Adventurer</div>
                       <select style={{ ...inp, cursor:'pointer' }} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
-                        {adventurers.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
+                        {ADVENTURERS.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
                       </select>
                     </div>
                     <div><div style={lbl}>Side</div>
@@ -930,7 +993,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       </select>
                     </div>
                   </div>
-                  {(() => { const adv = adventurers.find(a => a.name===adventurerPick); return adv ? (
+                  {(() => { const adv = ADVENTURERS.find(a => a.name===adventurerPick); return adv ? (
                     <div style={{ padding:'9px 12px', borderRadius:10, border:'1px solid rgba(255,220,160,0.10)', background:'rgba(0,0,0,0.28)', marginBottom:14, fontSize:12, color:'rgba(255,245,220,0.68)', fontWeight:900, lineHeight:1.7 }}>
                       <div style={{ color:'var(--koa-cream)', fontWeight:950 }}>{adv.name}</div>
                       <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
@@ -1118,6 +1181,208 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
           </div>
         )}
       </div>
-    </ShellLayout>
+    
+{/* IMAGE CROP (used for combat custom image upload) */}
+{cropOpen && (
+  <div
+    style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 90,
+      background: 'rgba(0,0,0,0.72)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+      backdropFilter: 'blur(4px)',
+    }}
+    onMouseDown={(e) => { if (e.target === e.currentTarget) setCropOpen(false); }}
+  >
+    <div
+      style={{
+        width: 'min(760px, 96vw)',
+        borderRadius: 22,
+        background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+        boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+        border: '1px solid rgba(255,220,160,0.18)',
+        color: 'rgba(255,245,220,0.96)',
+        fontFamily: fontStack,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div
+        style={{
+          padding: '14px 18px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 10,
+          borderBottom: '1px solid rgba(255,220,160,0.10)',
+        }}
+      >
+        <div style={{ fontSize: 16, fontWeight: 950, letterSpacing: 0.4 }}>Crop Image</div>
+        <button
+          type="button"
+          onClick={() => setCropOpen(false)}
+          style={{
+            padding: '8px 14px',
+            borderRadius: 999,
+            border: '1px solid rgba(255,160,160,0.22)',
+            background: 'linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92))',
+            color: 'rgba(255,245,220,0.96)',
+            cursor: 'pointer',
+            fontFamily: fontStack,
+            fontWeight: 950,
+            fontSize: 12,
+            letterSpacing: '0.14em',
+            boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
+          }}
+        >
+          CLOSE
+        </button>
+      </div>
+
+      <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div
+            style={{
+              width: CROP_BOX,
+              height: CROP_BOX,
+              borderRadius: 18,
+              border: '1px solid rgba(255,220,160,0.10)',
+              background: 'linear-gradient(180deg, rgba(10,8,6,0.55), rgba(10,8,6,0.25))',
+              boxShadow: '0 18px 46px rgba(0,0,0,0.55)',
+              overflow: 'hidden',
+              position: 'relative',
+              touchAction: 'none',
+              userSelect: 'none',
+            }}
+            onMouseDown={(e) => {
+              if (!cropImgRef.current) return;
+              cropDragRef.current.dragging = true;
+              cropDragRef.current.sx = e.clientX;
+              cropDragRef.current.sy = e.clientY;
+              cropDragRef.current.ox = cropOffset.x;
+              cropDragRef.current.oy = cropOffset.y;
+              e.preventDefault();
+            }}
+            onMouseMove={(e) => {
+              if (!cropDragRef.current.dragging) return;
+              const dx = e.clientX - cropDragRef.current.sx;
+              const dy = e.clientY - cropDragRef.current.sy;
+              setCropOffset({ x: cropDragRef.current.ox + dx, y: cropDragRef.current.oy + dy });
+            }}
+            onMouseUp={() => { cropDragRef.current.dragging = false; clampCropOffset(); }}
+            onMouseLeave={() => { if (cropDragRef.current.dragging) { cropDragRef.current.dragging = false; clampCropOffset(); } }}
+          >
+            <img
+              ref={cropImgRef}
+              src={cropSrc}
+              alt="Crop"
+              onLoad={() => { clampCropOffset(); }}
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: `translate(-50%, -50%) translate(${cropOffset.x}px, ${cropOffset.y}px) scale(${cropZoom})`,
+                transformOrigin: 'center center',
+                willChange: 'transform',
+                userSelect: 'none',
+                pointerEvents: 'none',
+                maxWidth: 'none',
+                maxHeight: 'none',
+              }}
+              draggable={false}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                inset: 10,
+                borderRadius: 14,
+                border: '1px dashed rgba(255,220,160,0.18)',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div
+            style={{
+              borderRadius: 18,
+              border: '1px solid rgba(255,220,160,0.10)',
+              background: 'linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))',
+              padding: 14,
+              boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.85, marginBottom: 8 }}>Zoom</div>
+            <input
+              type="range"
+              min={1}
+              max={2.5}
+              step={0.01}
+              value={cropZoom}
+              onChange={(e) => { setCropZoom(parseFloat(e.target.value) || 1); }}
+              onMouseUp={clampCropOffset}
+              onTouchEnd={clampCropOffset}
+              style={{ width: '100%', cursor: 'pointer' }}
+            />
+            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.72 }}>
+              Drag the image to position it inside the frame.
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setCropOpen(false)}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,160,160,0.22)',
+                background: 'linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92))',
+                color: 'rgba(255,245,220,0.96)',
+                cursor: 'pointer',
+                fontFamily: fontStack,
+                fontWeight: 950,
+                fontSize: 12,
+                letterSpacing: '0.12em',
+                boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
+              }}
+            >
+              CANCEL
+            </button>
+
+            <button
+              type="button"
+              onClick={applyCropToSelected}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,220,160,0.18)',
+                background: 'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
+                color: 'rgba(255,245,220,0.96)',
+                cursor: 'pointer',
+                fontFamily: fontStack,
+                fontWeight: 950,
+                fontSize: 12,
+                letterSpacing: '0.12em',
+                boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
+                backdropFilter: 'blur(10px)',
+              }}
+            >
+              USE CROPPED IMAGE
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+</ShellLayout>
   );
 }
