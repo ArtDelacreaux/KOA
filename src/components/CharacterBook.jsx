@@ -5,7 +5,7 @@ import ShellLayout from './ShellLayout';
 // Place each MP3 in: src/assets/music/<filename>
 import williamTheme  from '../assets/music/William.mp3';
 import arlisTheme    from '../assets/music/Arlis.mp3';
-//import thryvTheme    from '../assets/music/Thryvaris.mp3';
+import thryvTheme    from '../assets/music/Thryvaris.mp3';
 import fenTheme      from '../assets/music/Fen.mp3';
 import vonghulTheme  from '../assets/music/VonGhul.mp3';
 import castorTheme   from '../assets/music/Castor.mp3';
@@ -16,7 +16,7 @@ import jasperTheme   from '../assets/music/Jasper.mp3';
 const CHAR_MUSIC_MAP = {
   'William Spicer':   williamTheme,
   'Arlis Ghoth':      arlisTheme,
-  //'Thryvaris Bria':   thryvTheme,
+  'Thryvaris Bria':   thryvTheme,
   'Fen':              fenTheme,
   "Von'Ghul":         vonghulTheme,
   'Castor':           castorTheme,
