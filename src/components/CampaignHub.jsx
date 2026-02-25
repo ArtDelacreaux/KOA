@@ -4,11 +4,13 @@ import ShellLayout from './ShellLayout';
 // ─── Theme (matches WorldLore / CharacterBook) ────────────────────────────────
 const THEME = {
   creamText: 'rgba(255,245,220,0.96)',
-  creamSoft: 'rgba(255,245,220,0.72)',
+  creamSoft: 'rgba(255,245,220,0.82)',
   glassA:    'rgba(255,245,220,0.065)',
   glassB:    'rgba(255,245,220,0.022)',
   line:      'rgba(255,220,160,0.18)',
   lineSoft:  'rgba(255,220,160,0.10)',
+  textShadow: '0 1px 6px rgba(0,0,0,0.85), 0 2px 16px rgba(0,0,0,0.65)',
+  textShadowSoft: '0 1px 4px rgba(0,0,0,0.75)',
 };
 const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
 
@@ -53,11 +55,13 @@ export default function CampaignHub(props) {
   const softCard = {
     padding: 14,
     borderRadius: 16,
-    background: 'rgba(255,245,220,0.92)',
-    color: '#2b1a0f',
+    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+    color: THEME.creamText,
     fontFamily: fontStack,
-    boxShadow: '0 10px 18px rgba(0,0,0,0.08)',
-    border: '1px solid rgba(0,0,0,0.06)',
+    boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
+    border: `1px solid ${THEME.line}`,
+    backdropFilter: 'blur(10px)',
+    textShadow: THEME.textShadow,
   };
 
   const tabButtonStyle = (active) => ({
@@ -75,13 +79,14 @@ export default function CampaignHub(props) {
     userSelect: 'none',
     whiteSpace: 'nowrap',
     transition: 'all 150ms ease',
+    textShadow: THEME.textShadow,
   });
 
   const smallBtn = (variant = 'gold') => {
     const base = {
       padding: '8px 10px',
       borderRadius: 12,
-      border: '1px solid rgba(0,0,0,0.12)',
+      border: `1px solid ${THEME.line}`,
       cursor: 'pointer',
       fontWeight: 900,
       fontSize: 12,
@@ -90,11 +95,13 @@ export default function CampaignHub(props) {
       transition: 'transform 140ms ease, box-shadow 140ms ease, filter 140ms ease',
       userSelect: 'none',
       whiteSpace: 'nowrap',
-      background: 'rgba(255,255,255,0.55)',
+      background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+      color: THEME.creamText,
+      textShadow: THEME.textShadow,
     };
     if (variant === 'gold') return { ...base, background: 'linear-gradient(180deg, rgba(176,101,0,0.90), rgba(122,55,0,0.92))', color: THEME.creamText, border: `1px solid ${THEME.line}`, textShadow: '0 2px 8px rgba(0,0,0,0.55)', boxShadow: '0 12px 26px rgba(0,0,0,0.25)' };
     if (variant === 'danger') return { ...base, background: 'linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92))', color: THEME.creamText, border: '1px solid rgba(255,160,160,0.26)', textShadow: '0 2px 8px rgba(0,0,0,0.55)', boxShadow: '0 12px 26px rgba(0,0,0,0.22)' };
-    if (variant === 'ghost') return { ...base, background: 'rgba(255,255,255,0.45)', color: THEME.creamText, border: '1px solid rgba(0,0,0,0.10)', boxShadow: 'none' };
+    if (variant === 'ghost') return { ...base, background: 'rgba(255,245,220,0.06)', color: THEME.creamText, border: `1px solid ${THEME.line}`, boxShadow: 'none', textShadow: THEME.textShadow };
     return base;
   };
 
@@ -103,9 +110,9 @@ export default function CampaignHub(props) {
 
   const pill = (type) => {
     const map = {
-      Main:   { bg: 'rgba(30,58,138,0.14)',  bd: 'rgba(30,58,138,0.28)',  fg: '#1e3a8a' },
-      Side:   { bg: 'rgba(176,101,0,0.14)',   bd: 'rgba(176,101,0,0.28)',  fg: '#7a3f00' },
-      Personal: { bg: 'rgba(122,30,30,0.14)',   bd: 'rgba(122,30,30,0.28)',  fg: '#7a1e1e' },
+      Main:   { bg: 'rgba(96,165,250,0.18)',  bd: 'rgba(96,165,250,0.35)',  fg: 'rgba(186,230,255,0.95)' },
+      Side:   { bg: 'rgba(251,191,36,0.16)',   bd: 'rgba(251,191,36,0.35)',  fg: 'rgba(253,230,138,0.96)' },
+      Personal: { bg: 'rgba(248,113,113,0.16)',   bd: 'rgba(248,113,113,0.35)',  fg: 'rgba(254,202,202,0.95)' },
     };
     const c = map[type] || map.Side;
     return { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: `1px solid ${c.bd}`, background: c.bg, color: c.fg, fontWeight: 900, fontSize: 12, letterSpacing: 0.2, userSelect: 'none', boxShadow: type === 'Personal' ? '0 0 18px rgba(122,30,30,0.18)' : 'none' };
@@ -196,10 +203,10 @@ export default function CampaignHub(props) {
     return map[r] || map.common;
   };
 
-  const invInput     = { width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.16)', outline: 'none', fontSize: 13, background: 'rgba(255,255,255,0.70)', color: '#2b1a0f', fontFamily: fontStack };
-  const invTinyInput = { width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 10, border: '1px solid rgba(0,0,0,0.16)', outline: 'none', fontSize: 12, fontWeight: 900, background: 'rgba(255,255,255,0.72)', color: '#2b1a0f', fontFamily: fontStack };
-  const invLabel     = { fontSize: 11, fontWeight: 900, opacity: 0.75, marginBottom: 4 };
-  const invTinyLabel = { fontSize: 10, fontWeight: 950, opacity: 0.70, marginBottom: 4, letterSpacing: 0.2 };
+  const invInput     = { width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: 12, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 13, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack };
+  const invTinyInput = { width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 10, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 12, fontWeight: 900, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack };
+  const invLabel     = { fontSize: 11, fontWeight: 900, color: THEME.creamSoft, marginBottom: 4, textShadow: THEME.textShadowSoft };
+  const invTinyLabel = { fontSize: 10, fontWeight: 950, color: THEME.creamSoft, marginBottom: 4, letterSpacing: 0.2, textShadow: THEME.textShadowSoft };
 
   const [bag, setBag] = useState(() => {
     try {
@@ -281,13 +288,17 @@ export default function CampaignHub(props) {
         .ch-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .ch-scrollbar::-webkit-scrollbar-thumb { background: rgba(176,101,0,0.4); border-radius: 999px; }
         .ch-scrollbar input::placeholder,
-        .ch-scrollbar textarea::placeholder { color: rgba(43,26,15,0.45); opacity: 1; }
+        .ch-scrollbar textarea::placeholder { color: rgba(255,245,220,0.42); opacity: 1; }
         .ch-modal input::placeholder,
-        .ch-modal textarea::placeholder { color: rgba(43,26,15,0.45); opacity: 1; }
+        .ch-modal textarea::placeholder { color: rgba(255,245,220,0.42); opacity: 1; }
+        .ch-glass-text { text-shadow: 0 1px 6px rgba(0,0,0,0.85), 0 2px 16px rgba(0,0,0,0.65); }
+        .ch-glass-text * { text-shadow: inherit; }
+        .ch-glass-text input, .ch-glass-text textarea, .ch-glass-text select { text-shadow: none; }
+        .ch-modal, .ch-modal * { text-shadow: 0 1px 4px rgba(0,0,0,0.6) !important; }
       `}</style>
 
       <div
-        className="ch-scrollbar"
+        className="ch-scrollbar ch-glass-text"
         style={{
           width: '100%',
           height: '100%',
@@ -444,23 +455,23 @@ export default function CampaignHub(props) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
                   <div>
                     <div style={{ fontSize: 18, fontWeight: 950 }}>Quick Launch</div>
-                    <div style={{ opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Don't forget your character sheet!</div>
+                    <div style={{ fontSize: 15, fontWeight: 550, opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Don't forget your character sheet!</div>
                   </div>
                   <span style={{ padding: '6px 10px', borderRadius: 999, background: 'rgba(176,101,0,0.12)', border: '1px solid rgba(176,101,0,0.18)', fontSize: 12, fontWeight: 900, opacity: 0.92, userSelect: 'none' }}>
                     Players
                   </span>
                 </div>
 
-                <div style={{ height: 1, background: 'rgba(0,0,0,0.10)', margin: '14px 0' }} />
+                <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)', margin: '14px 0' }} />
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {/* Watch Party */}
-                  <div style={{ padding: 14, borderRadius: 16, background: 'linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.50))', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 10px 18px rgba(0,0,0,0.08)' }} onMouseEnter={() => playHover()}>
+                  <div style={{ padding: 14, borderRadius: 16, background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`, border: `1px solid ${THEME.line}`, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', backdropFilter: 'blur(10px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <div style={{ fontSize: 22 }}>🎬</div>
                       <div>
                         <div style={{ fontWeight: 950, fontSize: 14 }}>Watch Party</div>
-                        <div style={{ fontSize: 12, opacity: 0.78 }}>Music / Videos / Friends</div>
+                        <div style={{ fontWeight: 550, fontSize: 12, opacity: 0.78 }}>Music / Videos / Friends</div>
                       </div>
                     </div>
                     <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -469,12 +480,12 @@ export default function CampaignHub(props) {
                   </div>
 
                   {/* Owlbear */}
-                  <div style={{ padding: 14, borderRadius: 16, background: 'linear-gradient(180deg, rgba(255,255,255,0.62), rgba(255,255,255,0.50))', border: '1px solid rgba(0,0,0,0.06)', boxShadow: '0 10px 18px rgba(0,0,0,0.08)' }} onMouseEnter={() => playHover()}>
+                  <div style={{ padding: 14, borderRadius: 16, background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`, border: `1px solid ${THEME.line}`, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', backdropFilter: 'blur(10px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <div style={{ fontSize: 22 }}>🗺️</div>
                       <div>
                         <div style={{ fontWeight: 950, fontSize: 14 }}>Owlbear Table</div>
-                        <div style={{ fontSize: 12, opacity: 0.78 }}>Maps / tokens / encounters</div>
+                        <div style={{ fontWeight: 550,fontSize: 12, opacity: 0.78 }}>Maps / tokens / encounters</div>
                       </div>
                     </div>
                     <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -485,13 +496,13 @@ export default function CampaignHub(props) {
 
                 <div style={{ marginTop: 14, ...softCard }}>
                   <div style={{ fontWeight: 950 }}>Recap</div>
-                  <div style={{ fontSize: 12, opacity: 0.8, marginTop: 6, lineHeight: 1.6 }}>Write what happened last session so nobody "forgets" (again).</div>
+                  <div style={{ fontWeight: 550,fontSize: 12, opacity: 0.8, marginTop: 6, lineHeight: 1.6 }}>Write what happened last session</div>
                   <textarea
                     value={launcherState.recap || ''}
                     onChange={(e) => setLauncherState((s) => ({ ...s, recap: e.target.value }))}
                     placeholder="Last time, the party…"
                     rows={5}
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 12, padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.16)', outline: 'none', fontSize: 13, lineHeight: 1.5, background: 'rgba(255,255,255,0.70)', color: '#2b1a0f', fontFamily: fontStack, resize: 'none' }}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 12, padding: '10px 12px', borderRadius: 12, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 13, lineHeight: 1.5, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack, resize: 'none' }}
                   />
                 </div>
               </div>
@@ -536,7 +547,7 @@ export default function CampaignHub(props) {
                     <div style={{ fontSize: 22 }}>📝</div>
                     <div>
                       <div style={{ fontWeight: 950 }}>Session Notes</div>
-                      <div style={{ fontSize: 12, opacity: 0.8, marginTop: 2 }}>Saved locally. Great for improvised names.</div>
+                      <div style={{ fontWeight: 550, fontSize: 12, opacity: 0.8, marginTop: 2 }}>Saved locally. Great for improvised names.</div>
                     </div>
                   </div>
                   <textarea
@@ -544,7 +555,7 @@ export default function CampaignHub(props) {
                     onChange={(e) => setLauncherState((s) => ({ ...s, notes: e.target.value }))}
                     placeholder={`• NPC:\n• Hook:\n• Loot:\n• Reminder:`}
                     rows={10}
-                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 12, padding: '10px 12px', borderRadius: 12, border: '1px solid rgba(0,0,0,0.16)', outline: 'none', fontSize: 13, lineHeight: 1.5, background: 'rgba(255,255,255,0.70)', color: '#2b1a0f', fontFamily: fontStack, resize: 'none' }}
+                    style={{ width: '100%', boxSizing: 'border-box', marginTop: 12, padding: '10px 12px', borderRadius: 12, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 13, lineHeight: 1.5, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack, resize: 'none' }}
                   />
                 </div>
               </div>
@@ -564,7 +575,7 @@ export default function CampaignHub(props) {
                   {activeQuests.length === 0 ? (
                     <div style={{ ...softCard, opacity: 0.85 }}>
                       <div style={{ fontWeight: 950, marginBottom: 6 }}>No active quests.</div>
-                      <div style={{ lineHeight: 1.55 }}>Hit <strong>+ Add Quest</strong> to start tracking hooks.</div>
+                      <div style={{ fontWeight: 550, lineHeight: 1.55 }}>Hit <strong>+ Add Quest</strong> to start tracking hooks.</div>
                     </div>
                   ) : (
                     activeQuests.map((q) => (
@@ -605,7 +616,7 @@ export default function CampaignHub(props) {
                   {completedQuests.length === 0 ? (
                     <div style={{ ...softCard, opacity: 0.85 }}>
                       <div style={{ fontWeight: 950, marginBottom: 6 }}>Nothing completed yet.</div>
-                      <div style={{ lineHeight: 1.55 }}>Completed quests appear here.</div>
+                      <div style={{ fontWeight: 550,lineHeight: 1.55 }}>Completed quests appear here.</div>
                     </div>
                   ) : (
                     completedQuests.map((q) => (
@@ -646,10 +657,10 @@ export default function CampaignHub(props) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
                     <div>
                       <div style={{ fontSize: 18, fontWeight: 950 }}>Bag of Holding</div>
-                      <div style={{ opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Shared party inventory — loot, gold totals, quest items, and artifacts.</div>
+                      <div style={{ fontWeight: 550, opacity: 0.82, marginTop: 6, lineHeight: 1.5 }}>Shared party inventory — loot, gold totals, quest items, and artifacts.</div>
                     </div>
                   </div>
-                  <div style={{ height: 1, background: 'rgba(0,0,0,0.10)', margin: '14px 0' }} />
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)', margin: '14px 0' }} />
 
                   {/* Filters */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
@@ -695,7 +706,7 @@ export default function CampaignHub(props) {
                       <div style={{ fontSize: 11, opacity: 0.78, marginTop: 2 }}>PP / GP / SP / CP</div>
                     </div>
                   </div>
-                  <div style={{ height: 1, background: 'rgba(0,0,0,0.10)', margin: '10px 0' }} />
+                  <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)', margin: '10px 0' }} />
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {['pp','gp','sp','cp'].map((k) => (
                       <div key={k}>
@@ -709,9 +720,9 @@ export default function CampaignHub(props) {
                       {dangerOpen ? 'Hide Danger' : 'Danger Zone'}
                     </button>
                     {dangerOpen && (
-                      <div style={{ marginTop: 8, padding: 10, borderRadius: 14, border: '1px solid rgba(122,30,30,0.22)', background: 'rgba(122,30,30,0.08)' }}>
-                        <div style={{ fontWeight: 950, color: '#7a1e1e', fontSize: 12 }}>Clear Bag</div>
-                        <div style={{ fontSize: 11, opacity: 0.86, marginTop: 6, lineHeight: 1.5 }}>This removes <strong>all</strong> items and currency.</div>
+                      <div style={{ marginTop: 8, padding: 10, borderRadius: 14, border: '1px solid rgba(248,113,113,0.28)', background: 'rgba(122,30,30,0.14)' }}>
+                        <div style={{ fontWeight: 950, color: 'rgba(252,165,165,0.92)', fontSize: 12 }}>Clear Bag</div>
+                        <div style={{ fontSize: 11, color: THEME.creamSoft, marginTop: 6, lineHeight: 1.5 }}>This removes <strong>all</strong> items and currency.</div>
                         <button style={{ ...smallBtn('danger'), width: '100%', marginTop: 8 }} onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={() => { const ok = confirm('Clear the entire Bag of Holding? This cannot be undone.'); if (!ok) return; setBag({ currency: { pp:0,gp:0,sp:0,cp:0 }, items:[] }); setDangerOpen(false); }}>
                           Clear Bag Forever
                         </button>
@@ -730,7 +741,7 @@ export default function CampaignHub(props) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {invFilteredItems.map((it) => (
-                    <div key={it.id} style={{ ...softCard, background: rarityBadge(it.rarity) + ', rgba(255,245,220,0.88)' }} onMouseEnter={() => playHover()}>
+                    <div key={it.id} style={{ ...softCard, background: `${rarityBadge(it.rarity)}, linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})` }} onMouseEnter={() => playHover()}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 220 }}>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -767,12 +778,12 @@ export default function CampaignHub(props) {
         {questModalOpen && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.60)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
             onMouseDown={(e) => { if (e.target === e.currentTarget) setQuestModalOpen(false); }}>
-            <div className="ch-modal" style={{ width: 'min(640px, 94vw)', borderRadius: 18, background: 'rgba(255,245,220,0.96)', boxShadow: '0 30px 90px rgba(0,0,0,0.65)', border: '1px solid rgba(0,0,0,0.12)', color: '#2b1a0f', fontFamily: fontStack, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'min(560px, 82vh)' }}>
+            <div className="ch-modal" style={{ width: 'min(640px, 94vw)', borderRadius: 18, background: `linear-gradient(180deg, rgba(14,10,6,0.97), rgba(8,6,4,0.98))`, boxShadow: '0 30px 90px rgba(0,0,0,0.75)', border: `1px solid ${THEME.line}`, color: THEME.creamText, fontFamily: fontStack, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'min(560px, 82vh)' }}>
               <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div style={{ fontSize: 18, fontWeight: 950 }}>{editingQuestId ? 'Edit Quest' : 'Add Quest'}</div>
                 <button style={smallBtn('danger')} onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={() => setQuestModalOpen(false)}>Close</button>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,0,0,0.10)' }} />
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />
               <div style={{ padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[['Title *', 'title', 'text', 'e.g. Retrieve the stolen signet ring'], ['Quest Giver', 'giver', 'text', 'e.g. Lord Harwick'], ['Location', 'location', 'text', 'e.g. The Thornwall Keep']].map(([lbl, key, type, ph]) => (
                   <div key={key}>
@@ -791,7 +802,7 @@ export default function CampaignHub(props) {
                   <textarea value={questDraft.description || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, description: e.target.value }))} placeholder="What's the hook? What's at stake?" rows={4} style={{ ...invInput, resize: 'none' }} />
                 </div>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,0,0,0.10)' }} />
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />
               <div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button style={smallBtn('ghost')}  onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={() => setQuestModalOpen(false)}>Cancel</button>
                 <button style={smallBtn('gold')}   onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={saveQuest}>{editingQuestId ? 'Save Changes' : 'Add Quest'}</button>
@@ -804,12 +815,12 @@ export default function CampaignHub(props) {
         {invModalOpen && (
           <div style={{ position: 'fixed', inset: 0, zIndex: 35, background: 'rgba(0,0,0,0.60)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
             onMouseDown={(e) => { if (e.target === e.currentTarget) setInvModalOpen(false); }}>
-            <div className="ch-modal" style={{ width: 'min(720px, 95vw)', borderRadius: 18, background: 'rgba(255,245,220,0.96)', boxShadow: '0 30px 90px rgba(0,0,0,0.65)', border: '1px solid rgba(0,0,0,0.12)', color: '#2b1a0f', fontFamily: fontStack, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'min(620px, 86vh)' }}>
+            <div className="ch-modal" style={{ width: 'min(720px, 95vw)', borderRadius: 18, background: `linear-gradient(180deg, rgba(14,10,6,0.97), rgba(8,6,4,0.98))`, boxShadow: '0 30px 90px rgba(0,0,0,0.75)', border: `1px solid ${THEME.line}`, color: THEME.creamText, fontFamily: fontStack, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: 'min(620px, 86vh)' }}>
               <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <div style={{ fontSize: 18, fontWeight: 950 }}>{invEditingId ? 'Edit Item' : 'Add Item'}</div>
                 <button style={smallBtn('danger')} onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={() => setInvModalOpen(false)}>Close</button>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,0,0,0.10)' }} />
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />
               <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1.4fr 0.6fr', gap: 10, alignContent: 'start', overflowY: 'auto' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={invLabel}>Name</div>
@@ -853,10 +864,10 @@ export default function CampaignHub(props) {
                 </div>
                 <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input type="checkbox" id="inv-equipped" checked={!!invDraft.equipped} onChange={(e) => setInvDraft((d) => ({ ...d, equipped: e.target.checked }))} />
-                  <label htmlFor="inv-equipped" style={{ fontWeight: 900, fontSize: 13, cursor: 'pointer' }}>Equipped</label>
+                  <label htmlFor="inv-equipped" style={{ fontWeight: 900, fontSize: 13, cursor: 'pointer', color: THEME.creamText }}>Equipped</label>
                 </div>
               </div>
-              <div style={{ height: 1, background: 'rgba(0,0,0,0.10)' }} />
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />
               <div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button style={smallBtn('ghost')} onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={() => setInvModalOpen(false)}>Cancel</button>
                 <button style={smallBtn('gold')}  onMouseEnter={smallBtnHover} onMouseLeave={smallBtnLeave} onClick={invSaveDraft}>{invEditingId ? 'Save Changes' : 'Add Item'}</button>

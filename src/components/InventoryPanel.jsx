@@ -17,18 +17,20 @@ export default function InventoryPanel({
     margin: '10px',
     padding: '14px 28px',
     borderRadius: '10px',
-    border: 'none',
+    border: '1px solid rgba(255,220,160,0.22)',
     cursor: 'pointer',
-    backgroundColor: '#b06500',
-    color: 'white',
+    background: 'linear-gradient(180deg, rgba(176,101,0,0.86), rgba(122,55,0,0.90))',
+    color: 'rgba(255,245,220,0.96)',
     fontSize: '1.1rem',
     transition: 'all 0.25s ease',
+    textShadow: '0 2px 8px rgba(0,0,0,0.55)',
   };
 
   const backButton = {
     ...buttonBase,
-    backgroundColor: '#7a1e1e',
-    boxShadow: '0 0 15px rgba(255,80,80,0.5)',
+    background: 'linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92))',
+    border: '1px solid rgba(255,160,160,0.22)',
+    boxShadow: '0 0 15px rgba(255,80,80,0.3)',
     margin: 0,
   };
 
@@ -43,15 +45,17 @@ export default function InventoryPanel({
     e.currentTarget.style.boxShadow = isBack ? '0 0 15px rgba(255,80,80,0.5)' : 'none';
   };
 
-  const cardShell = (bg = 'rgba(10, 8, 6, 0.70)', fg = 'rgba(255,245,220,0.95)') => ({
+  const cardShell = () => ({
     width: 'min(1100px, 94vw)',
     height: 'min(760px, 86vh)',
     borderRadius: 18,
-    background: bg,
-    boxShadow: '0 20px 60px rgba(0,0,0,0.6)',
+    background: `linear-gradient(180deg, rgba(255,245,220,0.065), rgba(255,245,220,0.022))`,
+    boxShadow: '0 22px 60px rgba(0,0,0,0.62)',
+    border: '1px solid rgba(255,220,160,0.18)',
+    backdropFilter: 'blur(12px)',
     position: 'relative',
     overflow: 'hidden',
-    color: fg,
+    color: 'rgba(255,245,220,0.96)',
   });
 
   const headerBar = {
@@ -86,9 +90,10 @@ export default function InventoryPanel({
   const softCard = {
     padding: 14,
     borderRadius: 16,
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,220,160,0.10)',
-    boxShadow: '0 10px 18px rgba(0,0,0,0.22)',
+    background: 'linear-gradient(180deg, rgba(255,245,220,0.065), rgba(255,245,220,0.022))',
+    border: '1px solid rgba(255,220,160,0.15)',
+    boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
+    backdropFilter: 'blur(10px)',
   };
 
   const smallBtn = (variant = 'gold') => {
@@ -156,7 +161,7 @@ export default function InventoryPanel({
     outline: 'none',
     fontSize: 13,
     background: 'rgba(0,0,0,0.28)',
-    color: 'rgba(255,245,220,0.95)',
+    color: 'rgba(255,245,220,0.96)',
   };
 
   const label = { fontSize: 11, fontWeight: 900, opacity: 0.8, marginBottom: 6, letterSpacing: 0.4 };
@@ -638,7 +643,7 @@ export default function InventoryPanel({
               style={{
                 width: 'min(720px, 95vw)',
                 borderRadius: 18,
-                background: 'rgba(14, 10, 7, 0.92)',
+                background: 'linear-gradient(180deg, rgba(14,10,6,0.97), rgba(8,6,4,0.98))',
                 border: '1px solid rgba(255,220,160,0.14)',
                 boxShadow: '0 30px 90px rgba(0,0,0,0.70)',
                 color: 'rgba(255,245,220,0.95)',

@@ -25,11 +25,11 @@ export default function MenuPanel({
   setCharView,
   setVideoChoice,
 
-  playHover = () => {},
+  playHover = () => { },
   // optional; TavernMenu may or may not pass it
-  playNav = () => {},
-  playMenuOpen = () => {},
-  onMenuStarted = () => {},
+  playNav = () => { },
+  playMenuOpen = () => { },
+  onMenuStarted = () => { },
 }) {
   /* ---------- persistence (menu-side, independent of CampaignHub) ---------- */
   const LS_CAMPAIGN_BRIEF = 'koa:menu:campaignBrief:v2';
@@ -42,7 +42,7 @@ export default function MenuPanel({
       return {
         location: p.location || '',
         objective: p.objective || '',
-updatedAt: p.updatedAt || null,
+        updatedAt: p.updatedAt || null,
       };
     } catch {
       return { location: '', objective: '', updatedAt: null };
@@ -64,7 +64,7 @@ updatedAt: p.updatedAt || null,
   useEffect(() => {
     try {
       localStorage.setItem(LS_CAMPAIGN_BRIEF, JSON.stringify(campaignBrief));
-    } catch {}
+    } catch { }
   }, [campaignBrief]);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ updatedAt: p.updatedAt || null,
       localStorage.setItem(`${LS_NOTE_PREFIX}characters`, notes.characters || '');
       localStorage.setItem(`${LS_NOTE_PREFIX}video`, notes.video || '');
       localStorage.setItem(`${LS_NOTE_PREFIX}lore`, notes.lore || '');
-    } catch {}
+    } catch { }
   }, [notes]);
 
   const theaterPreviewRef = useRef(null);
@@ -158,13 +158,13 @@ updatedAt: p.updatedAt || null,
 
 
   const overlayVignette = {
-	  position: 'absolute',
-	  left: 0,
-	  right: 0,
-	  top: LOGO_CLEAR_H,      // 👈 add this
-	  bottom: 0,
-	  // keep the rest the same
-};
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: LOGO_CLEAR_H,      // 👈 add this
+    bottom: 0,
+    // keep the rest the same
+  };
 
   const grain = {
     position: 'absolute',
@@ -206,7 +206,7 @@ updatedAt: p.updatedAt || null,
   };
 
   const logoCenter = {
-    
+
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -594,7 +594,7 @@ updatedAt: p.updatedAt || null,
     playNav();
     cinematicNav('campaign');
   };
-    const goCombat = () => {
+  const goCombat = () => {
     playNav();
     cinematicNav('combat');
   };
@@ -634,10 +634,10 @@ updatedAt: p.updatedAt || null,
         label: 'Continue ?',
         sub: 'Return to the hub and resume your session.',
         title: 'Session Brief',
-        desc: 'Keep the table oriented. Update these before you hit Continue.',
+        desc: 'Keep up with the party and watch last weeks episode!',
         primary: { label: 'Continue', onClick: goCampaign },
       },
-	  {
+      {
         key: 'combat',
         label: 'Combat',
         sub: 'Initiative, HP, slots, and statuses.',
@@ -681,8 +681,8 @@ updatedAt: p.updatedAt || null,
 
   const startMenu = () => {
     if (menuStarted) return;
-    try { playMenuOpen(); } catch (e) {}
-	try { onMenuStarted(); } catch (e) {}
+    try { playMenuOpen(); } catch (e) { }
+    try { onMenuStarted(); } catch (e) { }
     setStartFading(true);
     window.setTimeout(() => {
       setMenuStarted(true);
@@ -692,14 +692,14 @@ updatedAt: p.updatedAt || null,
   const activeItem = items.find((i) => i.key === activeKey) || items[0];
 
   return (
-  <>
-    <div style={panelStyle(panelType === 'menu')}
-      onMouseDown={(e) => {
-        // stop accidental drag ghost images
-        if (e.target?.tagName === 'IMG') e.preventDefault();
-      }}
-    >
-      <style>{`
+    <>
+      <div style={panelStyle(panelType === 'menu')}
+        onMouseDown={(e) => {
+          // stop accidental drag ghost images
+          if (e.target?.tagName === 'IMG') e.preventDefault();
+        }}
+      >
+        <style>{`
 		::placeholder {
 		  color: rgba(255, 245, 220, 0.90);
 		  opacity: 1;
@@ -749,382 +749,334 @@ updatedAt: p.updatedAt || null,
           color: rgba(140,70,10,0.95) !important;
         }
       `}</style>
-      {/* PRESS TO START overlay */}
-      {!menuStarted && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 60,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background:
-              'radial-gradient(1200px 520px at 50% 28%, rgba(255,245,220,0.30), rgba(0,0,0,0.35))',
-            backdropFilter: 'blur(2px)',
-            WebkitBackdropFilter: 'blur(2px)',
-            transition: 'opacity 520ms ease, transform 520ms ease',
-            opacity: startFading ? 0 : 1,
-            transform: startFading ? 'translateY(8px) scale(0.99)' : 'translateY(0px) scale(1)',
-            pointerEvents: startFading ? 'none' : 'auto',
-          }}
-          onMouseDown={startMenu}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') startMenu(nMenuStarted = () => {});
-          }}
-          role="button"
-          tabIndex={0}
-          aria-label="Press to start"
-        >
+        {/* PRESS TO START overlay */}
+        {!menuStarted && (
           <div
             style={{
-              width: 'min(560px, 92vw)',
-              borderRadius: 22,
-              padding: '18px 18px 16px',
-              border: `1px solid ${THEME.line}`,
-              background: `linear-gradient(180deg, rgba(255,245,220,0.10), rgba(255,245,220,0.04))`,
-              boxShadow: '0 22px 60px rgba(0,0,0,0.55)',
-              textAlign: 'center',
+              position: 'absolute',
+              inset: 0,
+              zIndex: 60,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background:
+                'radial-gradient(1200px 520px at 50% 28%, rgba(255,245,220,0.30), rgba(0,0,0,0.35))',
+              backdropFilter: 'blur(2px)',
+              WebkitBackdropFilter: 'blur(2px)',
+              transition: 'opacity 520ms ease, transform 520ms ease',
+              opacity: startFading ? 0 : 1,
+              transform: startFading ? 'translateY(8px) scale(0.99)' : 'translateY(0px) scale(1)',
+              pointerEvents: startFading ? 'none' : 'auto',
             }}
+            onMouseDown={startMenu}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') startMenu(nMenuStarted = () => { });
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Press to start"
           >
             <div
               style={{
-                fontSize: 14,
-                letterSpacing: 2.6,
-                fontWeight: 950,
-                color: 'rgba(255,245,220,0.85)',
-                textTransform: 'uppercase',
-                marginBottom: 10,
+                width: 'min(560px, 92vw)',
+                borderRadius: 22,
+                padding: '18px 18px 16px',
+                border: `1px solid ${THEME.line}`,
+                background: `linear-gradient(180deg, rgba(255,245,220,0.10), rgba(255,245,220,0.04))`,
+                boxShadow: '0 22px 60px rgba(0,0,0,0.55)',
+                textAlign: 'center',
               }}
             >
-              Welcome Envoys
-            </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  letterSpacing: 2.6,
+                  fontWeight: 950,
+                  color: 'rgba(255,245,220,0.85)',
+                  textTransform: 'uppercase',
+                  marginBottom: 10,
+                }}
+              >
+                Welcome Envoys
+              </div>
 
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 950,
-                letterSpacing: 0.8,
-                color: THEME.creamText,
-                textShadow: '0 2px 18px rgba(0,0,0,0.65)',
-              }}
-            >
-              Press to Start
-            </div>
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 950,
+                  letterSpacing: 0.8,
+                  color: THEME.creamText,
+                  textShadow: '0 2px 18px rgba(0,0,0,0.65)',
+                }}
+              >
+                Press to Start
+              </div>
 
-            <div
-              style={{
-                marginTop: 10,
-                fontSize: 12,
-                fontWeight: 900,
-                letterSpacing: 0.5,
-                color: 'rgba(255,245,220,0.70)',
-              }}
-            >
-              Click anywhere
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 12,
+                  fontWeight: 900,
+                  letterSpacing: 0.5,
+                  color: 'rgba(255,245,220,0.70)',
+                }}
+              >
+                Click anywhere
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
 
-      <div style={{ ...menuRoot, opacity: menuStarted ? 1 : 0, transform: menuStarted ? 'translateY(0px)' : 'translateY(8px)', transition: 'opacity 520ms ease, transform 520ms ease', pointerEvents: menuStarted ? 'auto' : 'none' }}>
-        <div style={menuShell}>
-          <div style={shellGlassBelow} />
+        <div style={{ ...menuRoot, opacity: menuStarted ? 1 : 0, transform: menuStarted ? 'translateY(0px)' : 'translateY(8px)', transition: 'opacity 520ms ease, transform 520ms ease', pointerEvents: menuStarted ? 'auto' : 'none' }}>
+          <div style={menuShell}>
+            <div style={shellGlassBelow} />
 
-			{/* Logo (no surrounding panel) */}
-			<div style={{ textAlign: 'center', paddingTop: 16, marginBottom: 6 }}>
-			  <img
-				src={koaTitle}
-				alt="Knights of Avalon"
-				draggable={false}
-				style={logoImg}
-			  />
-			</div>
+            {/* Logo (no surrounding panel) */}
+            <div style={{ textAlign: 'center', paddingTop: 16, marginBottom: 6 }}>
+              <img
+                src={koaTitle}
+                alt="Knights of Avalon"
+                draggable={false}
+                style={logoImg}
+              />
+            </div>
 
-          <div style={contentGrid}>
-            {/* LEFT: Command List */}
-            <div style={{ ...panelCard, position: 'relative', paddingTop: 6 }}>
-              <div style={edgeGlow} />
-              <div style={leftMenuTitle}>CAMPAIGN HUB</div>
+            <div style={contentGrid}>
+              {/* LEFT: Command List */}
+              <div style={{ ...panelCard, position: 'relative', paddingTop: 6 }}>
+                <div style={edgeGlow} />
+                <div style={leftMenuTitle}>CAMPAIGN HUB</div>
 
-              <div style={commandList}>
-                {items.map((it) => {
-                  const active = it.key === activeKey;
-                  return (
-                    <div
-                      key={it.key}
-                      className="jrpgShimmer"
-                      style={cmdRow(active)}
-                      onMouseEnter={() => {
-                        if (it.key !== activeKey) playHover();
-                        setActiveKey(it.key);
-                      }}
-                      onMouseDown={(e) => {
-                        e.currentTarget.style.transform = 'translateY(1px) scale(0.995)';
-                        e.currentTarget.style.filter = 'brightness(0.98)';
-                      }}
-                      onMouseUp={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.filter = 'brightness(1.06)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0px)';
-                        e.currentTarget.style.filter = 'none';
-                      }}
-                      // IMPORTANT: clicking the row navigates (fixes “links broken”)
-                      onClick={it.primary.onClick}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={it.label}
-                    >
-                      <div style={selectBar(active)} />
+                <div style={commandList}>
+                  {items.map((it) => {
+                    const active = it.key === activeKey;
+                    return (
+                      <div
+                        key={it.key}
+                        className="jrpgShimmer"
+                        style={cmdRow(active)}
+                        onMouseEnter={() => {
+                          if (it.key !== activeKey) playHover();
+                          setActiveKey(it.key);
+                        }}
+                        onMouseDown={(e) => {
+                          e.currentTarget.style.transform = 'translateY(1px) scale(0.995)';
+                          e.currentTarget.style.filter = 'brightness(0.98)';
+                        }}
+                        onMouseUp={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-1px)';
+                          e.currentTarget.style.filter = 'brightness(1.06)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0px)';
+                          e.currentTarget.style.filter = 'none';
+                        }}
+                        // IMPORTANT: clicking the row navigates (fixes “links broken”)
+                        onClick={it.primary.onClick}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={it.label}
+                      >
+                        <div style={selectBar(active)} />
 
-                      {active && (
-                        <div style={{ ...cursorWrap, animation: 'cursorBob 760ms ease-in-out infinite' }}>
-                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7 5L19 12L7 19V5Z" fill="rgba(255,245,220,0.92)" />
-                            <path d="M7 5L19 12L7 19V5Z" stroke="rgba(255,220,160,0.55)" strokeWidth="1.5" />
-                          </svg>
+                        {active && (
+                          <div style={{ ...cursorWrap, animation: 'cursorBob 760ms ease-in-out infinite' }}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7 5L19 12L7 19V5Z" fill="rgba(255,245,220,0.92)" />
+                              <path d="M7 5L19 12L7 19V5Z" stroke="rgba(255,220,160,0.55)" strokeWidth="1.5" />
+                            </svg>
+                          </div>
+                        )}
+
+                        <div style={cmdLeft}>
+                          <div style={cmdIconWrap(active)}>
+                            <Icon name={it.key} active={active} />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="cmd-title" style={cmdTitle(active)}>{it.label}</div>
+                            <div className="cmd-sub" style={cmdSub}>{it.sub}</div>
+                          </div>
+                        </div>
+
+                        <div className="cmd-chevron" style={cmdChevron(active)}>›</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* RIGHT: Useful panel (changes by selection) */}
+              <div style={previewWrap}>
+                <div style={edgeGlow} />
+
+                {/* Fixed header — never scrolls */}
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <h3 style={previewTitle}>{activeItem.title}</h3>
+                  <div style={previewBody}>{activeItem.desc}</div>
+
+                  {/* Move campaign recap into the fixed header so it appears higher */}
+                  {activeKey === 'campaign' && (
+                    <div style={{ display: 'grid', gap: 14, marginTop: 10 }}>
+                      <div style={cardMini}>
+                        <video
+                          src={recapVideo}
+                          controls
+                          preload="metadata"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                            objectFit: 'cover',
+                            background: 'rgba(0,0,0,0.25)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ ...divider, flexShrink: 0 }} />
+
+                {/* Scrollable body */}
+                <div
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    paddingRight: 4,
+                    /* thin custom scrollbar */
+                    scrollbarWidth: 'thin',
+                    scrollbarColor: 'rgba(176,101,0,0.45) transparent',
+                  }}
+                >
+
+                  {/* Campaign brief (moved to header) */}
+
+                  {/* Character book helpers */}
+                  {activeKey === 'characters' && (
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      {menuBackdrop && (
+                        <div
+                          aria-hidden
+                          style={{
+                            height: 300,
+                            borderRadius: 18,
+                            overflow: 'hidden',
+                            border: '1px solid rgba(255,220,160,0.18)',
+                            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
+                            backgroundImage: `url(${menuBackdrop})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center center',
+                            backgroundRepeat: 'no-repeat',
+                            position: 'relative',
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              background:
+                                'linear-gradient(180deg, rgba(8,10,14,0.10), rgba(8,10,14,0.45))',
+                            }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              inset: 0,
+                              boxShadow:
+                                'inset 0 0 0 2px rgba(255,240,210,0.06), inset 0 -28px 60px rgba(0,0,0,0.55)',
+                              pointerEvents: 'none',
+                            }}
+                          />
                         </div>
                       )}
 
-                      <div style={cmdLeft}>
-                        <div style={cmdIconWrap(active)}>
-                          <Icon name={it.key} active={active} />
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <div className="cmd-title" style={cmdTitle(active)}>{it.label}</div>
-                          <div className="cmd-sub" style={cmdSub}>{it.sub}</div>
-                        </div>
-                      </div>
 
-                      <div className="cmd-chevron" style={cmdChevron(active)}>›</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* RIGHT: Useful panel (changes by selection) */}
-            <div style={previewWrap}>
-              <div style={edgeGlow} />
-
-              {/* Fixed header — never scrolls */}
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <h3 style={previewTitle}>{activeItem.title}</h3>
-                <div style={previewBody}>{activeItem.desc}</div>
-              </div>
-
-              <div style={{ ...divider, flexShrink: 0 }} />
-
-              {/* Scrollable body */}
-              <div
-                style={{
-                  flex: 1,
-                  overflowY: 'auto',
-                  overflowX: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  paddingRight: 4,
-                  /* thin custom scrollbar */
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: 'rgba(176,101,0,0.45) transparent',
-                }}
-              >
-
-              {/* Campaign brief */}
-              {activeKey === 'campaign' && (
-                <div style={{ display: 'grid', gap: 14 }}>
-                  <div style={cardMini}>
-                    <div style={label}>Session Recap</div>
-
-                    <div
-                      style={{
-                        marginTop: 8,
-                        borderRadius: 16,
-                        overflow: 'hidden',
-                        border: '1px solid rgba(255,220,160,0.18)',
-                        boxShadow: '0 14px 34px rgba(0,0,0,0.35)',
-                      }}
-                    >
-                      <video
-                        src={recapVideo}
-                        controls
-                        preload="metadata"
-                        style={{
-                          width: '100%',
-                          height: 'clamp(180px, 26vh, 320px)',
-                          display: 'block',
-                          objectFit: 'cover',
-                          background: 'rgba(0,0,0,0.25)',
-                        }}
-                      />
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: 10,
-                        color: 'rgba(255,245,220,0.62)',
-                        fontSize: 12,
-                        fontWeight: 900,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      Tip: Keep a quick 30–90s recap here to re-sync the table fast.
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Character book helpers */}
-              {activeKey === 'characters' && (
-                <div style={{ display: 'grid', gap: 14 }}>
-                  {menuBackdrop && (
-                    <div
-                      aria-hidden
-                      style={{
-					  height: 'clamp(200px, 30vh, 340px)',
-					  borderRadius: 18,
-					  overflow: 'hidden',
-					  border: '1px solid rgba(255,220,160,0.18)',
-					  boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
-					  backgroundImage: `url(${menuBackdrop})`,
-					  backgroundSize: 'cover',
-					  backgroundPosition: 'center center',
-					  backgroundRepeat: 'no-repeat',
-					  position: 'relative',
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          background:
-                            'linear-gradient(180deg, rgba(8,10,14,0.10), rgba(8,10,14,0.45))',
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: 'absolute',
-                          inset: 0,
-                          boxShadow:
-                            'inset 0 0 0 2px rgba(255,240,210,0.06), inset 0 -28px 60px rgba(0,0,0,0.55)',
-                          pointerEvents: 'none',
-                        }}
-                      />
                     </div>
                   )}
 
-                  <div style={cardMini}>
-                    <div style={label}>Quick Jump</div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                      <button
-                        style={ghostBtn}
-                        onMouseEnter={btnHover}
-                        onMouseLeave={btnLeave}
-                        onMouseDown={btnDown}
-                        onClick={() => goCharacters('grid')}
+                  {/* Video preview — Theater hover panel */}
+                  {activeKey === 'video' && (
+                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                      <div
+                        style={{
+                          width: '100%',
+                          height: 300,
+                          borderRadius: 16,
+                          overflow: 'hidden',
+                          border: '1px solid rgba(255,220,160,0.18)',
+                          boxShadow: '0 14px 34px rgba(0,0,0,0.5)',
+                          background: '#000',
+                        }}
                       >
-                        Party
-                      </button>
-                      <button
-                        style={ghostBtn}
-                        onMouseEnter={btnHover}
-                        onMouseLeave={btnLeave}
-                        onMouseDown={btnDown}
-                        onClick={() => goCharacters('worldnpcs')}
-                      >
-                        World NPCs
-                      </button>
+                        <video
+                          ref={theaterPreviewRef}
+                          src={theaterPreviewVideo}
+                          autoPlay
+                          loop
+                          playsInline
+                          preload="auto"
+                          style={{
+                            height: '100%',
+                            width: '100%',
+                            display: 'block',
+                            objectFit: 'cover',
+                            objectPosition: 'center center',
+                          }}
+                        />
+                      </div>
                     </div>
+                  )}
 
-                    <div style={{ marginTop: 12, color: 'rgba(255,245,220,0.62)', fontSize: 12, fontWeight: 900, lineHeight: 1.5 }}>
-                      Use this after sessions: update relationship notes and drop new NPCs.
+                  {/* Lore panel CTA */}
+                  {activeKey === 'lore' && (
+                    <div style={{ display: 'grid', gap: 14 }}>
+                      <div style={cardMini}>
+                        <div style={label}>World Lore Archive</div>
+                        <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.62)', fontSize: 12, fontWeight: 900, lineHeight: 1.6 }}>
+                          Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
+                        </div>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
+                          <button style={actionBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={goLore}>
+                            Open World Lore
+                          </button>
+                        </div>
+                      </div>
+                      <div style={cardMini}>
+                        <div style={label}>Lore Scratchpad</div>
+                        <textarea
+                          value={notes.lore}
+                          onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
+                          placeholder="Factions, locations, mysteries…"
+                          style={{ ...textarea, marginTop: 8 }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* Video preview — Theater hover panel */}
-              {activeKey === 'video' && (
-                <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                  <div
-                    style={{
-                      width: '100%',
-                      height: 300,
-                      borderRadius: 16,
-                      overflow: 'hidden',
-                      border: '1px solid rgba(255,220,160,0.18)',
-                      boxShadow: '0 14px 34px rgba(0,0,0,0.5)',
-                      background: '#000',
-                    }}
+                </div>{/* end scrollable body */}
+
+                <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', paddingTop: 4 }}>
+                  {/* Primary action mirrors row click */}
+                  <button
+                    style={actionBtn}
+                    onMouseEnter={btnHover}
+                    onMouseLeave={btnLeave}
+                    onMouseDown={btnDown}
+                    onClick={activeItem.primary.onClick}
                   >
-                    <video
-                      ref={theaterPreviewRef}
-                      src={theaterPreviewVideo}
-                      autoPlay
-                      loop
-                      playsInline
-                      preload="auto"
-                      style={{
-                        height: '100%',
-                        width: '100%',
-                        display: 'block',
-                        objectFit: 'cover',
-                        objectPosition: 'center center',
-                      }}
-                    />
-                  </div>
+                    {activeItem.primary.label}
+                  </button>
                 </div>
-              )}
-
-              {/* Lore panel CTA */}
-              {activeKey === 'lore' && (
-                <div style={{ display: 'grid', gap: 14 }}>
-                  <div style={cardMini}>
-                    <div style={label}>World Lore Archive</div>
-                    <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.62)', fontSize: 12, fontWeight: 900, lineHeight: 1.6 }}>
-                      Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-                      <button style={actionBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={goLore}>
-                        Open World Lore
-                      </button>
-                    </div>
-                  </div>
-                  <div style={cardMini}>
-                    <div style={label}>Lore Scratchpad</div>
-                    <textarea
-                      value={notes.lore}
-                      onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
-                      placeholder="Factions, locations, mysteries…"
-                      style={{ ...textarea, marginTop: 8 }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              </div>{/* end scrollable body */}
-
-              <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', paddingTop: 4 }}>
-                {/* Primary action mirrors row click */}
-                <button
-                  style={actionBtn}
-                  onMouseEnter={btnHover}
-                  onMouseLeave={btnLeave}
-                  onMouseDown={btnDown}
-                  onClick={activeItem.primary.onClick}
-                >
-                  {activeItem.primary.label}
-                </button>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </>
+    </>
   );
 }
