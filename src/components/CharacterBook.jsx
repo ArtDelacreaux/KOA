@@ -407,6 +407,17 @@ export default function CharacterBook({
     backdropFilter: 'blur(8px)',
   };
 
+  const worldNpcControlBtn = {
+    ...tinyBtn,
+    padding: '7px 12px',
+    border: '1px solid rgba(255,220,160,0.42)',
+    background: 'linear-gradient(180deg, rgba(58,38,18,0.92), rgba(28,18,9,0.94))',
+    color: THEME.creamText,
+    boxShadow: '0 12px 30px rgba(0,0,0,0.46)',
+    textShadow: '0 1px 8px rgba(0,0,0,0.62)',
+    opacity: 1,
+  };
+
   const tinyBtnHover = (e) => {
     e.currentTarget.style.transform = 'translateY(-1px)';
     e.currentTarget.style.filter = 'brightness(1.12)';
@@ -521,6 +532,9 @@ export default function CharacterBook({
   const [npcFilterFaction, setNpcFilterFaction] = useState('All');
   const [npcFilterLocation, setNpcFilterLocation] = useState('All');
   const [npcSearch, setNpcSearch] = useState('');
+  const WORLD_NPC_PAGE_SIZE = 5;
+  const [worldNpcListMode, setWorldNpcListMode] = useState('paged'); // paged | all
+  const [worldNpcPage, setWorldNpcPage] = useState(1);
 
   const factions = useMemo(() => {
     const set = new Set();
@@ -547,6 +561,33 @@ export default function CharacterBook({
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [worldNpcs, npcFilterFaction, npcFilterLocation, npcSearch]);
+
+  const worldNpcTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filteredWorldNpcs.length / WORLD_NPC_PAGE_SIZE)),
+    [filteredWorldNpcs.length]
+  );
+
+  const visibleWorldNpcs = useMemo(() => {
+    if (worldNpcListMode === 'all') return filteredWorldNpcs;
+    const start = (worldNpcPage - 1) * WORLD_NPC_PAGE_SIZE;
+    return filteredWorldNpcs.slice(start, start + WORLD_NPC_PAGE_SIZE);
+  }, [filteredWorldNpcs, worldNpcListMode, worldNpcPage]);
+
+  const worldNpcRangeLabel = useMemo(() => {
+    if (!filteredWorldNpcs.length) return 'Showing 0 of 0';
+    if (worldNpcListMode === 'all') return `Showing 1-${filteredWorldNpcs.length} of ${filteredWorldNpcs.length}`;
+    const start = (worldNpcPage - 1) * WORLD_NPC_PAGE_SIZE + 1;
+    const end = Math.min(filteredWorldNpcs.length, worldNpcPage * WORLD_NPC_PAGE_SIZE);
+    return `Showing ${start}-${end} of ${filteredWorldNpcs.length}`;
+  }, [filteredWorldNpcs.length, worldNpcListMode, worldNpcPage]);
+
+  useEffect(() => {
+    setWorldNpcPage(1);
+  }, [npcFilterFaction, npcFilterLocation, npcSearch, worldNpcListMode]);
+
+  useEffect(() => {
+    setWorldNpcPage((p) => Math.min(Math.max(1, p), worldNpcTotalPages));
+  }, [worldNpcTotalPages]);
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
@@ -1696,6 +1737,72 @@ export default function CharacterBook({
                   </div>
                 </div>
 
+                <div style={lightCard}>
+                  <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Connection Web (Preview)</div>
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75, color: THEME.creamSoft }}>
+                    Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
+                  </div>
+                  {connectionWeb.nodes.length === 0 ? (
+                    <div style={{ marginTop: 12, opacity: 0.78, lineHeight: 1.6, color: THEME.creamSoft }}>
+                      Add NPCs and links to build your relationship web.
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 12, position: 'relative', height: 360, borderRadius: 14, border: `1px solid ${THEME.lineSoft}`, background: 'linear-gradient(180deg, rgba(8,6,4,0.50), rgba(8,6,4,0.28))', overflow: 'hidden' }}>
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                        {connectionWeb.edges.map((edge, idx) => {
+                          const a = connectionWeb.nodeById[edge.from];
+                          const b = connectionWeb.nodeById[edge.to];
+                          if (!a || !b) return null;
+                          const route = Array.isArray(edge.route) && edge.route.length >= 2 ? edge.route : [a, b];
+                          const d = route.map((p, pointIdx) => `${pointIdx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                          return (
+                            <path
+                              key={`${edge.from}-${edge.to}-${idx}`}
+                              d={d}
+                              fill="none"
+                              stroke={edge.type === 'character' ? 'rgba(120,180,255,0.72)' : 'rgba(255,210,120,0.70)'}
+                              strokeWidth={edge.type === 'character' ? 0.22 : 0.28}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          );
+                        })}
+                      </svg>
+                      {connectionWeb.nodes.map((node) => (
+                        <div
+                          key={node.id}
+                          title={node.label}
+                          style={{
+                            position: 'absolute',
+                            left: `${node.x}%`,
+                            top: `${node.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            minWidth: 66,
+                            maxWidth: 92,
+                            padding: '4px 6px',
+                            borderRadius: 999,
+                            border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
+                            background: node.type === 'character'
+                              ? 'linear-gradient(180deg, rgba(26,44,72,0.88), rgba(14,26,44,0.90))'
+                              : 'linear-gradient(180deg, rgba(42,28,14,0.88), rgba(20,14,8,0.90))',
+                            boxShadow: '0 8px 18px rgba(0,0,0,0.42)',
+                            color: THEME.creamText,
+                            fontSize: 10.5,
+                            fontWeight: 900,
+                            letterSpacing: 0.2,
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {node.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
                   {[
                     { label: 'Faction', val: npcFilterFaction, set: setNpcFilterFaction, opts: factions },
@@ -1715,14 +1822,52 @@ export default function CharacterBook({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft }}>
-                    Showing <strong style={{ color: THEME.creamText }}>{filteredWorldNpcs.length}</strong> of <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>
+                    {worldNpcRangeLabel} <strong style={{ color: THEME.creamText }}>filtered</strong> (total <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>)
                   </div>
-                  <button style={{ ...tinyBtn, opacity: 0.9 }} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                    onClick={() => { setNpcFilterFaction('All'); setNpcFilterLocation('All'); setNpcSearch(''); }}>
-                    Clear Filters
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      style={worldNpcControlBtn}
+                      onMouseEnter={tinyBtnHover}
+                      onMouseLeave={tinyBtnLeave}
+                      onMouseDown={navClick}
+                      onClick={() => setWorldNpcListMode((m) => (m === 'paged' ? 'all' : 'paged'))}
+                    >
+                      {worldNpcListMode === 'paged' ? 'Show All (Scroll)' : 'Show 5 Per Page'}
+                    </button>
+                    {worldNpcListMode === 'paged' && filteredWorldNpcs.length > WORLD_NPC_PAGE_SIZE && (
+                      <>
+                        <button
+                          style={{ ...worldNpcControlBtn, opacity: worldNpcPage > 1 ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage > 1 ? 'pointer' : 'not-allowed' }}
+                          disabled={worldNpcPage <= 1}
+                          onMouseEnter={(e) => { if (worldNpcPage > 1) tinyBtnHover(e); }}
+                          onMouseLeave={(e) => { if (worldNpcPage > 1) tinyBtnLeave(e); }}
+                          onMouseDown={(e) => { if (worldNpcPage > 1) navClick(e); }}
+                          onClick={() => setWorldNpcPage((p) => Math.max(1, p - 1))}
+                        >
+                          Prev
+                        </button>
+                        <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamText, minWidth: 76, textAlign: 'center', textShadow: '0 1px 6px rgba(0,0,0,0.45)' }}>
+                          Page {worldNpcPage}/{worldNpcTotalPages}
+                        </div>
+                        <button
+                          style={{ ...worldNpcControlBtn, opacity: worldNpcPage < worldNpcTotalPages ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage < worldNpcTotalPages ? 'pointer' : 'not-allowed' }}
+                          disabled={worldNpcPage >= worldNpcTotalPages}
+                          onMouseEnter={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnHover(e); }}
+                          onMouseLeave={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnLeave(e); }}
+                          onMouseDown={(e) => { if (worldNpcPage < worldNpcTotalPages) navClick(e); }}
+                          onClick={() => setWorldNpcPage((p) => Math.min(worldNpcTotalPages, p + 1))}
+                        >
+                          Next
+                        </button>
+                      </>
+                    )}
+                    <button style={worldNpcControlBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
+                      onClick={() => { setNpcFilterFaction('All'); setNpcFilterLocation('All'); setNpcSearch(''); }}>
+                      Clear Filters
+                    </button>
+                  </div>
                 </div>
 
                 {filteredWorldNpcs.length === 0 ? (
@@ -1731,8 +1876,17 @@ export default function CharacterBook({
                     <div style={{ lineHeight: 1.6, opacity: 0.8 }}>Try clearing filters, or add your first World NPC.</div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {filteredWorldNpcs.map((n) => {
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                      maxHeight: worldNpcListMode === 'all' ? 520 : 'none',
+                      overflowY: worldNpcListMode === 'all' ? 'auto' : 'visible',
+                      paddingRight: worldNpcListMode === 'all' ? 4 : 0,
+                    }}
+                  >
+                    {visibleWorldNpcs.map((n) => {
                       const linkedChars = (n.characterLinks || []).map((l) =>
                         l.relation ? `${l.characterName} (${l.relation})` : l.characterName
                       );
@@ -1806,71 +1960,6 @@ export default function CharacterBook({
                   </div>
                 )}
 
-                <div style={lightCard}>
-                  <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Connection Web (Preview)</div>
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75, color: THEME.creamSoft }}>
-                    Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
-                  </div>
-                  {connectionWeb.nodes.length === 0 ? (
-                    <div style={{ marginTop: 12, opacity: 0.78, lineHeight: 1.6, color: THEME.creamSoft }}>
-                      Add NPCs and links to build your relationship web.
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 12, position: 'relative', height: 360, borderRadius: 14, border: `1px solid ${THEME.lineSoft}`, background: 'linear-gradient(180deg, rgba(8,6,4,0.50), rgba(8,6,4,0.28))', overflow: 'hidden' }}>
-                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-                        {connectionWeb.edges.map((edge, idx) => {
-                          const a = connectionWeb.nodeById[edge.from];
-                          const b = connectionWeb.nodeById[edge.to];
-                          if (!a || !b) return null;
-                          const route = Array.isArray(edge.route) && edge.route.length >= 2 ? edge.route : [a, b];
-                          const d = route.map((p, pointIdx) => `${pointIdx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                          return (
-                            <path
-                              key={`${edge.from}-${edge.to}-${idx}`}
-                              d={d}
-                              fill="none"
-                              stroke={edge.type === 'character' ? 'rgba(120,180,255,0.72)' : 'rgba(255,210,120,0.70)'}
-                              strokeWidth={edge.type === 'character' ? 0.22 : 0.28}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          );
-                        })}
-                      </svg>
-                      {connectionWeb.nodes.map((node) => (
-                        <div
-                          key={node.id}
-                          title={node.label}
-                          style={{
-                            position: 'absolute',
-                            left: `${node.x}%`,
-                            top: `${node.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                            minWidth: 66,
-                            maxWidth: 92,
-                            padding: '4px 6px',
-                            borderRadius: 999,
-                            border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
-                            background: node.type === 'character'
-                              ? 'linear-gradient(180deg, rgba(26,44,72,0.88), rgba(14,26,44,0.90))'
-                              : 'linear-gradient(180deg, rgba(42,28,14,0.88), rgba(20,14,8,0.90))',
-                            boxShadow: '0 8px 18px rgba(0,0,0,0.42)',
-                            color: THEME.creamText,
-                            fontSize: 10.5,
-                            fontWeight: 900,
-                            letterSpacing: 0.2,
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {node.label}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
             )}
 
