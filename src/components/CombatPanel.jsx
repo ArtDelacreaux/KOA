@@ -15,17 +15,16 @@ import battleback9  from '../assets/Backgrounds/battleback9.png';
 import battleback10 from '../assets/Backgrounds/battleback10.png';
 
 const BATTLE_BACKGROUNDS = [
-  { label: 'Default Scene',   src: null },
-  { label: 'Scene 1',         src: battleback1  },
-  { label: 'Scene 2',         src: battleback2  },
-  { label: 'Scene 3',         src: battleback3  },
-  { label: 'Scene 4',         src: battleback4  },
-  { label: 'Scene 5',         src: battleback5  },
-  { label: 'Scene 6',         src: battleback6  },
-  { label: 'Scene 7',         src: battleback7  },
-  { label: 'Scene 8',         src: battleback8  },
-  { label: 'Scene 9',         src: battleback9  },
-  { label: 'Scene 10',        src: battleback10 },
+  { label: 'Forest',          src: battleback1  },
+  { label: 'Forest 2',        src: battleback6  },
+  { label: 'Forest 3',        src: battleback7  },
+  { label: 'Snow',            src: battleback2  },
+  { label: 'Desert',          src: battleback3  },
+  { label: 'Market',          src: battleback4  },
+  { label: 'Rocky Cavern',    src: battleback5  },
+  { label: 'Cave',            src: battleback8  },
+  { label: 'Arena',           src: battleback9  },
+  { label: 'Pasture',         src: battleback10 },
 ];
 
 const LS_KEY = 'koa:combat:v4';
