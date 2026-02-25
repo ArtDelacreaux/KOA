@@ -1,27 +1,27 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 
 // Character theme music — one import per character
 // Place each MP3 in: src/assets/music/<filename>
-import williamTheme  from '../assets/music/William.mp3';
-import arlisTheme    from '../assets/music/Arlis.mp3';
-import thryvTheme    from '../assets/music/Thryvaris.mp3';
-import fenTheme      from '../assets/music/Fen.mp3';
-import vonghulTheme  from '../assets/music/VonGhul.mp3';
-import castorTheme   from '../assets/music/Castor.mp3';
-import cerciTheme    from '../assets/music/Cerci.mp3';
-import jasperTheme   from '../assets/music/Jasper.mp3';
+import williamTheme from '../assets/music/William.mp3';
+import arlisTheme from '../assets/music/Arlis.mp3';
+import thryvTheme from '../assets/music/Thryvaris.mp3';
+import fenTheme from '../assets/music/Fen.mp3';
+import vonghulTheme from '../assets/music/VonGhul.mp3';
+import castorTheme from '../assets/music/Castor.mp3';
+import cerciTheme from '../assets/music/Cerci.mp3';
+import jasperTheme from '../assets/music/Jasper.mp3';
 
 // Map character name → imported audio module
 const CHAR_MUSIC_MAP = {
-  'William Spicer':   williamTheme,
-  'Arlis Ghoth':      arlisTheme,
-  'Thryvaris Bria':   thryvTheme,
-  'Fen':              fenTheme,
-  "Von'Ghul":         vonghulTheme,
-  'Castor':           castorTheme,
+  'William Spicer': williamTheme,
+  'Arlis Ghoth': arlisTheme,
+  'Thryvaris Bria': thryvTheme,
+  'Fen': fenTheme,
+  "Von'Ghul": vonghulTheme,
+  'Castor': castorTheme,
   'Cerci VonDonovon': cerciTheme,
-  'Jasper Delancey':  jasperTheme,
+  'Jasper Delancey': jasperTheme,
 };
 
 export default function CharacterBook({
@@ -52,7 +52,7 @@ export default function CharacterBook({
   pauseAmbient,
   resumeAmbient,
 }) {
-  const navClick = playNav || playClick || (() => {});
+  const navClick = playNav || playClick || (() => { });
 
   /* ---------- header measurement (prevents dead space above content) ---------- */
   const headerRef = useRef(null);
@@ -123,10 +123,10 @@ export default function CharacterBook({
   /* ---------- CHARACTER THEME PLAYER ---------- */
   // Single persistent <audio> element — never remounted, src swapped manually.
   const charAudioRef = useRef(null);
-  const [charSongOn,  setCharSongOn]  = useState(false);
+  const [charSongOn, setCharSongOn] = useState(false);
   const [charSongTime, setCharSongTime] = useState(0);
-  const [charSongDur,  setCharSongDur]  = useState(0);
-  const [charSongVol,  setCharSongVol]  = useState(0.50);
+  const [charSongDur, setCharSongDur] = useState(0);
+  const [charSongVol, setCharSongVol] = useState(0.50);
 
   // Derive src without useMemo so it never lags a render cycle
   const charSongSrc = selectedChar ? (CHAR_MUSIC_MAP[selectedChar.name] || null) : null;
@@ -155,7 +155,7 @@ export default function CharacterBook({
     a.addEventListener('canplay', onCanPlay);
     a.load();
     return () => a.removeEventListener('canplay', onCanPlay);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charSongSrc]);
 
   // Stop when leaving the character book entirely
@@ -176,7 +176,7 @@ export default function CharacterBook({
     } else {
       resumeAmbient?.();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelType, charView, selectedChar, charSongSrc]);
 
   // Keep volume in sync
@@ -474,16 +474,46 @@ export default function CharacterBook({
 
   /* ---------- World NPC Codex ---------- */
   const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
+  const normalizeWorldNpc = (npc, idx = 0) => ({
+    id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
+    name: npc?.name || '',
+    age: npc?.age || '',
+    faction: npc?.faction || '',
+    occupation: npc?.occupation || '',
+    location: npc?.location || '',
+    summary: npc?.summary || npc?.bio || '',
+    bio: npc?.bio || '',
+    image: npc?.image || '',
+    characterLinks: Array.isArray(npc?.characterLinks)
+      ? npc.characterLinks
+        .map((l) => ({
+          characterName: (l?.characterName || '').trim(),
+          relation: (l?.relation || '').trim(),
+        }))
+        .filter((l) => l.characterName)
+      : [],
+    links: Array.isArray(npc?.links)
+      ? npc.links
+        .map((l) => ({
+          targetId: (l?.targetId && String(l.targetId)) || '',
+          note: (l?.note || '').trim(),
+        }))
+        .filter((l) => l.targetId)
+      : [],
+    createdAt: npc?.createdAt || null,
+    updatedAt: npc?.updatedAt || null,
+  });
 
   const [worldNpcs, setWorldNpcs] = useState(() => {
     try {
       const raw = localStorage.getItem(LS_WORLD_NPCS);
-      return raw ? JSON.parse(raw) : [];
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((npc, idx) => normalizeWorldNpc(npc, idx)) : [];
     } catch { return []; }
   });
 
   useEffect(() => {
-    try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch {}
+    try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch { }
   }, [worldNpcs]);
 
   const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -511,7 +541,8 @@ export default function CharacterBook({
       .filter((n) => npcFilterLocation === 'All' || (n.location || '') === npcFilterLocation)
       .filter((n) => {
         if (!q) return true;
-        const hay = `${n.name || ''} ${n.faction || ''} ${n.location || ''} ${n.bio || ''}`.toLowerCase();
+        const linkedChars = (n.characterLinks || []).map((l) => l.characterName).join(' ');
+        const hay = `${n.name || ''} ${n.age || ''} ${n.faction || ''} ${n.occupation || ''} ${n.location || ''} ${n.summary || ''} ${n.bio || ''} ${linkedChars}`.toLowerCase();
         return hay.includes(q);
       })
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -519,7 +550,20 @@ export default function CharacterBook({
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
-  const [worldNpcDraft, setWorldNpcDraft] = useState({ name: '', faction: '', location: '', bio: '', image: '' });
+  const [worldNpcDraft, setWorldNpcDraft] = useState({
+    name: '',
+    age: '',
+    faction: '',
+    occupation: '',
+    location: '',
+    summary: '',
+    bio: '',
+    image: '',
+    characterLinks: [],
+    links: [],
+  });
+  const [worldNpcCharSearch, setWorldNpcCharSearch] = useState('');
+  const [worldNpcConnectionSearch, setWorldNpcConnectionSearch] = useState('');
 
   // Image cropper (simple, no external libs)
   const [worldNpcCropOpen, setWorldNpcCropOpen] = useState(false);
@@ -532,89 +576,116 @@ export default function CharacterBook({
 
 
 
-const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-const clampCropOffset = () => {
-  const img = worldNpcCropImgRef.current;
-  if (!img) return;
-  const iw = img.naturalWidth || 1;
-  const ih = img.naturalHeight || 1;
-  const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
-  const scale = base * worldNpcCropZoom;
-  const rw = iw * scale;
-  const rh = ih * scale;
-  const maxX = Math.max(0, (rw - WORLD_NPC_CROP_BOX) / 2);
-  const maxY = Math.max(0, (rh - WORLD_NPC_CROP_BOX) / 2);
-  setWorldNpcCropOffset((o) => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
-};
-
-const onWorldNpcImagePick = (file) => {
-  if (!file) return;
-  if (!file.type || !file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-    if (!dataUrl) return;
-    // Open cropper first (user confirms before it becomes the NPC image)
-    setWorldNpcCropSrc(dataUrl);
-    setWorldNpcCropZoom(1);
-    setWorldNpcCropOffset({ x: 0, y: 0 });
-    setWorldNpcCropOpen(true);
+  const clampCropOffset = () => {
+    const img = worldNpcCropImgRef.current;
+    if (!img) return;
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
+    const scale = base * worldNpcCropZoom;
+    const rw = iw * scale;
+    const rh = ih * scale;
+    const maxX = Math.max(0, (rw - WORLD_NPC_CROP_BOX) / 2);
+    const maxY = Math.max(0, (rh - WORLD_NPC_CROP_BOX) / 2);
+    setWorldNpcCropOffset((o) => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
   };
-  reader.readAsDataURL(file);
-};
 
-const applyWorldNpcCrop = () => {
-  const img = worldNpcCropImgRef.current;
-  if (!img) return;
+  const onWorldNpcImagePick = (file) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      // Open cropper first (user confirms before it becomes the NPC image)
+      setWorldNpcCropSrc(dataUrl);
+      setWorldNpcCropZoom(1);
+      setWorldNpcCropOffset({ x: 0, y: 0 });
+      setWorldNpcCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  };
 
-  const iw = img.naturalWidth || 1;
-  const ih = img.naturalHeight || 1;
+  const applyWorldNpcCrop = () => {
+    const img = worldNpcCropImgRef.current;
+    if (!img) return;
 
-  const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
-  const scale = base * worldNpcCropZoom;
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
 
-  const rw = iw * scale;
-  const rh = ih * scale;
+    const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih); // cover
+    const scale = base * worldNpcCropZoom;
 
-  const imgLeft = (WORLD_NPC_CROP_BOX / 2) - (rw / 2) + worldNpcCropOffset.x;
-  const imgTop = (WORLD_NPC_CROP_BOX / 2) - (rh / 2) + worldNpcCropOffset.y;
+    const rw = iw * scale;
+    const rh = ih * scale;
 
-  // Source rect in original image coords that maps to the crop box
-  let sx = (-imgLeft) / scale;
-  let sy = (-imgTop) / scale;
-  const sw = WORLD_NPC_CROP_BOX / scale;
-  const sh = WORLD_NPC_CROP_BOX / scale;
+    const imgLeft = (WORLD_NPC_CROP_BOX / 2) - (rw / 2) + worldNpcCropOffset.x;
+    const imgTop = (WORLD_NPC_CROP_BOX / 2) - (rh / 2) + worldNpcCropOffset.y;
 
-  // Clamp to bounds
-  sx = clamp(sx, 0, Math.max(0, iw - sw));
-  sy = clamp(sy, 0, Math.max(0, ih - sh));
+    // Source rect in original image coords that maps to the crop box
+    let sx = (-imgLeft) / scale;
+    let sy = (-imgTop) / scale;
+    const sw = WORLD_NPC_CROP_BOX / scale;
+    const sh = WORLD_NPC_CROP_BOX / scale;
 
-  const out = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = out;
-  canvas.height = out;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+    // Clamp to bounds
+    sx = clamp(sx, 0, Math.max(0, iw - sw));
+    sy = clamp(sy, 0, Math.max(0, ih - sh));
 
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+    const out = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  const dataUrl = canvas.toDataURL('image/png');
-  setWorldNpcDraft((d) => ({ ...d, image: dataUrl }));
-  setWorldNpcCropOpen(false);
-};
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    setWorldNpcDraft((d) => ({ ...d, image: dataUrl }));
+    setWorldNpcCropOpen(false);
+  };
 
   const openAddWorldNpc = () => {
     setEditingWorldNpcId(null);
-    setWorldNpcDraft({ name: '', faction: '', location: '', bio: '', image: '' });
+    setWorldNpcDraft({
+      name: '',
+      age: '',
+      faction: '',
+      occupation: '',
+      location: '',
+      summary: '',
+      bio: '',
+      image: '',
+      characterLinks: [],
+      links: [],
+    });
+    setWorldNpcCharSearch('');
+    setWorldNpcConnectionSearch('');
     setWorldNpcModalOpen(true);
   };
 
   const openEditWorldNpc = (npc) => {
-    setEditingWorldNpcId(npc.id);
-    setWorldNpcDraft({ name: npc.name || '', faction: npc.faction || '', location: npc.location || '', bio: npc.bio || '', image: npc.image || '' });
+    const normalized = normalizeWorldNpc(npc, 0);
+    setEditingWorldNpcId(normalized.id);
+    setWorldNpcDraft({
+      name: normalized.name || '',
+      age: normalized.age || '',
+      faction: normalized.faction || '',
+      occupation: normalized.occupation || '',
+      location: normalized.location || '',
+      summary: normalized.summary || '',
+      bio: normalized.bio || '',
+      image: normalized.image || '',
+      characterLinks: normalized.characterLinks || [],
+      links: normalized.links || [],
+    });
+    setWorldNpcCharSearch('');
+    setWorldNpcConnectionSearch('');
     setWorldNpcModalOpen(true);
   };
 
@@ -624,10 +695,19 @@ const applyWorldNpcCrop = () => {
     if (!editingWorldNpcId) {
       const npc = {
         id: newId(), name,
+        age: (worldNpcDraft.age || '').trim(),
         faction: (worldNpcDraft.faction || '').trim(),
+        occupation: (worldNpcDraft.occupation || '').trim(),
         location: (worldNpcDraft.location || '').trim(),
+        summary: (worldNpcDraft.summary || '').trim(),
         bio: (worldNpcDraft.bio || '').trim(),
         image: (worldNpcDraft.image || ''),
+        characterLinks: (worldNpcDraft.characterLinks || [])
+          .map((l) => ({ characterName: (l.characterName || '').trim(), relation: (l.relation || '').trim() }))
+          .filter((l) => l.characterName),
+        links: (worldNpcDraft.links || [])
+          .map((l) => ({ targetId: (l.targetId && String(l.targetId)) || '', note: (l.note || '').trim() }))
+          .filter((l) => l.targetId),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -636,7 +716,24 @@ const applyWorldNpcCrop = () => {
       setWorldNpcs((prev) =>
         (prev || []).map((n) =>
           n.id === editingWorldNpcId
-            ? { ...n, name, faction: (worldNpcDraft.faction || '').trim(), location: (worldNpcDraft.location || '').trim(), bio: (worldNpcDraft.bio || '').trim(), image: (worldNpcDraft.image || ''), updatedAt: new Date().toISOString() }
+            ? {
+              ...n,
+              name,
+              age: (worldNpcDraft.age || '').trim(),
+              faction: (worldNpcDraft.faction || '').trim(),
+              occupation: (worldNpcDraft.occupation || '').trim(),
+              location: (worldNpcDraft.location || '').trim(),
+              summary: (worldNpcDraft.summary || '').trim(),
+              bio: (worldNpcDraft.bio || '').trim(),
+              image: (worldNpcDraft.image || ''),
+              characterLinks: (worldNpcDraft.characterLinks || [])
+                .map((l) => ({ characterName: (l.characterName || '').trim(), relation: (l.relation || '').trim() }))
+                .filter((l) => l.characterName),
+              links: (worldNpcDraft.links || [])
+                .map((l) => ({ targetId: (l.targetId && String(l.targetId)) || '', note: (l.note || '').trim() }))
+                .filter((l) => l.targetId),
+              updatedAt: new Date().toISOString(),
+            }
             : n
         )
       );
@@ -759,9 +856,14 @@ const applyWorldNpcCrop = () => {
     id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
     name: npc?.name || '',
     relation: npc?.relation || '',
+    age: npc?.age || '',
+    faction: npc?.faction || '',
+    occupation: npc?.occupation || '',
     summary: npc?.summary || npc?.bio || '',
     bio: npc?.bio || '',
     image: npc?.image || '',
+    source: npc?.source || 'character',
+    worldNpcId: npc?.worldNpcId || null,
   });
 
   const [charNpcByCharacter, setCharNpcByCharacter] = useState(() => {
@@ -774,7 +876,7 @@ const applyWorldNpcCrop = () => {
   });
 
   useEffect(() => {
-    try { localStorage.setItem(LS_CHAR_NPCS, JSON.stringify(charNpcByCharacter)); } catch {}
+    try { localStorage.setItem(LS_CHAR_NPCS, JSON.stringify(charNpcByCharacter)); } catch { }
   }, [charNpcByCharacter]);
 
   const getBaseRelatedNpcs = (char) => {
@@ -782,33 +884,91 @@ const applyWorldNpcCrop = () => {
     return (char.npcs || []).map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
   };
 
-  const getRelatedNpcsForCharacter = (char, store = charNpcByCharacter) => {
+  const getCharacterOwnedNpcs = (char, store = charNpcByCharacter) => {
     if (!char) return [];
     const saved = store?.[char.name];
     if (Array.isArray(saved)) return saved.map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
     return getBaseRelatedNpcs(char);
   };
 
+  const worldLinkedNpcsByCharacter = useMemo(() => {
+    const map = {};
+    (worldNpcs || []).forEach((wNpc, wIdx) => {
+      const normalizedWorld = normalizeWorldNpc(wNpc, wIdx);
+      (normalizedWorld.characterLinks || []).forEach((link, lIdx) => {
+        const charName = (link.characterName || '').trim();
+        if (!charName) return;
+        const projected = normalizeRelatedNpc({
+          id: `worldlink::${normalizedWorld.id}::${charName}::${lIdx}`,
+          name: normalizedWorld.name,
+          relation: (link.relation || '').trim() || 'Related NPC',
+          age: normalizedWorld.age || '',
+          faction: normalizedWorld.faction || '',
+          occupation: normalizedWorld.occupation || '',
+          summary: normalizedWorld.summary || normalizedWorld.bio || '',
+          bio: normalizedWorld.bio || '',
+          image: normalizedWorld.image || '',
+          source: 'world',
+          worldNpcId: normalizedWorld.id,
+        }, charName, lIdx);
+        if (!map[charName]) map[charName] = [];
+        map[charName].push(projected);
+      });
+    });
+    return map;
+  }, [worldNpcs]);
+
+  const getRelatedNpcsForCharacter = (char, store = charNpcByCharacter) => {
+    const owned = getCharacterOwnedNpcs(char, store);
+    if (!char) return [];
+    const linked = worldLinkedNpcsByCharacter[char.name] || [];
+    if (!linked.length) return owned;
+
+    const hasMatch = (candidate) => owned.some((npc) =>
+      (candidate.worldNpcId && npc.worldNpcId && candidate.worldNpcId === npc.worldNpcId) ||
+      ((candidate.name || '').trim().toLowerCase() && (npc.name || '').trim().toLowerCase() === (candidate.name || '').trim().toLowerCase())
+    );
+
+    const merged = [...owned];
+    linked.forEach((candidate) => {
+      if (!hasMatch(candidate)) merged.push(candidate);
+    });
+    return merged;
+  };
+
   const selectedCharNpcs = useMemo(
     () => getRelatedNpcsForCharacter(selectedChar),
-    [selectedChar, charNpcByCharacter]
+    [selectedChar, charNpcByCharacter, worldLinkedNpcsByCharacter]
   );
 
   const activeSelectedNpc = useMemo(() => {
     if (!selectedNpc) return null;
-    if (!selectedCharNpcs.length) return selectedNpc;
+    const isWorldLinked = selectedNpc.source === 'world' || !!selectedNpc.worldNpcId;
+    if (!selectedCharNpcs.length) return isWorldLinked ? null : selectedNpc;
     if (selectedNpc.id) {
       const byId = selectedCharNpcs.find((npc) => npc.id === selectedNpc.id);
       if (byId) return byId;
     }
-    return selectedCharNpcs.find((npc) => npc.name === selectedNpc.name) || selectedNpc;
+    const byName = selectedCharNpcs.find((npc) => npc.name === selectedNpc.name);
+    if (byName) return byName;
+    return isWorldLinked ? null : selectedNpc;
   }, [selectedNpc, selectedCharNpcs]);
+
+  useEffect(() => {
+    if (charView === 'npc' && selectedChar && !activeSelectedNpc) {
+      setSelectedNpc(null);
+      setCharView('relations');
+    }
+  }, [charView, selectedChar, activeSelectedNpc, setSelectedNpc, setCharView]);
 
   const [charNpcModalOpen, setCharNpcModalOpen] = useState(false);
   const [editingCharNpcId, setEditingCharNpcId] = useState(null);
   const [charNpcDraft, setCharNpcDraft] = useState({
     name: '',
     relation: '',
+    age: '',
+    faction: '',
+    occupation: '',
     summary: '',
     bio: '',
     image: '',
@@ -822,7 +982,7 @@ const applyWorldNpcCrop = () => {
   const openAddCharNpc = () => {
     if (!selectedChar) return;
     setEditingCharNpcId(null);
-    setCharNpcDraft({ name: '', relation: '', summary: '', bio: '', image: '' });
+    setCharNpcDraft({ name: '', relation: '', age: '', faction: '', occupation: '', summary: '', bio: '', image: '' });
     setCharNpcModalOpen(true);
   };
 
@@ -833,6 +993,9 @@ const applyWorldNpcCrop = () => {
     setCharNpcDraft({
       name: normalized.name || '',
       relation: normalized.relation || '',
+      age: normalized.age || '',
+      faction: normalized.faction || '',
+      occupation: normalized.occupation || '',
       summary: normalized.summary || normalized.bio || '',
       bio: normalized.bio || '',
       image: normalized.image || '',
@@ -866,13 +1029,16 @@ const applyWorldNpcCrop = () => {
       id: editingCharNpcId || newId(),
       name,
       relation: (charNpcDraft.relation || '').trim(),
+      age: (charNpcDraft.age || '').trim(),
+      faction: (charNpcDraft.faction || '').trim(),
+      occupation: (charNpcDraft.occupation || '').trim(),
       summary: (charNpcDraft.summary || '').trim(),
       bio: (charNpcDraft.bio || '').trim(),
       image: charNpcDraft.image || '',
     };
 
     setCharNpcByCharacter((prev) => {
-      const current = getRelatedNpcsForCharacter(selectedChar, prev);
+      const current = getCharacterOwnedNpcs(selectedChar, prev);
       const nextList = editingCharNpcId
         ? current.map((npc) => (npc.id === editingCharNpcId ? nextNpc : npc))
         : [nextNpc, ...current];
@@ -889,7 +1055,7 @@ const applyWorldNpcCrop = () => {
     if (!confirm('Delete this NPC?')) return;
 
     setCharNpcByCharacter((prev) => {
-      const current = getRelatedNpcsForCharacter(selectedChar, prev);
+      const current = getCharacterOwnedNpcs(selectedChar, prev);
       const nextList = current.filter((npc) => npc.id !== editingCharNpcId);
       return { ...prev, [selectedChar.name]: nextList };
     });
@@ -900,6 +1066,324 @@ const applyWorldNpcCrop = () => {
     }
     closeCharNpcModal();
   };
+
+  const characterNames = useMemo(
+    () => characters.map((c) => c.name),
+    [characters]
+  );
+
+  const toggleWorldNpcCharacterLink = (characterName) => {
+    setWorldNpcDraft((d) => {
+      const current = Array.isArray(d.characterLinks) ? d.characterLinks : [];
+      const exists = current.some((l) => l.characterName === characterName);
+      const next = exists
+        ? current.filter((l) => l.characterName !== characterName)
+        : [...current, { characterName, relation: '' }];
+      return { ...d, characterLinks: next };
+    });
+  };
+
+  const setWorldNpcCharacterRelation = (characterName, relation) => {
+    setWorldNpcDraft((d) => {
+      const current = Array.isArray(d.characterLinks) ? d.characterLinks : [];
+      const next = current.map((l) =>
+        l.characterName === characterName ? { ...l, relation } : l
+      );
+      return { ...d, characterLinks: next };
+    });
+  };
+
+  const toggleWorldNpcConnection = (targetId) => {
+    const target = String(targetId || '');
+    if (!target) return;
+    setWorldNpcDraft((d) => {
+      const current = Array.isArray(d.links) ? d.links : [];
+      const exists = current.some((l) => String(l.targetId) === target);
+      const next = exists
+        ? current.filter((l) => String(l.targetId) !== target)
+        : [...current, { targetId: target, note: '' }];
+      return { ...d, links: next };
+    });
+  };
+
+  const setWorldNpcConnectionNote = (targetId, note) => {
+    const target = String(targetId || '');
+    if (!target) return;
+    setWorldNpcDraft((d) => {
+      const current = Array.isArray(d.links) ? d.links : [];
+      const next = current.map((l) =>
+        String(l.targetId) === target ? { ...l, note } : l
+      );
+      return { ...d, links: next };
+    });
+  };
+
+  const importCharacterNpcsIntoWorld = () => {
+    const seedsByName = new Map();
+
+    characters.forEach((char) => {
+      const owned = getCharacterOwnedNpcs(char);
+      owned.forEach((npc) => {
+        const name = (npc.name || '').trim();
+        if (!name) return;
+        const key = name.toLowerCase();
+        const prev = seedsByName.get(key) || {
+          name,
+          age: '',
+          faction: '',
+          occupation: '',
+          location: '',
+          summary: '',
+          bio: '',
+          image: '',
+          characterLinks: [],
+          links: [],
+        };
+        if (!prev.age && npc.age) prev.age = (npc.age || '').trim();
+        if (!prev.faction && npc.faction) prev.faction = (npc.faction || '').trim();
+        if (!prev.occupation && npc.occupation) prev.occupation = (npc.occupation || '').trim();
+        if (!prev.summary && (npc.summary || npc.bio)) prev.summary = (npc.summary || npc.bio || '').trim();
+        if (!prev.bio && npc.bio) prev.bio = (npc.bio || '').trim();
+        if (!prev.image && npc.image) prev.image = npc.image;
+        if (!prev.characterLinks.some((l) => l.characterName === char.name)) {
+          prev.characterLinks.push({
+            characterName: char.name,
+            relation: (npc.relation || '').trim() || 'Related NPC',
+          });
+        }
+        seedsByName.set(key, prev);
+      });
+    });
+
+    if (!seedsByName.size) return;
+
+    setWorldNpcs((prev) => {
+      const next = [...(prev || [])];
+      let changed = false;
+      seedsByName.forEach((seed, key) => {
+        const idx = next.findIndex((n) => ((n.name || '').trim().toLowerCase() === key));
+        if (idx < 0) {
+          next.push(normalizeWorldNpc({
+            ...seed,
+            id: newId(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }, next.length));
+          changed = true;
+          return;
+        }
+        const cur = normalizeWorldNpc(next[idx], idx);
+        let rowChanged = false;
+
+        const mergedCharLinks = [...(cur.characterLinks || [])];
+        (seed.characterLinks || []).forEach((l) => {
+          const li = mergedCharLinks.findIndex((x) => x.characterName === l.characterName);
+          if (li < 0) {
+            mergedCharLinks.push(l);
+            rowChanged = true;
+          } else if (!mergedCharLinks[li].relation && l.relation) {
+            mergedCharLinks[li] = { ...mergedCharLinks[li], relation: l.relation };
+            rowChanged = true;
+          }
+        });
+
+        const patch = {};
+        if (!cur.age && seed.age) { patch.age = seed.age; rowChanged = true; }
+        if (!cur.faction && seed.faction) { patch.faction = seed.faction; rowChanged = true; }
+        if (!cur.occupation && seed.occupation) { patch.occupation = seed.occupation; rowChanged = true; }
+        if (!cur.summary && seed.summary) { patch.summary = seed.summary; rowChanged = true; }
+        if (!cur.bio && seed.bio) { patch.bio = seed.bio; rowChanged = true; }
+        if (!cur.image && seed.image) { patch.image = seed.image; rowChanged = true; }
+        if (rowChanged) {
+          next[idx] = {
+            ...cur,
+            ...patch,
+            characterLinks: mergedCharLinks,
+            updatedAt: new Date().toISOString(),
+          };
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  };
+
+  useEffect(() => {
+    if (charView === 'worldnpcs') {
+      importCharacterNpcsIntoWorld();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charView]);
+
+  const worldNpcById = useMemo(() => {
+    const out = {};
+    (worldNpcs || []).forEach((n, idx) => {
+      const normalized = normalizeWorldNpc(n, idx);
+      out[normalized.id] = normalized;
+    });
+    return out;
+  }, [worldNpcs]);
+
+  const openNpcEditorFromRelation = (npc) => {
+    if (!npc) return;
+    if (npc.source === 'world' || npc.worldNpcId) {
+      const target = (worldNpcs || []).find((w) => w.id === npc.worldNpcId) || (worldNpcs || []).find((w) => w.id === npc.id);
+      if (target) {
+        openEditWorldNpc(target);
+        return;
+      }
+    }
+    openEditCharNpc(npc);
+  };
+
+  const connectionWeb = useMemo(() => {
+    const worldList = worldNpcs || [];
+    const worldNodes = worldList.map((n, idx) => {
+      const x = worldList.length
+        ? 50 + 38 * Math.cos((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, worldList.length)))
+        : 50;
+      const y = worldList.length
+        ? 50 + 34 * Math.sin((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, worldList.length)))
+        : 50;
+      return { id: `world:${n.id}`, type: 'world', label: n.name || 'NPC', x, y };
+    });
+
+    const charSet = new Set();
+    worldList.forEach((n) => {
+      (n.characterLinks || []).forEach((l) => { if (l.characterName) charSet.add(l.characterName); });
+    });
+    const charList = Array.from(charSet);
+    const charNodes = charList.map((name, idx) => {
+      const x = charList.length
+        ? 50 + 20 * Math.cos((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, charList.length)))
+        : 50;
+      const y = charList.length
+        ? 50 + 16 * Math.sin((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, charList.length)))
+        : 50;
+      return { id: `char:${name}`, type: 'character', label: name, x, y };
+    });
+
+    const nodes = [...worldNodes, ...charNodes];
+    const nodeById = {};
+    nodes.forEach((n) => { nodeById[n.id] = n; });
+
+    // Keep lines from visually cutting through unrelated character nodes.
+    const charRectsById = {};
+    charNodes.forEach((node) => {
+      const len = (node.label || '').length;
+      const halfW = Math.min(7.6, Math.max(4.9, 2.8 + len * 0.24));
+      const halfH = 3.9;
+      charRectsById[node.id] = {
+        left: node.x - halfW,
+        right: node.x + halfW,
+        top: node.y - halfH,
+        bottom: node.y + halfH,
+      };
+    });
+
+    const pointInRect = (p, r) =>
+      p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+
+    const segmentHitsRect = (a, b, rect) => {
+      const steps = 36;
+      for (let i = 0; i <= steps; i += 1) {
+        const t = i / steps;
+        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        if (pointInRect(p, rect)) return true;
+      }
+      return false;
+    };
+
+    const routeEdge = (fromId, toId) => {
+      const from = nodeById[fromId];
+      const to = nodeById[toId];
+      if (!from || !to) return [];
+
+      const blockedRects = Object.entries(charRectsById)
+        .filter(([id]) => id !== fromId && id !== toId)
+        .map(([, rect]) => rect);
+
+      const segmentBlocked = (p1, p2) =>
+        blockedRects.some((rect) => segmentHitsRect(p1, p2, rect));
+
+      if (!segmentBlocked(from, to)) return [from, to];
+
+      const midX = (from.x + to.x) / 2;
+      const midY = (from.y + to.y) / 2;
+      const singleWaypointCandidates = [
+        { x: 6, y: midY }, { x: 94, y: midY },
+        { x: midX, y: 8 }, { x: midX, y: 92 },
+        { x: 6, y: from.y }, { x: 6, y: to.y },
+        { x: 94, y: from.y }, { x: 94, y: to.y },
+        { x: from.x, y: 8 }, { x: to.x, y: 8 },
+        { x: from.x, y: 92 }, { x: to.x, y: 92 },
+      ];
+
+      for (const wp of singleWaypointCandidates) {
+        if (!segmentBlocked(from, wp) && !segmentBlocked(wp, to)) {
+          return [from, wp, to];
+        }
+      }
+
+      for (const x of [4, 96]) {
+        const w1 = { x, y: from.y };
+        const w2 = { x, y: to.y };
+        if (!segmentBlocked(from, w1) && !segmentBlocked(w1, w2) && !segmentBlocked(w2, to)) {
+          return [from, w1, w2, to];
+        }
+      }
+
+      for (const y of [4, 96]) {
+        const w1 = { x: from.x, y };
+        const w2 = { x: to.x, y };
+        if (!segmentBlocked(from, w1) && !segmentBlocked(w1, w2) && !segmentBlocked(w2, to)) {
+          return [from, w1, w2, to];
+        }
+      }
+
+      return [from, to];
+    };
+
+    const edges = [];
+    const seen = new Set();
+
+    worldList.forEach((n) => {
+      const from = `world:${n.id}`;
+      (n.links || []).forEach((l) => {
+        const to = `world:${l.targetId}`;
+        if (!nodeById[to]) return;
+        const key = [from, to].sort().join('::');
+        if (seen.has(key)) return;
+        seen.add(key);
+        edges.push({ from, to, type: 'npc', note: l.note || '', route: routeEdge(from, to) });
+      });
+      (n.characterLinks || []).forEach((l) => {
+        const to = `char:${l.characterName}`;
+        if (!nodeById[to]) return;
+        const key = `${from}::${to}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        edges.push({ from, to, type: 'character', note: l.relation || '', route: routeEdge(from, to) });
+      });
+    });
+
+    return { nodes, edges, nodeById };
+  }, [worldNpcs]);
+
+  const worldNpcConnectionTargets = useMemo(
+    () => (worldNpcs || []).filter((n) => n.id !== editingWorldNpcId),
+    [worldNpcs, editingWorldNpcId]
+  );
+  const filteredWorldNpcCharacterNames = useMemo(() => {
+    const q = (worldNpcCharSearch || '').trim().toLowerCase();
+    if (!q) return characterNames;
+    return characterNames.filter((name) => (name || '').toLowerCase().includes(q));
+  }, [characterNames, worldNpcCharSearch]);
+  const filteredWorldNpcConnectionTargets = useMemo(() => {
+    const q = (worldNpcConnectionSearch || '').trim().toLowerCase();
+    if (!q) return worldNpcConnectionTargets;
+    return worldNpcConnectionTargets.filter((target) => (target.name || '').toLowerCase().includes(q));
+  }, [worldNpcConnectionTargets, worldNpcConnectionSearch]);
 
   const partyMateNames = useMemo(() => {
     if (!selectedChar) return [];
@@ -1042,7 +1526,7 @@ const applyWorldNpcCrop = () => {
           </div>
 
           {/* Context tabs (only show when applicable) */}
-          
+
         </div>
 
         {/* Body */}
@@ -1103,9 +1587,9 @@ const applyWorldNpcCrop = () => {
                       ? 'Return to Family & Related NPCs'
                       : charView === 'worldnpcs'
                         ? 'Return to Codex'
-                      : showProfileTab
-                        ? 'Return to Codex'
-                        : 'Adventurers'}
+                        : showProfileTab
+                          ? 'Return to Codex'
+                          : 'Adventurers'}
                 </button>
               )}
 
@@ -1137,6 +1621,31 @@ const applyWorldNpcCrop = () => {
                   onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
                 >
                   World NPCs
+                </button>
+              )}
+
+              {!!selectedChar && (charView === 'relations' || charView === 'npc') && (
+                <button
+                  type="button"
+                  disabled={!charSongSrc}
+                  style={{
+                    ...tinyBtn,
+                    padding: '10px 14px',
+                    borderRadius: 999,
+                    opacity: charSongSrc ? 1 : 0.45,
+                    cursor: charSongSrc ? 'pointer' : 'not-allowed',
+                    fontSize: 12,
+                    letterSpacing: '0.08em',
+                  }}
+                  onMouseEnter={(e) => { if (charSongSrc) tinyBtnHover(e); }}
+                  onMouseLeave={(e) => { if (charSongSrc) tinyBtnLeave(e); }}
+                  onMouseDown={(e) => { if (charSongSrc) navClick(e); }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (charSongSrc) toggleCharSong();
+                  }}
+                >
+                  {charSongSrc ? `Theme: ${charSongOn ? 'Pause' : 'Play'}` : 'No Theme'}
                 </button>
               )}
             </div>
@@ -1171,9 +1680,20 @@ const applyWorldNpcCrop = () => {
                     <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>World NPC Codex</div>
                     <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4, color: THEME.creamSoft }}>NPCs you meet in the world — not tied to any one player.</div>
                   </div>
-                  <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
-                    + Add NPC
-                  </button>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <button
+                      style={{ ...tinyBtn, padding: '10px 14px', opacity: 0.95 }}
+                      onMouseEnter={tinyBtnHover}
+                      onMouseLeave={tinyBtnLeave}
+                      onMouseDown={navClick}
+                      onClick={importCharacterNpcsIntoWorld}
+                    >
+                      Import Character NPCs
+                    </button>
+                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
+                      + Add NPC
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
@@ -1191,7 +1711,7 @@ const applyWorldNpcCrop = () => {
                   <div style={darkCard}>
                     <div style={fieldLabel}>Search</div>
                     <input value={npcSearch} onChange={(e) => setNpcSearch(e.target.value)}
-                      placeholder="Name, faction, location, bio…" style={inputBase} />
+                      placeholder="Name, age, faction, occupation, location, summary…" style={inputBase} />
                   </div>
                 </div>
 
@@ -1212,57 +1732,145 @@ const applyWorldNpcCrop = () => {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {filteredWorldNpcs.map((n) => (
-                      <div key={n.id} className="cb-npc-hover" style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
-                      onMouseDown={navClick}
-                      onClick={() => openEditWorldNpc(n)}
-                      role="button" tabIndex={0}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220 }}>
-                          {n.image ? (
-                            <img
-                              src={n.image}
-                              alt={n.name || 'NPC'}
-                              style={{
-                                width: 44,
-                                height: 44,
-                                objectFit: 'cover',
-                                borderRadius: 12,
-                                border: `1px solid ${THEME.lineSoft}`,
-                                boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
-                                flex: '0 0 auto',
-                              }}
-                            />
-                          ) : (
-                            <div
-                              aria-hidden
-                              style={{
-                                width: 44,
-                                height: 44,
-                                borderRadius: 12,
-                                border: `1px solid ${THEME.lineSoft}`,
-                                background: 'linear-gradient(180deg, rgba(30,20,10,0.70), rgba(18,12,6,0.78))',
-                                boxShadow: '0 10px 22px rgba(0,0,0,0.30)',
-                                flex: '0 0 auto',
-                              }}
-                            />
+                    {filteredWorldNpcs.map((n) => {
+                      const linkedChars = (n.characterLinks || []).map((l) =>
+                        l.relation ? `${l.characterName} (${l.relation})` : l.characterName
+                      );
+                      const connectedNames = (n.links || [])
+                        .map((l) => worldNpcById[l.targetId]?.name)
+                        .filter(Boolean);
+                      return (
+                        <div key={n.id} className="cb-npc-hover" style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                          onMouseDown={navClick}
+                          onClick={() => openEditWorldNpc(n)}
+                          role="button" tabIndex={0}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220 }}>
+                              {n.image ? (
+                                <img
+                                  src={n.image}
+                                  alt={n.name || 'NPC'}
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    objectFit: 'cover',
+                                    borderRadius: 12,
+                                    border: `1px solid ${THEME.lineSoft}`,
+                                    boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
+                                    flex: '0 0 auto',
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  aria-hidden
+                                  style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: 12,
+                                    border: `1px solid ${THEME.lineSoft}`,
+                                    background: 'linear-gradient(180deg, rgba(30,20,10,0.70), rgba(18,12,6,0.78))',
+                                    boxShadow: '0 10px 22px rgba(0,0,0,0.30)',
+                                    flex: '0 0 auto',
+                                  }}
+                                />
+                              )}
+                              <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                                Faction: {(n.faction || '').trim() || '—'}
+                              </span>
+                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                                Location: {(n.location || '').trim() || '—'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {(n.summary || n.bio) && (
+                            <div style={{ marginTop: 8, opacity: 0.88, lineHeight: 1.55, fontSize: 13 }}>
+                              {(n.summary || n.bio || '').trim()}
+                            </div>
                           )}
-                          <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
+
+                          <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span style={{ fontSize: 11.5, fontWeight: 900, color: linkedChars.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                              Linked Characters: {linkedChars.length ? linkedChars.join(', ') : 'None'}
+                            </span>
+                            <span style={{ fontSize: 11.5, fontWeight: 900, color: connectedNames.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                              Connected NPCs: {connectedNames.length ? connectedNames.join(', ') : 'None'}
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                            Faction: {(n.faction || '').trim() || '—'}
-                          </span>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
-                            Location: {(n.location || '').trim() || '—'}
-                          </span>
-                        </div>
-                      </div>
-                        {n.bio && <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13 }}>{n.bio}</div>}
-</div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
+
+                <div style={lightCard}>
+                  <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Connection Web (Preview)</div>
+                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75, color: THEME.creamSoft }}>
+                    Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
+                  </div>
+                  {connectionWeb.nodes.length === 0 ? (
+                    <div style={{ marginTop: 12, opacity: 0.78, lineHeight: 1.6, color: THEME.creamSoft }}>
+                      Add NPCs and links to build your relationship web.
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 12, position: 'relative', height: 360, borderRadius: 14, border: `1px solid ${THEME.lineSoft}`, background: 'linear-gradient(180deg, rgba(8,6,4,0.50), rgba(8,6,4,0.28))', overflow: 'hidden' }}>
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                        {connectionWeb.edges.map((edge, idx) => {
+                          const a = connectionWeb.nodeById[edge.from];
+                          const b = connectionWeb.nodeById[edge.to];
+                          if (!a || !b) return null;
+                          const route = Array.isArray(edge.route) && edge.route.length >= 2 ? edge.route : [a, b];
+                          const d = route.map((p, pointIdx) => `${pointIdx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                          return (
+                            <path
+                              key={`${edge.from}-${edge.to}-${idx}`}
+                              d={d}
+                              fill="none"
+                              stroke={edge.type === 'character' ? 'rgba(120,180,255,0.72)' : 'rgba(255,210,120,0.70)'}
+                              strokeWidth={edge.type === 'character' ? 0.22 : 0.28}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          );
+                        })}
+                      </svg>
+                      {connectionWeb.nodes.map((node) => (
+                        <div
+                          key={node.id}
+                          title={node.label}
+                          style={{
+                            position: 'absolute',
+                            left: `${node.x}%`,
+                            top: `${node.y}%`,
+                            transform: 'translate(-50%, -50%)',
+                            minWidth: 66,
+                            maxWidth: 92,
+                            padding: '4px 6px',
+                            borderRadius: 999,
+                            border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
+                            background: node.type === 'character'
+                              ? 'linear-gradient(180deg, rgba(26,44,72,0.88), rgba(14,26,44,0.90))'
+                              : 'linear-gradient(180deg, rgba(42,28,14,0.88), rgba(20,14,8,0.90))',
+                            boxShadow: '0 8px 18px rgba(0,0,0,0.42)',
+                            color: THEME.creamText,
+                            fontSize: 10.5,
+                            fontWeight: 900,
+                            letterSpacing: 0.2,
+                            textAlign: 'center',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {node.label}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1534,7 +2142,7 @@ const applyWorldNpcCrop = () => {
                           onMouseDown={navClick}
                           onClick={(e) => {
                             e.stopPropagation();
-                            openEditCharNpc(npc);
+                            openNpcEditorFromRelation(npc);
                           }}
                         >
                           Edit
@@ -1591,8 +2199,27 @@ const applyWorldNpcCrop = () => {
                       <div style={{ opacity: 0.90, lineHeight: 1.65, fontSize: 13.5, color: THEME.creamSoft }}>
                         {(activeSelectedNpc.summary || activeSelectedNpc.bio || '').trim() || 'No synopsis yet.'}
                       </div>
-                      <div style={{ marginTop: 8, opacity: 0.62, fontSize: 11.5, color: THEME.creamSoft }}>
-                        Detailed bio lives in the NPC editor modal.
+                      <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr', gap: 4, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>
+                        <div><strong style={{ color: THEME.creamText }}>Age:</strong> {(activeSelectedNpc.age || '').trim() || 'Unknown'}</div>
+                        <div><strong style={{ color: THEME.creamText }}>Faction:</strong> {(activeSelectedNpc.faction || '').trim() || 'Unknown'}</div>
+                        <div><strong style={{ color: THEME.creamText }}>Occupation:</strong> {(activeSelectedNpc.occupation || '').trim() || 'Unknown'}</div>
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 12,
+                          borderRadius: 12,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          background: 'linear-gradient(180deg, rgba(16,11,7,0.50), rgba(8,6,4,0.36))',
+                          boxShadow: 'inset 0 1px 0 rgba(255,240,200,0.06)',
+                          padding: '10px 12px',
+                        }}
+                      >
+                        <div style={{ fontSize: 11, letterSpacing: 0.35, fontWeight: 900, color: THEME.creamSoft, opacity: 0.74 }}>
+                          Lore
+                        </div>
+                        <div style={{ marginTop: 6, opacity: 0.92, lineHeight: 1.62, fontSize: 13, color: THEME.creamSoft, whiteSpace: 'pre-wrap' }}>
+                          {(activeSelectedNpc.bio && activeSelectedNpc.bio.trim() ? activeSelectedNpc.bio : 'No lore yet.')}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1603,7 +2230,7 @@ const applyWorldNpcCrop = () => {
                       onMouseEnter={btnHover}
                       onMouseLeave={btnLeave}
                       onMouseDown={(e) => { btnDown(e); navClick(); }}
-                      onClick={() => openEditCharNpc(activeSelectedNpc)}
+                      onClick={() => openNpcEditorFromRelation(activeSelectedNpc)}
                     >
                       View / Edit NPC
                     </button>
@@ -1732,6 +2359,33 @@ const applyWorldNpcCrop = () => {
                     style={inputBase}
                   />
                 </div>
+                <div>
+                  <div style={fieldLabel}>Age</div>
+                  <input
+                    value={charNpcDraft.age}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, age: e.target.value }))}
+                    placeholder="e.g. 42"
+                    style={inputBase}
+                  />
+                </div>
+                <div>
+                  <div style={fieldLabel}>Faction</div>
+                  <input
+                    value={charNpcDraft.faction}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, faction: e.target.value }))}
+                    placeholder="e.g. Church of Amiras"
+                    style={inputBase}
+                  />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={fieldLabel}>Occupation</div>
+                  <input
+                    value={charNpcDraft.occupation}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, occupation: e.target.value }))}
+                    placeholder="e.g. Captain, Scholar, Merchant"
+                    style={inputBase}
+                  />
+                </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Quick Synopsis (shown on cards)</div>
@@ -1745,11 +2399,11 @@ const applyWorldNpcCrop = () => {
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Detailed Bio (inside modal)</div>
+                  <div style={fieldLabel}>Lore</div>
                   <textarea
                     value={charNpcDraft.bio}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, bio: e.target.value }))}
-                    placeholder="Long-form notes, history, hooks, secrets..."
+                    placeholder="Long-form lore, history, hooks, secrets..."
                     rows={6}
                     style={{ ...inputBase, resize: 'vertical', minHeight: 140, lineHeight: 1.5 }}
                   />
@@ -1807,7 +2461,7 @@ const applyWorldNpcCrop = () => {
             onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcModalOpen(false); }}
           >
             <div style={{
-              width: 'min(640px, 94vw)',
+              width: 'min(760px, 96vw)',
               borderRadius: 22,
               background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
               boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
@@ -1816,7 +2470,7 @@ const applyWorldNpcCrop = () => {
               fontFamily: fontStack,
               overflow: 'hidden',
               display: 'flex', flexDirection: 'column',
-              maxHeight: 'min(580px, 84vh)',
+              maxHeight: 'min(760px, 90vh)',
             }}>
               <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
                 <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
@@ -1826,28 +2480,28 @@ const applyWorldNpcCrop = () => {
                   Close
                 </button>
               </div>
-				{worldNpcDraft.image && (
-				  <div
-					style={{
-					  marginTop: 10,
-					  paddingLeft: 20, // 👈 move it slightly right
-					}}
-				  >
-					<img
-					  src={worldNpcDraft.image}
-					  alt="NPC"
-					  style={{
-						width: 110,
-						height: 110,
-						objectFit: 'cover',
-						borderRadius: 14,
-						border: `1px solid ${THEME.lineSoft}`,
-						boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
-						display: 'block',
-					  }}
-					/>
-				  </div>
-				)}
+              {worldNpcDraft.image && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    paddingLeft: 20, // 👈 move it slightly right
+                  }}
+                >
+                  <img
+                    src={worldNpcDraft.image}
+                    alt="NPC"
+                    style={{
+                      width: 110,
+                      height: 110,
+                      objectFit: 'cover',
+                      borderRadius: 14,
+                      border: `1px solid ${THEME.lineSoft}`,
+                      boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+                      display: 'block',
+                    }}
+                  />
+                </div>
+              )}
               <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Name</div>
@@ -1855,16 +2509,34 @@ const applyWorldNpcCrop = () => {
                     placeholder="e.g. Captain Rell" style={{ ...inputBase, fontWeight: 900 }} />
                 </div>
                 <div>
+                  <div style={fieldLabel}>Age</div>
+                  <input value={worldNpcDraft.age} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, age: e.target.value }))}
+                    placeholder="e.g. 42" style={inputBase} />
+                </div>
+                <div>
                   <div style={fieldLabel}>Faction</div>
                   <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
                     placeholder="e.g. Church of Amiras" style={inputBase} />
+                </div>
+                <div>
+                  <div style={fieldLabel}>Occupation</div>
+                  <input value={worldNpcDraft.occupation} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, occupation: e.target.value }))}
+                    placeholder="e.g. Captain, Scholar, Merchant" style={inputBase} />
                 </div>
                 <div>
                   <div style={fieldLabel}>Location</div>
                   <input value={worldNpcDraft.location} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
                     placeholder="e.g. Avalon" style={inputBase} />
                 </div>
-                
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={fieldLabel}>Quick Synopsis</div>
+                  <textarea value={worldNpcDraft.summary} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, summary: e.target.value }))}
+                    placeholder="One or two lines used for quick cards and previews."
+                    rows={3}
+                    style={{ ...inputBase, resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} />
+                </div>
+
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={fieldLabel}>Image (optional)</div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1890,10 +2562,213 @@ const applyWorldNpcCrop = () => {
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Bio / Notes</div>
+                  <div style={fieldLabel}>Lore</div>
                   <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
-                    placeholder="Short summary, personality, hook, secrets…" rows={5}
+                    placeholder="Long-form lore, history, hooks, secrets…" rows={5}
                     style={{ ...inputBase, resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                    <div style={fieldLabel}>Related Characters</div>
+                    <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
+                      {(worldNpcDraft.characterLinks || []).length} linked
+                    </div>
+                  </div>
+                  <input
+                    value={worldNpcCharSearch}
+                    onChange={(e) => setWorldNpcCharSearch(e.target.value)}
+                    placeholder="Find character..."
+                    style={{ ...inputBase, marginTop: 6, fontSize: 12 }}
+                  />
+                  <div
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 12,
+                      border: `1px solid ${THEME.lineSoft}`,
+                      background: 'rgba(0,0,0,0.16)',
+                      padding: 8,
+                    }}
+                  >
+                    {filteredWorldNpcCharacterNames.length === 0 ? (
+                      <div style={{ fontSize: 12, opacity: 0.72, color: THEME.creamSoft, padding: '6px 4px' }}>
+                        No matching characters.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, maxHeight: 138, overflowY: 'auto', paddingRight: 2 }}>
+                        {filteredWorldNpcCharacterNames.map((charName) => {
+                          const checked = (worldNpcDraft.characterLinks || []).some((l) => l.characterName === charName);
+                          return (
+                            <button
+                              key={charName}
+                              type="button"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 7,
+                                width: '100%',
+                                padding: '8px 10px',
+                                borderRadius: 10,
+                                border: checked ? '1px solid rgba(255,220,160,0.45)' : `1px solid ${THEME.lineSoft}`,
+                                background: checked
+                                  ? 'linear-gradient(180deg, rgba(56,38,18,0.62), rgba(26,18,10,0.72))'
+                                  : 'linear-gradient(180deg, rgba(20,14,8,0.54), rgba(12,8,4,0.62))',
+                                color: checked ? THEME.creamText : THEME.creamSoft,
+                                fontSize: 12,
+                                fontWeight: 900,
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                              }}
+                              onMouseDown={navClick}
+                              onClick={() => toggleWorldNpcCharacterLink(charName)}
+                            >
+                              <span style={{
+                                width: 13,
+                                height: 13,
+                                borderRadius: 4,
+                                border: checked ? '1px solid rgba(255,220,160,0.65)' : `1px solid ${THEME.lineSoft}`,
+                                background: checked ? 'rgba(255,220,160,0.24)' : 'transparent',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 10,
+                                lineHeight: 1,
+                                flex: '0 0 auto',
+                              }}>
+                                {checked ? '✓' : ''}
+                              </span>
+                              <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {charName}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  {(worldNpcDraft.characterLinks || []).length > 0 && (
+                    <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                      {(worldNpcDraft.characterLinks || []).map((link) => (
+                        <div key={`char-rel-${link.characterName}`} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, alignItems: 'center' }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {link.characterName}
+                          </div>
+                          <input
+                            value={link?.relation || ''}
+                            onChange={(e) => setWorldNpcCharacterRelation(link.characterName, e.target.value)}
+                            placeholder="Relation (e.g. Mentor)"
+                            style={{ ...inputBase, fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                    <div style={fieldLabel}>Connected NPCs</div>
+                    <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
+                      {(worldNpcDraft.links || []).length} linked
+                    </div>
+                  </div>
+                  {worldNpcConnectionTargets.length === 0 ? (
+                    <div style={{ opacity: 0.72, fontSize: 12, color: THEME.creamSoft, lineHeight: 1.5 }}>
+                      Add at least one other world NPC to create NPC-to-NPC links.
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        value={worldNpcConnectionSearch}
+                        onChange={(e) => setWorldNpcConnectionSearch(e.target.value)}
+                        placeholder="Find world NPC..."
+                        style={{ ...inputBase, marginTop: 6, fontSize: 12 }}
+                      />
+                      <div
+                        style={{
+                          marginTop: 8,
+                          borderRadius: 12,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          background: 'rgba(0,0,0,0.16)',
+                          padding: 8,
+                        }}
+                      >
+                        {filteredWorldNpcConnectionTargets.length === 0 ? (
+                          <div style={{ fontSize: 12, opacity: 0.72, color: THEME.creamSoft, padding: '6px 4px' }}>
+                            No matching NPCs.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, maxHeight: 150, overflowY: 'auto', paddingRight: 2 }}>
+                            {filteredWorldNpcConnectionTargets.map((target) => {
+                              const link = (worldNpcDraft.links || []).find((l) => String(l.targetId) === String(target.id));
+                              const checked = !!link;
+                              return (
+                                <button
+                                  key={target.id}
+                                  type="button"
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 7,
+                                    width: '100%',
+                                    padding: '8px 10px',
+                                    borderRadius: 10,
+                                    border: checked ? '1px solid rgba(255,220,160,0.45)' : `1px solid ${THEME.lineSoft}`,
+                                    background: checked
+                                      ? 'linear-gradient(180deg, rgba(56,38,18,0.62), rgba(26,18,10,0.72))'
+                                      : 'linear-gradient(180deg, rgba(20,14,8,0.54), rgba(12,8,4,0.62))',
+                                    color: checked ? THEME.creamText : THEME.creamSoft,
+                                    fontSize: 12,
+                                    fontWeight: 900,
+                                    cursor: 'pointer',
+                                    textAlign: 'left',
+                                  }}
+                                  onMouseDown={navClick}
+                                  onClick={() => toggleWorldNpcConnection(target.id)}
+                                >
+                                  <span style={{
+                                    width: 13,
+                                    height: 13,
+                                    borderRadius: 4,
+                                    border: checked ? '1px solid rgba(255,220,160,0.65)' : `1px solid ${THEME.lineSoft}`,
+                                    background: checked ? 'rgba(255,220,160,0.24)' : 'transparent',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: 10,
+                                    lineHeight: 1,
+                                    flex: '0 0 auto',
+                                  }}>
+                                    {checked ? '✓' : ''}
+                                  </span>
+                                  <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {target.name || 'Unnamed NPC'}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {(worldNpcDraft.links || []).length > 0 && (
+                    <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr', gap: 6, maxHeight: 140, overflowY: 'auto', paddingRight: 2 }}>
+                      {(worldNpcDraft.links || []).map((link) => (
+                        <div key={`npc-note-${link.targetId}`} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, alignItems: 'center' }}>
+                          <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {worldNpcById[link.targetId]?.name || 'Linked NPC'}
+                          </div>
+                          <input
+                            value={link?.note || ''}
+                            onChange={(e) => setWorldNpcConnectionNote(link.targetId, e.target.value)}
+                            placeholder="Connection note (optional)"
+                            style={{ ...inputBase, fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1911,157 +2786,157 @@ const applyWorldNpcCrop = () => {
               </div>
 
 
-{/* WORLD NPC IMAGE CROP */}
-{worldNpcCropOpen && (
-  <div
-    style={{
-      position: 'absolute',
-      inset: 0,
-      zIndex: 40,
-      background: 'rgba(0,0,0,0.72)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 16,
-      backdropFilter: 'blur(4px)',
-    }}
-    onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcCropOpen(false); }}
-  >
-    <div style={{
-      width: 'min(720px, 96vw)',
-      borderRadius: 22,
-      background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-      boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-      border: `1px solid ${THEME.line}`,
-      color: THEME.creamText,
-      fontFamily: fontStack,
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-    }}>
-      <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
-        <div style={{ fontSize: 16, fontWeight: 950 }}>Crop Image</div>
-        <button
-          style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
-          onMouseEnter={btnHover}
-          onMouseLeave={btnLeave}
-          onMouseDown={(e) => { btnDown(e); navClick(); }}
-          onClick={() => setWorldNpcCropOpen(false)}
-        >
-          Close
-        </button>
-      </div>
+              {/* WORLD NPC IMAGE CROP */}
+              {worldNpcCropOpen && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 40,
+                    background: 'rgba(0,0,0,0.72)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: 16,
+                    backdropFilter: 'blur(4px)',
+                  }}
+                  onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcCropOpen(false); }}
+                >
+                  <div style={{
+                    width: 'min(720px, 96vw)',
+                    borderRadius: 22,
+                    background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+                    boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+                    border: `1px solid ${THEME.line}`,
+                    color: THEME.creamText,
+                    fontFamily: fontStack,
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                  }}>
+                    <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
+                      <div style={{ fontSize: 16, fontWeight: 950 }}>Crop Image</div>
+                      <button
+                        style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                        onMouseEnter={btnHover}
+                        onMouseLeave={btnLeave}
+                        onMouseDown={(e) => { btnDown(e); navClick(); }}
+                        onClick={() => setWorldNpcCropOpen(false)}
+                      >
+                        Close
+                      </button>
+                    </div>
 
-      <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <div
-            style={{
-              width: WORLD_NPC_CROP_BOX,
-              height: WORLD_NPC_CROP_BOX,
-              borderRadius: 18,
-              border: `1px solid ${THEME.lineSoft}`,
-              background: 'linear-gradient(180deg, rgba(10,8,6,0.55), rgba(10,8,6,0.25))',
-              boxShadow: '0 18px 46px rgba(0,0,0,0.55)',
-              overflow: 'hidden',
-              position: 'relative',
-              touchAction: 'none',
-              userSelect: 'none',
-            }}
-            onMouseDown={(e) => {
-              const img = worldNpcCropImgRef.current;
-              if (!img) return;
-              worldNpcCropDragRef.current.dragging = true;
-              worldNpcCropDragRef.current.sx = e.clientX;
-              worldNpcCropDragRef.current.sy = e.clientY;
-              worldNpcCropDragRef.current.ox = worldNpcCropOffset.x;
-              worldNpcCropDragRef.current.oy = worldNpcCropOffset.y;
-              e.preventDefault();
-            }}
-            onMouseMove={(e) => {
-              if (!worldNpcCropDragRef.current.dragging) return;
-              const dx = e.clientX - worldNpcCropDragRef.current.sx;
-              const dy = e.clientY - worldNpcCropDragRef.current.sy;
-              setWorldNpcCropOffset({ x: worldNpcCropDragRef.current.ox + dx, y: worldNpcCropDragRef.current.oy + dy });
-            }}
-            onMouseUp={() => { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); }}
-            onMouseLeave={() => { if (worldNpcCropDragRef.current.dragging) { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); } }}
-          >
-            <img
-              ref={worldNpcCropImgRef}
-              src={worldNpcCropSrc}
-              alt="Crop"
-              onLoad={() => { clampCropOffset(); }}
-              style={{
-                position: 'absolute',
-                left: '50%',
-                top: '50%',
-                transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropZoom})`,
-                transformOrigin: 'center center',
-                willChange: 'transform',
-                userSelect: 'none',
-                pointerEvents: 'none',
-                maxWidth: 'none',
-                maxHeight: 'none',
-              }}
-              draggable={false}
-            />
+                    <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <div
+                          style={{
+                            width: WORLD_NPC_CROP_BOX,
+                            height: WORLD_NPC_CROP_BOX,
+                            borderRadius: 18,
+                            border: `1px solid ${THEME.lineSoft}`,
+                            background: 'linear-gradient(180deg, rgba(10,8,6,0.55), rgba(10,8,6,0.25))',
+                            boxShadow: '0 18px 46px rgba(0,0,0,0.55)',
+                            overflow: 'hidden',
+                            position: 'relative',
+                            touchAction: 'none',
+                            userSelect: 'none',
+                          }}
+                          onMouseDown={(e) => {
+                            const img = worldNpcCropImgRef.current;
+                            if (!img) return;
+                            worldNpcCropDragRef.current.dragging = true;
+                            worldNpcCropDragRef.current.sx = e.clientX;
+                            worldNpcCropDragRef.current.sy = e.clientY;
+                            worldNpcCropDragRef.current.ox = worldNpcCropOffset.x;
+                            worldNpcCropDragRef.current.oy = worldNpcCropOffset.y;
+                            e.preventDefault();
+                          }}
+                          onMouseMove={(e) => {
+                            if (!worldNpcCropDragRef.current.dragging) return;
+                            const dx = e.clientX - worldNpcCropDragRef.current.sx;
+                            const dy = e.clientY - worldNpcCropDragRef.current.sy;
+                            setWorldNpcCropOffset({ x: worldNpcCropDragRef.current.ox + dx, y: worldNpcCropDragRef.current.oy + dy });
+                          }}
+                          onMouseUp={() => { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); }}
+                          onMouseLeave={() => { if (worldNpcCropDragRef.current.dragging) { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); } }}
+                        >
+                          <img
+                            ref={worldNpcCropImgRef}
+                            src={worldNpcCropSrc}
+                            alt="Crop"
+                            onLoad={() => { clampCropOffset(); }}
+                            style={{
+                              position: 'absolute',
+                              left: '50%',
+                              top: '50%',
+                              transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropZoom})`,
+                              transformOrigin: 'center center',
+                              willChange: 'transform',
+                              userSelect: 'none',
+                              pointerEvents: 'none',
+                              maxWidth: 'none',
+                              maxHeight: 'none',
+                            }}
+                            draggable={false}
+                          />
 
-            {/* subtle corner marks */}
-            <div style={{
-              position: 'absolute',
-              inset: 10,
-              borderRadius: 14,
-              border: '1px dashed rgba(255,220,160,0.18)',
-              pointerEvents: 'none',
-            }} />
-          </div>
-        </div>
+                          {/* subtle corner marks */}
+                          <div style={{
+                            position: 'absolute',
+                            inset: 10,
+                            borderRadius: 14,
+                            border: '1px dashed rgba(255,220,160,0.18)',
+                            pointerEvents: 'none',
+                          }} />
+                        </div>
+                      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ ...darkCard, padding: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.8, marginBottom: 8 }}>Zoom</div>
-            <input
-              className="cb-rng"
-              type="range"
-              min={1}
-              max={2.5}
-              step={0.01}
-              value={worldNpcCropZoom}
-              onChange={(e) => { setWorldNpcCropZoom(parseFloat(e.target.value) || 1); }}
-              onMouseUp={clampCropOffset}
-              onTouchEnd={clampCropOffset}
-              style={{ color: 'rgba(255,220,160,0.9)', accentColor: 'rgba(255,220,160,0.9)', background: 'rgba(255,245,220,0.12)' }}
-            />
-            <div style={{ marginTop: 8, fontSize: 11, opacity: 0.72, color: THEME.creamSoft }}>
-              Drag the image to position it inside the frame.
-            </div>
-          </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <div style={{ ...darkCard, padding: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.8, marginBottom: 8 }}>Zoom</div>
+                          <input
+                            className="cb-rng"
+                            type="range"
+                            min={1}
+                            max={2.5}
+                            step={0.01}
+                            value={worldNpcCropZoom}
+                            onChange={(e) => { setWorldNpcCropZoom(parseFloat(e.target.value) || 1); }}
+                            onMouseUp={clampCropOffset}
+                            onTouchEnd={clampCropOffset}
+                            style={{ color: 'rgba(255,220,160,0.9)', accentColor: 'rgba(255,220,160,0.9)', background: 'rgba(255,245,220,0.12)' }}
+                          />
+                          <div style={{ marginTop: 8, fontSize: 11, opacity: 0.72, color: THEME.creamSoft }}>
+                            Drag the image to position it inside the frame.
+                          </div>
+                        </div>
 
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button
-              style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
-              onMouseEnter={btnHover}
-              onMouseLeave={btnLeave}
-              onMouseDown={(e) => { btnDown(e); navClick(); }}
-              onClick={() => setWorldNpcCropOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              style={goldBtn}
-              onMouseEnter={btnHover}
-              onMouseLeave={btnLeave}
-              onMouseDown={(e) => { btnDown(e); navClick(); }}
-              onClick={applyWorldNpcCrop}
-            >
-              Use Cropped Image
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <button
+                            style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                            onMouseEnter={btnHover}
+                            onMouseLeave={btnLeave}
+                            onMouseDown={(e) => { btnDown(e); navClick(); }}
+                            onClick={() => setWorldNpcCropOpen(false)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            style={goldBtn}
+                            onMouseEnter={btnHover}
+                            onMouseLeave={btnLeave}
+                            onMouseDown={(e) => { btnDown(e); navClick(); }}
+                            onClick={applyWorldNpcCrop}
+                          >
+                            Use Cropped Image
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2080,3 +2955,4 @@ const applyWorldNpcCrop = () => {
     </ShellLayout>
   );
 }
+
