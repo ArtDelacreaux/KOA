@@ -308,8 +308,8 @@ export default function MenuPanel({
     borderRadius: 18,
     border: active ? '1px solid rgba(255,235,205,0.55)' : `1px solid ${THEME.lineSoft}`,
     background: active
-      ? 'linear-gradient(90deg, rgba(176,101,0,0.22), rgba(255,245,220,0.06))'
-      : 'linear-gradient(90deg, rgba(255,245,220,0.06), rgba(255,245,220,0.03))',
+      ? 'linear-gradient(90deg, rgba(132,78,20,0.36), rgba(255,245,220,0.08))'
+      : 'linear-gradient(90deg, rgba(28,20,14,0.44), rgba(255,245,220,0.05))',
     boxShadow: active
       ? '0 18px 46px rgba(0,0,0,0.42), 0 0 36px rgba(255,200,120,0.22)'
       : '0 16px 40px rgba(0,0,0,0.46)',
@@ -366,27 +366,30 @@ export default function MenuPanel({
     border: `1px solid ${THEME.lineSoft}`,
   });
 
-  const cmdTitle = (active) => ({
+  const cmdTitle = (active, titleColor) => ({
     fontSize: 14.5,
     fontWeight: 950,
     letterSpacing: 0.6,
-    color: active ? THEME.creamText : 'rgba(255,245,220,0.90)',
-    textShadow: '0 2px 10px rgba(0,0,0,0.60)',
+    color: active ? THEME.creamText : (titleColor ?? 'rgba(255,245,220,0.90)'),
+    textShadow: active
+      ? '0 2px 12px rgba(0,0,0,0.80)'
+      : '0 2px 10px rgba(0,0,0,0.78), 0 0 1px rgba(0,0,0,0.60)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   });
 
-  const cmdSub = {
+  const cmdSub = (active) => ({
     marginTop: 2,
-    fontSize: 11.5,
-    fontWeight: 850,
+    fontSize: 12.5,
+    fontWeight: 900,
     letterSpacing: 0.3,
-    color: 'rgba(255,245,220,0.68)',
+    color: active ? 'rgba(255,245,220,0.90)' : 'rgba(255,245,220,0.82)',
+    textShadow: '0 1px 8px rgba(0,0,0,0.70)',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
-  };
+  });
 
   const cmdChevron = (active) => ({
     fontWeight: 950,
@@ -399,6 +402,9 @@ export default function MenuPanel({
   /* ---------- right: content ---------- */
   const previewWrap = {
     ...panelCard,
+    border: '1px solid rgba(255,220,160,0.24)',
+    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
+    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
     padding: 18,
     paddingBottom: 22,
     display: 'flex',
@@ -408,36 +414,47 @@ export default function MenuPanel({
     position: 'relative',
   };
 
+  const leftPanelWrap = {
+    ...panelCard,
+    border: '1px solid rgba(255,220,160,0.24)',
+    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
+    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
+    position: 'relative',
+    paddingTop: 6,
+  };
+
   const previewTitle = {
     fontSize: 20,
     fontWeight: 950,
     letterSpacing: 0.65,
     color: THEME.creamText,
-    textShadow: '0 2px 12px rgba(0,0,0,0.65)',
+    textShadow: '0 2px 14px rgba(0,0,0,0.82)',
     margin: 0,
   };
 
   const previewBody = {
-    color: 'rgba(255,245,220,0.82)',
+    color: 'rgba(255,245,220,0.92)',
     fontSize: 13.5,
     lineHeight: 1.65,
-    fontWeight: 850,
+    fontWeight: 900,
     letterSpacing: 0.2,
+    textShadow: '0 2px 10px rgba(0,0,0,0.72)',
   };
 
   const cardMini = {
     borderRadius: 18,
-    border: `1px solid ${THEME.lineSoft}`,
-    background: 'linear-gradient(180deg, rgba(255,245,220,0.06), rgba(255,245,220,0.03))',
+    border: '1px solid rgba(255,220,160,0.24)',
+    background: 'linear-gradient(180deg, rgba(30,22,16,0.68), rgba(12,10,8,0.56))',
     padding: 16,
-    boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
+    boxShadow: '0 20px 50px rgba(0,0,0,0.56)',
   };
 
   const label = {
-    color: 'rgba(255,245,220,0.72)',
+    color: 'rgba(255,245,220,0.90)',
     fontSize: 12,
     fontWeight: 950,
     letterSpacing: 0.45,
+    textShadow: '0 2px 10px rgba(0,0,0,0.70)',
   };
 
   const input = {
@@ -445,8 +462,8 @@ export default function MenuPanel({
     boxSizing: 'border-box',
     padding: '10px 12px',
     borderRadius: 14,
-    border: `1px solid ${THEME.lineSoft}`,
-    background: 'rgba(0,0,0,0.18)',
+    border: '1px solid rgba(255,220,160,0.24)',
+    background: 'rgba(6,6,6,0.42)',
     color: THEME.creamText,
     outline: 'none',
     fontWeight: 850,
@@ -464,8 +481,8 @@ export default function MenuPanel({
   const actionBtn = {
     padding: '12px 14px',
     borderRadius: 16,
-    border: `1px solid ${THEME.line}`,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+    border: '1px solid rgba(255,220,160,0.28)',
+    background: 'linear-gradient(180deg, rgba(72,50,34,0.84), rgba(34,24,16,0.80))',
     backdropFilter: 'blur(12px)',
     cursor: 'pointer',
     color: THEME.creamText,
@@ -481,8 +498,8 @@ export default function MenuPanel({
   const ghostBtn = {
     padding: '10px 12px',
     borderRadius: 14,
-    border: `1px solid ${THEME.line}`,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+    border: '1px solid rgba(255,220,160,0.24)',
+    background: 'linear-gradient(180deg, rgba(58,42,30,0.78), rgba(24,18,14,0.72))',
     backdropFilter: 'blur(12px)',
     cursor: 'pointer',
     color: THEME.creamText,
@@ -633,6 +650,7 @@ export default function MenuPanel({
       {
         key: 'campaign',
         label: 'Continue ?',
+        titleColor: 'rgba(242,224,199,0.98)',
         sub: 'Return to the hub and resume your session.',
         title: 'Session Brief',
         desc: 'Keep up with the party and watch last weeks episode!',
@@ -641,6 +659,7 @@ export default function MenuPanel({
       {
         key: 'combat',
         label: 'Combat',
+        titleColor: 'rgba(246,229,207,0.98)',
         sub: 'Initiative, HP, slots, and statuses.',
         title: 'Combat Tracker',
         desc: 'Run encounters fast. Add/drop combatants mid-fight and track conditions.',
@@ -649,6 +668,7 @@ export default function MenuPanel({
       {
         key: 'characters',
         label: 'Character Book',
+        titleColor: 'rgba(249,234,214,0.98)',
         sub: 'Profiles, NPCs, and party bonds.',
         title: 'Character Book',
         desc: 'Quick-jump to Party or World NPCs. Keep post-session updates here.',
@@ -657,6 +677,7 @@ export default function MenuPanel({
       {
         key: 'video',
         label: 'Theater',
+        titleColor: 'rgba(252,239,221,0.98)',
         sub: 'Cinematic scenes & mood setting.',
         title: 'Cinematics',
         desc: 'Set the stage. Open the Theater to play your intro and outro cinematics.',
@@ -845,7 +866,7 @@ export default function MenuPanel({
 
             <div style={contentGrid}>
               {/* LEFT: Command List */}
-              <div style={{ ...panelCard, position: 'relative', paddingTop: 6 }}>
+              <div style={leftPanelWrap}>
                 <div style={edgeGlow} />
                 <div style={leftMenuTitle}>CAMPAIGN HUB</div>
 
@@ -895,8 +916,8 @@ export default function MenuPanel({
                             <Icon name={it.key} active={active} />
                           </div>
                           <div style={{ minWidth: 0 }}>
-                            <div className="cmd-title" style={cmdTitle(active)}>{it.label}</div>
-                            <div className="cmd-sub" style={cmdSub}>{it.sub}</div>
+                            <div className="cmd-title" style={cmdTitle(active, it.titleColor)}>{it.label}</div>
+                            <div className="cmd-sub" style={cmdSub(active)}>{it.sub}</div>
                           </div>
                         </div>
 
@@ -998,23 +1019,6 @@ export default function MenuPanel({
                             position: 'relative',
                           }}
                         >
-                          <div
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              background:
-                                'linear-gradient(180deg, rgba(8,10,14,0.10), rgba(8,10,14,0.45))',
-                            }}
-                          />
-                          <div
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              boxShadow:
-                                'inset 0 0 0 2px rgba(255,240,210,0.06), inset 0 -28px 60px rgba(0,0,0,0.55)',
-                              pointerEvents: 'none',
-                            }}
-                          />
                         </div>
                       )}
 
@@ -1060,7 +1064,7 @@ export default function MenuPanel({
                     <div style={{ display: 'grid', gap: 14 }}>
                       <div style={cardMini}>
                         <div style={label}>World Lore Archive</div>
-                        <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.62)', fontSize: 12, fontWeight: 900, lineHeight: 1.6 }}>
+                        <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.88)', fontSize: 12.5, fontWeight: 900, lineHeight: 1.65, textShadow: '0 1px 8px rgba(0,0,0,0.72)' }}>
                           Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
                         </div>
                         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>

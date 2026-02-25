@@ -753,6 +753,154 @@ const applyWorldNpcCrop = () => {
     },
   ];
 
+  const LS_CHAR_NPCS = 'koa:char:npcs:v1';
+
+  const normalizeRelatedNpc = (npc, charName, idx = 0) => ({
+    id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
+    name: npc?.name || '',
+    relation: npc?.relation || '',
+    summary: npc?.summary || npc?.bio || '',
+    bio: npc?.bio || '',
+    image: npc?.image || '',
+  });
+
+  const [charNpcByCharacter, setCharNpcByCharacter] = useState(() => {
+    try {
+      const raw = localStorage.getItem(LS_CHAR_NPCS);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(LS_CHAR_NPCS, JSON.stringify(charNpcByCharacter)); } catch {}
+  }, [charNpcByCharacter]);
+
+  const getBaseRelatedNpcs = (char) => {
+    if (!char) return [];
+    return (char.npcs || []).map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
+  };
+
+  const getRelatedNpcsForCharacter = (char, store = charNpcByCharacter) => {
+    if (!char) return [];
+    const saved = store?.[char.name];
+    if (Array.isArray(saved)) return saved.map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
+    return getBaseRelatedNpcs(char);
+  };
+
+  const selectedCharNpcs = useMemo(
+    () => getRelatedNpcsForCharacter(selectedChar),
+    [selectedChar, charNpcByCharacter]
+  );
+
+  const activeSelectedNpc = useMemo(() => {
+    if (!selectedNpc) return null;
+    if (!selectedCharNpcs.length) return selectedNpc;
+    if (selectedNpc.id) {
+      const byId = selectedCharNpcs.find((npc) => npc.id === selectedNpc.id);
+      if (byId) return byId;
+    }
+    return selectedCharNpcs.find((npc) => npc.name === selectedNpc.name) || selectedNpc;
+  }, [selectedNpc, selectedCharNpcs]);
+
+  const [charNpcModalOpen, setCharNpcModalOpen] = useState(false);
+  const [editingCharNpcId, setEditingCharNpcId] = useState(null);
+  const [charNpcDraft, setCharNpcDraft] = useState({
+    name: '',
+    relation: '',
+    summary: '',
+    bio: '',
+    image: '',
+  });
+
+  const closeCharNpcModal = () => {
+    setCharNpcModalOpen(false);
+    setEditingCharNpcId(null);
+  };
+
+  const openAddCharNpc = () => {
+    if (!selectedChar) return;
+    setEditingCharNpcId(null);
+    setCharNpcDraft({ name: '', relation: '', summary: '', bio: '', image: '' });
+    setCharNpcModalOpen(true);
+  };
+
+  const openEditCharNpc = (npc) => {
+    if (!selectedChar || !npc) return;
+    const normalized = normalizeRelatedNpc(npc, selectedChar.name, 0);
+    setEditingCharNpcId(normalized.id);
+    setCharNpcDraft({
+      name: normalized.name || '',
+      relation: normalized.relation || '',
+      summary: normalized.summary || normalized.bio || '',
+      bio: normalized.bio || '',
+      image: normalized.image || '',
+    });
+    setCharNpcModalOpen(true);
+  };
+
+  const onCharNpcImagePick = (file) => {
+    if (!file) return;
+    if (!file.type || !file.type.startsWith('image/')) {
+      alert('Please choose an image file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (!dataUrl) return;
+      setCharNpcDraft((d) => ({ ...d, image: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveCharNpc = () => {
+    if (!selectedChar) return;
+    const name = (charNpcDraft.name || '').trim();
+    if (!name) {
+      alert('NPC needs a name.');
+      return;
+    }
+    const nextNpc = {
+      id: editingCharNpcId || newId(),
+      name,
+      relation: (charNpcDraft.relation || '').trim(),
+      summary: (charNpcDraft.summary || '').trim(),
+      bio: (charNpcDraft.bio || '').trim(),
+      image: charNpcDraft.image || '',
+    };
+
+    setCharNpcByCharacter((prev) => {
+      const current = getRelatedNpcsForCharacter(selectedChar, prev);
+      const nextList = editingCharNpcId
+        ? current.map((npc) => (npc.id === editingCharNpcId ? nextNpc : npc))
+        : [nextNpc, ...current];
+      return { ...prev, [selectedChar.name]: nextList };
+    });
+
+    setSelectedNpc(nextNpc);
+    setCharView('npc');
+    closeCharNpcModal();
+  };
+
+  const deleteCharNpc = () => {
+    if (!selectedChar || !editingCharNpcId) return;
+    if (!confirm('Delete this NPC?')) return;
+
+    setCharNpcByCharacter((prev) => {
+      const current = getRelatedNpcsForCharacter(selectedChar, prev);
+      const nextList = current.filter((npc) => npc.id !== editingCharNpcId);
+      return { ...prev, [selectedChar.name]: nextList };
+    });
+
+    if (selectedNpc?.id === editingCharNpcId) {
+      setSelectedNpc(null);
+      setCharView('relations');
+    }
+    closeCharNpcModal();
+  };
+
   const partyMateNames = useMemo(() => {
     if (!selectedChar) return [];
     return characters.map((c) => c.name).filter((n) => n !== selectedChar.name);
@@ -909,63 +1057,88 @@ const applyWorldNpcCrop = () => {
               flexWrap: 'wrap',
               margin: '6px 0 14px',
             }}>
-              <button
-                type="button"
-                style={{
-                  ...tabButtonStyle(charView !== 'worldnpcs'),
-                  padding: '10px 14px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  letterSpacing: '0.16em',
-				  fontWeight: 900,
-				  fontFamily: fontStack,
-				  cursor: 'pointer',
-				  border: charView !== 'worldnpcs'
-					? '1px solid rgba(255,220,160,0.35)'
-					: '1px solid rgba(255,220,160,0.18)',
-				  background: charView !== 'worldnpcs'
-					? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
-					: 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
-				  color: 'rgba(255,245,220,0.92)',
-				  boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
-				  transition: 'all 150ms ease',
-                }}
-				onMouseEnter={btnHover}
-				onMouseLeave={btnLeave}
-                onMouseDown={navClick}
-                onClick={() => { setCharView('grid'); setSelectedChar(null); setSelectedNpc(null); }}
-              >
-                Adventurers
-              </button>
+              {(charView === 'worldnpcs' || showProfileTab) && (
+                <button
+                  type="button"
+                  style={{
+                    ...tabButtonStyle(charView !== 'worldnpcs'),
+                    padding: '10px 14px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    letterSpacing: '0.16em',
+                    fontWeight: 900,
+                    fontFamily: fontStack,
+                    cursor: 'pointer',
+                    border: charView !== 'worldnpcs'
+                      ? '1px solid rgba(255,220,160,0.35)'
+                      : '1px solid rgba(255,220,160,0.18)',
+                    background: charView !== 'worldnpcs'
+                      ? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
+                      : 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
+                    color: 'rgba(255,245,220,0.92)',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+                    transition: 'all 150ms ease',
+                  }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={navClick}
+                  onClick={() => {
+                    if (charView === 'relations') {
+                      setSelectedNpc(null);
+                      setCharView('detail');
+                      return;
+                    }
+                    if (charView === 'npc') {
+                      setCharView('relations');
+                      return;
+                    }
+                    setCharView('grid');
+                    setSelectedChar(null);
+                    setSelectedNpc(null);
+                  }}
+                >
+                  {charView === 'relations'
+                    ? 'Return to Profile'
+                    : charView === 'npc'
+                      ? 'Return to Family & Related NPCs'
+                      : charView === 'worldnpcs'
+                        ? 'Return to Codex'
+                      : showProfileTab
+                        ? 'Return to Codex'
+                        : 'Adventurers'}
+                </button>
+              )}
 
-              <button
-                type="button"
-                style={{
-                  ...tabButtonStyle(charView === 'worldnpcs'),
-                  padding: '10px 14px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  letterSpacing: '0.16em',
-				  fontWeight: 900,
-				  fontFamily: fontStack,
-				  cursor: 'pointer',
-				  border: charView !== 'worldnpcs'
-					? '1px solid rgba(255,220,160,0.35)'
-					: '1px solid rgba(255,220,160,0.18)',
-				  background: charView !== 'worldnpcs'
-					? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
-					: 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
-				  color: 'rgba(255,245,220,0.92)',
-				  boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
-				  transition: 'all 150ms ease',
-                }}
-				onMouseEnter={btnHover}
-				onMouseLeave={btnLeave}
-                onMouseDown={navClick}
-                onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
-              >
-                World NPCs
-              </button>
+              {!showProfileTab && charView !== 'worldnpcs' && (
+                <button
+                  type="button"
+                  style={{
+                    ...tabButtonStyle(charView === 'worldnpcs'),
+                    padding: '10px 14px',
+                    borderRadius: 999,
+                    fontSize: 12,
+                    letterSpacing: '0.16em',
+                    fontWeight: 900,
+                    fontFamily: fontStack,
+                    cursor: 'pointer',
+                    border: charView !== 'worldnpcs'
+                      ? '1px solid rgba(255,220,160,0.35)'
+                      : '1px solid rgba(255,220,160,0.18)',
+                    background: charView !== 'worldnpcs'
+                      ? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
+                      : 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
+                    color: 'rgba(255,245,220,0.92)',
+                    boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
+                    transition: 'all 150ms ease',
+                  }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={navClick}
+                  onClick={() => { setSelectedChar(null); setSelectedNpc(null); setCharView('worldnpcs'); }}
+                >
+                  World NPCs
+                </button>
+              )}
             </div>
 
             {/* GRID */}
@@ -1296,23 +1469,80 @@ const applyWorldNpcCrop = () => {
             {/* NPC RELATIONS LIST */}
             {charView === 'relations' && selectedChar && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline', marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
                   <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
-                  <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{(selectedChar.npcs || []).length} entries</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{selectedCharNpcs.length} entries</div>
+                    <button
+                      style={{ ...tinyBtn, padding: '7px 12px', opacity: 0.95 }}
+                      onMouseEnter={tinyBtnHover}
+                      onMouseLeave={tinyBtnLeave}
+                      onMouseDown={navClick}
+                      onClick={openAddCharNpc}
+                    >
+                      + Add NPC
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {(selectedChar.npcs || []).map((npc) => (
-                    <div key={npc.name} className="cb-npc-hover"
+                  {selectedCharNpcs.map((npc) => (
+                    <div key={npc.id || npc.name} className="cb-npc-hover"
                       style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
                       onMouseDown={navClick}
                       onClick={() => { setSelectedNpc(npc); setCharView('npc'); }}
                       role="button" tabIndex={0}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                        <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
-                        <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>{npc.relation}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 240 }}>
+                          {npc.image ? (
+                            <img
+                              src={npc.image}
+                              alt={npc.name || 'NPC'}
+                              style={{
+                                width: 48,
+                                height: 48,
+                                objectFit: 'cover',
+                                borderRadius: 12,
+                                border: `1px solid ${THEME.lineSoft}`,
+                                boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
+                                flex: '0 0 auto',
+                              }}
+                            />
+                          ) : (
+                            <div
+                              aria-hidden
+                              style={{
+                                width: 48,
+                                height: 48,
+                                borderRadius: 12,
+                                border: `1px solid ${THEME.lineSoft}`,
+                                background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
+                                boxShadow: '0 10px 24px rgba(0,0,0,0.30)',
+                                flex: '0 0 auto',
+                              }}
+                            />
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
+                            <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft, marginTop: 2 }}>{npc.relation || 'Relation unknown'}</div>
+                          </div>
+                        </div>
+                        <button
+                          style={{ ...tinyBtn, opacity: 0.95 }}
+                          onMouseEnter={tinyBtnHover}
+                          onMouseLeave={tinyBtnLeave}
+                          onMouseDown={navClick}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditCharNpc(npc);
+                          }}
+                        >
+                          Edit
+                        </button>
                       </div>
-                      <div style={{ marginTop: 8, opacity: 0.82, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>{npc.bio}</div>
+                      <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>
+                        {(npc.summary || npc.bio || '').trim() || 'No synopsis yet. Click Edit to add one.'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1320,26 +1550,62 @@ const applyWorldNpcCrop = () => {
             )}
 
             {/* NPC DETAIL */}
-            {charView === 'npc' && selectedChar && selectedNpc && (
+            {charView === 'npc' && selectedChar && activeSelectedNpc && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                 <div style={lightCard}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                    <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText }}>{selectedNpc.name}</div>
-                    <div style={{ opacity: 0.72, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>
-                      {selectedNpc.relation} of {selectedChar.name}
+                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 14, alignItems: 'start' }}>
+                    {activeSelectedNpc.image ? (
+                      <img
+                        src={activeSelectedNpc.image}
+                        alt={activeSelectedNpc.name || 'NPC'}
+                        style={{
+                          width: 130,
+                          height: 130,
+                          objectFit: 'cover',
+                          borderRadius: 14,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          boxShadow: '0 14px 30px rgba(0,0,0,0.48)',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        style={{
+                          width: 130,
+                          height: 130,
+                          borderRadius: 14,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
+                          boxShadow: '0 14px 30px rgba(0,0,0,0.32)',
+                        }}
+                      />
+                    )}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText }}>{activeSelectedNpc.name}</div>
+                        <div style={{ opacity: 0.72, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>
+                          {(activeSelectedNpc.relation || 'Relation unknown')} of {selectedChar.name}
+                        </div>
+                      </div>
+                      <div style={divider} />
+                      <div style={{ opacity: 0.90, lineHeight: 1.65, fontSize: 13.5, color: THEME.creamSoft }}>
+                        {(activeSelectedNpc.summary || activeSelectedNpc.bio || '').trim() || 'No synopsis yet.'}
+                      </div>
+                      <div style={{ marginTop: 8, opacity: 0.62, fontSize: 11.5, color: THEME.creamSoft }}>
+                        Detailed bio lives in the NPC editor modal.
+                      </div>
                     </div>
                   </div>
-                  <div style={divider} />
-                  <div style={{ opacity: 0.88, lineHeight: 1.7, fontSize: 13.5, color: THEME.creamSoft }}>{selectedNpc.bio}</div>
 
                   <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
-                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                      onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('relations')}>
-                      ← Back to NPCs
-                    </button>
-                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
-                      onMouseDown={(e) => { btnDown(e); navClick(); }} onClick={() => setCharView('detail')}>
-                      ← Back to {selectedChar.name}
+                    <button
+                      style={goldBtn}
+                      onMouseEnter={btnHover}
+                      onMouseLeave={btnLeave}
+                      onMouseDown={(e) => { btnDown(e); navClick(); }}
+                      onClick={() => openEditCharNpc(activeSelectedNpc)}
+                    >
+                      View / Edit NPC
                     </button>
                   </div>
                 </div>
@@ -1347,6 +1613,187 @@ const applyWorldNpcCrop = () => {
             )}
           </div>
         </div>
+
+        {/* CHARACTER NPC MODAL */}
+        {charNpcModalOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 32,
+              background: 'rgba(0,0,0,0.72)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              backdropFilter: 'blur(4px)',
+            }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) closeCharNpcModal(); }}
+          >
+            <div style={{
+              width: 'min(720px, 96vw)',
+              borderRadius: 22,
+              background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+              boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+              border: `1px solid ${THEME.line}`,
+              color: THEME.creamText,
+              fontFamily: fontStack,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: 'min(660px, 88vh)',
+            }}>
+              <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 950 }}>{editingCharNpcId ? 'Edit Related NPC' : 'Add Related NPC'}</div>
+                  <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 2 }}>{selectedChar?.name || 'Character'} codex entry</div>
+                </div>
+                <button
+                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={btnDown}
+                  onClick={closeCharNpcModal}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
+                <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12, alignItems: 'center' }}>
+                  <div>
+                    {charNpcDraft.image ? (
+                      <img
+                        src={charNpcDraft.image}
+                        alt="NPC"
+                        style={{
+                          width: 110,
+                          height: 110,
+                          objectFit: 'cover',
+                          borderRadius: 14,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+                          display: 'block',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        aria-hidden
+                        style={{
+                          width: 110,
+                          height: 110,
+                          borderRadius: 14,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
+                          boxShadow: '0 12px 28px rgba(0,0,0,0.32)',
+                        }}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <div style={fieldLabel}>Thumbnail Image (optional)</div>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => onCharNpcImagePick(e.target.files && e.target.files[0])}
+                        style={{ ...inputBase, padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                      />
+                      {charNpcDraft.image && (
+                        <button
+                          type="button"
+                          style={{ ...tinyBtn, opacity: 0.95 }}
+                          onMouseEnter={tinyBtnHover}
+                          onMouseLeave={tinyBtnLeave}
+                          onClick={() => setCharNpcDraft((d) => ({ ...d, image: '' }))}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={fieldLabel}>Name</div>
+                  <input
+                    value={charNpcDraft.name}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, name: e.target.value }))}
+                    placeholder="e.g. Captain Rell"
+                    style={{ ...inputBase, fontWeight: 900 }}
+                  />
+                </div>
+                <div>
+                  <div style={fieldLabel}>Relation</div>
+                  <input
+                    value={charNpcDraft.relation}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, relation: e.target.value }))}
+                    placeholder="e.g. Mentor, Parent, Patron"
+                    style={inputBase}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={fieldLabel}>Quick Synopsis (shown on cards)</div>
+                  <textarea
+                    value={charNpcDraft.summary}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, summary: e.target.value }))}
+                    placeholder="One to two lines for quick reference."
+                    rows={3}
+                    style={{ ...inputBase, resize: 'vertical', minHeight: 84, lineHeight: 1.5 }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <div style={fieldLabel}>Detailed Bio (inside modal)</div>
+                  <textarea
+                    value={charNpcDraft.bio}
+                    onChange={(e) => setCharNpcDraft((d) => ({ ...d, bio: e.target.value }))}
+                    placeholder="Long-form notes, history, hooks, secrets..."
+                    rows={6}
+                    style={{ ...inputBase, resize: 'vertical', minHeight: 140, lineHeight: 1.5 }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
+                <div>
+                  {editingCharNpcId && (
+                    <button
+                      style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                      onMouseEnter={btnHover}
+                      onMouseLeave={btnLeave}
+                      onMouseDown={btnDown}
+                      onClick={deleteCharNpc}
+                    >
+                      Delete NPC
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                    onMouseEnter={btnHover}
+                    onMouseLeave={btnLeave}
+                    onMouseDown={btnDown}
+                    onClick={closeCharNpcModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={goldBtn}
+                    onMouseEnter={btnHover}
+                    onMouseLeave={btnLeave}
+                    onMouseDown={btnDown}
+                    onClick={saveCharNpc}
+                  >
+                    {editingCharNpcId ? 'Save Changes' : 'Add NPC'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* WORLD NPC MODAL */}
         {worldNpcModalOpen && (
