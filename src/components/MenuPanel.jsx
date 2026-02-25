@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import recapVideo from '../assets/recap.mp4';
+import theaterPreviewVideo from '../assets/theater-preview.mp4';
 
 /*
   Knights of Atria — Main Menu (JRPG vibe, tavern palette)
@@ -73,6 +74,8 @@ updatedAt: p.updatedAt || null,
       localStorage.setItem(`${LS_NOTE_PREFIX}lore`, notes.lore || '');
     } catch {}
   }, [notes]);
+
+  const theaterPreviewRef = useRef(null);
 
   const stamp = () => new Date().toISOString();
   const prettyTime = (iso) => {
@@ -608,6 +611,9 @@ updatedAt: p.updatedAt || null,
 
   const goVideo = () => {
     playNav();
+    if (theaterPreviewRef.current) {
+      theaterPreviewRef.current.pause();
+    }
     cinematicDo(() => {
       setPanelType('video');
       setVideoChoice(null);
@@ -652,7 +658,7 @@ updatedAt: p.updatedAt || null,
         label: 'Theater',
         sub: 'Cinematic scenes & mood setting.',
         title: 'Cinematics',
-        desc: 'Queue intro/outro reminders so you actually use them.',
+        desc: 'Set the stage. Open the Theater to play your intro and outro cinematics.',
         primary: { label: 'Open Cinematics', onClick: goVideo },
       },
       {
@@ -1041,44 +1047,35 @@ updatedAt: p.updatedAt || null,
                 </div>
               )}
 
-              {/* Video helpers */}
+              {/* Video preview — Theater hover panel */}
               {activeKey === 'video' && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                  <div style={cardMini}>
-                    <div style={label}>Cinematic Reminders</div>
-                    <textarea
-                      value={notes.video}
-                      onChange={(e) => setNotes((n) => ({ ...n, video: e.target.value }))}
-                      placeholder="When do you want to play Intro/Outro?"
-                      style={{ ...textarea, marginTop: 8 }}
+                <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+                  <div
+                    style={{
+                      width: '100%',
+                      height: 300,
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      border: '1px solid rgba(255,220,160,0.18)',
+                      boxShadow: '0 14px 34px rgba(0,0,0,0.5)',
+                      background: '#000',
+                    }}
+                  >
+                    <video
+                      ref={theaterPreviewRef}
+                      src={theaterPreviewVideo}
+                      autoPlay
+                      loop
+                      playsInline
+                      preload="auto"
+                      style={{
+                        height: '100%',
+                        width: '100%',
+                        display: 'block',
+                        objectFit: 'cover',
+                        objectPosition: 'center center',
+                      }}
                     />
-                  </div>
-
-                  <div style={cardMini}>
-                    <div style={label}>Quick Actions</div>
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-                      <button
-                        style={ghostBtn}
-                        onMouseEnter={btnHover}
-                        onMouseLeave={btnLeave}
-                        onMouseDown={btnDown}
-                        onClick={goVideo}
-                      >
-                        Open Panel
-                      </button>
-                      <button
-                        style={dangerBtn}
-                        onMouseEnter={btnHover}
-                        onMouseLeave={btnLeave}
-                        onMouseDown={btnDown}
-                        onClick={() => {
-                          // Convenience: open panel and leave selection null (user chooses intro/outro there)
-                          goVideo();
-                        }}
-                      >
-                        Ready Cinematics
-                      </button>
-                    </div>
                   </div>
                 </div>
               )}
