@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import recapVideo from '../assets/recap.mp4';
+import combatVideo from '../assets/CombatVideo.mp4';
 import theaterPreviewVideo from '../assets/theater-preview.mp4';
 
 /*
@@ -923,6 +924,28 @@ export default function MenuPanel({
                           src={recapVideo}
                           controls
                           preload="metadata"
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            display: 'block',
+                            objectFit: 'cover',
+                            background: 'rgba(0,0,0,0.25)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {activeKey === 'combat' && (
+                    <div style={{ display: 'grid', gap: 14, marginTop: 10 }}>
+                      <div style={cardMini}>
+                        <video
+                          src={combatVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
                           style={{
                             width: '100%',
                             height: '100%',
