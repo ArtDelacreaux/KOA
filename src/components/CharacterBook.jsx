@@ -610,6 +610,7 @@ export default function CharacterBook({
   const [worldNpcCropOpen, setWorldNpcCropOpen] = useState(false);
   const [worldNpcCropSrc, setWorldNpcCropSrc] = useState('');
   const [worldNpcCropZoom, setWorldNpcCropZoom] = useState(1);
+  const [worldNpcCropBaseScale, setWorldNpcCropBaseScale] = useState(1);
   const [worldNpcCropOffset, setWorldNpcCropOffset] = useState({ x: 0, y: 0 });
   const worldNpcCropImgRef = useRef(null);
   const worldNpcCropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0, iw: 0, ih: 0 });
@@ -643,6 +644,7 @@ export default function CharacterBook({
       // Open cropper first (user confirms before it becomes the NPC image)
       setWorldNpcCropSrc(dataUrl);
       setWorldNpcCropZoom(1);
+      setWorldNpcCropBaseScale(1);
       setWorldNpcCropOffset({ x: 0, y: 0 });
       setWorldNpcCropOpen(true);
     };
@@ -2931,9 +2933,10 @@ export default function CharacterBook({
                             touchAction: 'none',
                             userSelect: 'none',
                           }}
-                          onMouseDown={(e) => {
+                          onPointerDown={(e) => {
                             const img = worldNpcCropImgRef.current;
                             if (!img) return;
+                            e.currentTarget.setPointerCapture(e.pointerId);
                             worldNpcCropDragRef.current.dragging = true;
                             worldNpcCropDragRef.current.sx = e.clientX;
                             worldNpcCropDragRef.current.sy = e.clientY;
@@ -2941,25 +2944,54 @@ export default function CharacterBook({
                             worldNpcCropDragRef.current.oy = worldNpcCropOffset.y;
                             e.preventDefault();
                           }}
-                          onMouseMove={(e) => {
+                          onPointerMove={(e) => {
                             if (!worldNpcCropDragRef.current.dragging) return;
+                            const img = worldNpcCropImgRef.current;
+                            if (!img) return;
                             const dx = e.clientX - worldNpcCropDragRef.current.sx;
                             const dy = e.clientY - worldNpcCropDragRef.current.sy;
-                            setWorldNpcCropOffset({ x: worldNpcCropDragRef.current.ox + dx, y: worldNpcCropDragRef.current.oy + dy });
+                            const iw = img.naturalWidth || 1;
+                            const ih = img.naturalHeight || 1;
+                            const base = Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih);
+                            const scale = base * worldNpcCropZoom;
+                            const rw = iw * scale;
+                            const rh = ih * scale;
+                            const maxX = Math.max(0, (rw - WORLD_NPC_CROP_BOX) / 2);
+                            const maxY = Math.max(0, (rh - WORLD_NPC_CROP_BOX) / 2);
+                            setWorldNpcCropOffset({
+                              x: clamp(worldNpcCropDragRef.current.ox + dx, -maxX, maxX),
+                              y: clamp(worldNpcCropDragRef.current.oy + dy, -maxY, maxY),
+                            });
                           }}
-                          onMouseUp={() => { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); }}
-                          onMouseLeave={() => { if (worldNpcCropDragRef.current.dragging) { worldNpcCropDragRef.current.dragging = false; clampCropOffset(); } }}
+                          onPointerUp={(e) => {
+                            if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                            worldNpcCropDragRef.current.dragging = false;
+                            clampCropOffset();
+                          }}
+                          onPointerCancel={(e) => {
+                            if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                            worldNpcCropDragRef.current.dragging = false;
+                            clampCropOffset();
+                          }}
                         >
                           <img
                             ref={worldNpcCropImgRef}
                             src={worldNpcCropSrc}
                             alt="Crop"
-                            onLoad={() => { clampCropOffset(); }}
+                            onLoad={() => {
+                              const img = worldNpcCropImgRef.current;
+                              if (img) {
+                                const iw = img.naturalWidth || 1;
+                                const ih = img.naturalHeight || 1;
+                                setWorldNpcCropBaseScale(Math.max(WORLD_NPC_CROP_BOX / iw, WORLD_NPC_CROP_BOX / ih));
+                              }
+                              clampCropOffset();
+                            }}
                             style={{
                               position: 'absolute',
                               left: '50%',
                               top: '50%',
-                              transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropZoom})`,
+                              transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropBaseScale * worldNpcCropZoom})`,
                               transformOrigin: 'center center',
                               willChange: 'transform',
                               userSelect: 'none',
