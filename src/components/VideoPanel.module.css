@@ -4,21 +4,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 0 40px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(176, 101, 0, 0.4) transparent;
-}
-
-.scrollWrap::-webkit-scrollbar {
-  width: 6px;
-}
-
-.scrollWrap::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollWrap::-webkit-scrollbar-thumb {
-  background: rgba(176, 101, 0, 0.4);
-  border-radius: 999px;
+  --koa-scrollbar-thumb: rgba(176, 101, 0, 0.4);
 }
 
 .pageHeader {
@@ -36,20 +22,16 @@
 }
 
 .backBtn {
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.065), rgba(255, 245, 220, 0.022));
-  border: 1px solid rgba(255, 220, 160, 0.18);
   color: rgba(255, 220, 160, 0.8);
   padding: 9px 18px;
   border-radius: 14px;
-  cursor: pointer;
   font-size: 12px;
   letter-spacing: 0.14em;
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   font-weight: 900;
   backdrop-filter: blur(10px);
   transition: all 150ms ease;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
-  user-select: none;
   text-transform: uppercase;
 }
 
@@ -73,14 +55,14 @@
   color: rgba(255, 220, 160, 0.45);
   margin-bottom: 14px;
   margin-top: -12px;
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   text-transform: uppercase;
   font-weight: 900;
 }
 
 .headerTitle {
   margin: 0;
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   font-size: clamp(1.4rem, 3vw, 2.2rem);
   font-weight: 900;
   color: rgba(255, 245, 220, 0.96);
@@ -113,7 +95,7 @@
 }
 
 .sectionDividerLabel {
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   font-size: 11px;
   letter-spacing: 0.22em;
   color: rgba(255, 220, 160, 0.55);
@@ -127,12 +109,8 @@
   display: flex;
   gap: 6px;
   margin-bottom: 18px;
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.065), rgba(255, 245, 220, 0.022));
-  border: 1px solid rgba(255, 220, 160, 0.1);
   border-radius: 18px;
   padding: 6px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
   flex-wrap: wrap;
   align-items: center;
 }
@@ -141,7 +119,7 @@
   padding: 11px 16px;
   border-radius: 14px;
   cursor: pointer;
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.18em;
@@ -185,7 +163,7 @@
   border: 1px solid rgba(255, 220, 160, 0.1);
   background: rgba(0, 0, 0, 0.22);
   color: rgba(255, 245, 220, 0.62);
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -260,7 +238,7 @@
 }
 
 .emptyTitle {
-  font-family: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  font-family: var(--koa-font-display);
   color: rgba(255, 220, 160, 0.38);
   font-size: 12px;
   letter-spacing: 0.22em;

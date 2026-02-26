@@ -13,6 +13,66 @@
   --koa-gold-b: rgba(122,55,0,0.92);
   --koa-danger-a: rgba(122,30,30,0.92);
   --koa-danger-b: rgba(90,18,18,0.92);
+
+  --koa-font-display: 'Cinzel', 'Trajan Pro', 'Times New Roman', serif;
+  --koa-glass-bg: linear-gradient(180deg, rgba(255,245,220,0.065), rgba(255,245,220,0.022));
+  --koa-scrollbar-thumb: rgba(176,101,0,0.45);
+  --koa-shadow-soft: 0 14px 34px rgba(0,0,0,0.42);
+  --koa-shadow-strong: 0 22px 60px rgba(0,0,0,0.55);
+}
+
+/* ===== shared primitives ===== */
+.koa-glass-card{
+  border: 1px solid var(--koa-line);
+  background: var(--koa-glass-bg);
+  box-shadow: 0 22px 60px rgba(0,0,0,0.52);
+  backdrop-filter: blur(12px);
+}
+
+.koa-glass-btn{
+  border: 1px solid var(--koa-line);
+  background: var(--koa-glass-bg);
+  color: var(--koa-cream);
+  font-family: var(--koa-font-display);
+  cursor: pointer;
+  user-select: none;
+}
+
+.koa-interactive-lift{
+  transition: transform 140ms ease, filter 140ms ease, box-shadow 140ms ease;
+}
+
+.koa-interactive-lift:hover{
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+.koa-interactive-lift:active{
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(0.98);
+}
+
+.koa-divider-line{
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,220,160,0.18), transparent);
+}
+
+.koa-scrollbar-thin{
+  scrollbar-width: thin;
+  scrollbar-color: var(--koa-scrollbar-thumb) transparent;
+}
+
+.koa-scrollbar-thin::-webkit-scrollbar{
+  width: 6px;
+}
+
+.koa-scrollbar-thin::-webkit-scrollbar-track{
+  background: transparent;
+}
+
+.koa-scrollbar-thin::-webkit-scrollbar-thumb{
+  background: var(--koa-scrollbar-thumb);
+  border-radius: 999px;
 }
 
 /* ===== shared tiny UI ===== */

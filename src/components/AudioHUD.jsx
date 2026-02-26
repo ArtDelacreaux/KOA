@@ -1,5 +1,4 @@
 import React from 'react';
-import './koaTheme.css';
 import styles from './AudioHUD.module.css';
 
 const ICON_MIC = '\uD83C\uDF9A\uFE0F';
@@ -24,7 +23,7 @@ export default function AudioHUD({
     <>
       <button
         onClick={() => setShowMix((v) => !v)}
-        className={`${styles.hudBtn} ${styles.audioBtn}`}
+        className={`${styles.hudBtn} ${styles.audioBtn} koa-glass-btn koa-interactive-lift`}
         onMouseEnter={playHover}
         title="Audio controls"
       >
@@ -34,7 +33,7 @@ export default function AudioHUD({
 
       <button
         onClick={toggleNightMode}
-        className={`${styles.hudBtn} ${styles.nightModeBtn}`}
+        className={`${styles.hudBtn} ${styles.nightModeBtn} koa-glass-btn koa-interactive-lift`}
         onMouseEnter={playHover}
         title="Toggle day/night mode"
       >
@@ -42,7 +41,7 @@ export default function AudioHUD({
       </button>
 
       {showMix && (
-        <div className={styles.mixPanel}>
+        <div className={`${styles.mixPanel} koa-glass-card`}>
           <div className={styles.panelGlow} />
 
           <div className={styles.mixPanelBody}>
@@ -68,7 +67,7 @@ export default function AudioHUD({
               </div>
             </div>
 
-            <div className={styles.divider} />
+            <div className={`${styles.divider} koa-divider-line`} />
 
             <div className={`${styles.rangeWrap} ${styles.musicRangeWrap}`}>
               <label className={styles.mixLabel}>

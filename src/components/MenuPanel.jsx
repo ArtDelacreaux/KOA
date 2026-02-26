@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import recapVideo from '../assets/recap.mp4';
 import combatVideo from '../assets/CombatVideo.mp4';
 import theaterPreviewVideo from '../assets/theater-preview.mp4';
+import styles from './MenuPanel.module.css';
 
 /*
   Knights of Atria — Main Menu (JRPG vibe, tavern palette)
@@ -79,18 +80,6 @@ export default function MenuPanel({
 
   const theaterPreviewRef = useRef(null);
 
-  const stamp = () => new Date().toISOString();
-  const prettyTime = (iso) => {
-    if (!iso) return '—';
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleString();
-    } catch {
-      return '—';
-    }
-  };
-
   /* ---------- theme (match your existing tavern build) ---------- */
   const THEME = {
     goldA: 'rgba(176,101,0,0.90)',
@@ -113,8 +102,6 @@ export default function MenuPanel({
     emberGlow: 'rgba(255,140,60,0.14)',
   };
 
-  const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
-
   /* ---------- layout ---------- */
   const panelStyle = (active) => ({
     position: 'absolute',
@@ -128,201 +115,6 @@ export default function MenuPanel({
     pointerEvents: active ? 'auto' : 'none',
     zIndex: active ? 6 : 4,
   });
-
-  const menuRoot = {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    padding: 14,
-    paddingTop: '2vh',
-    position: 'relative',
-    fontFamily: fontStack,
-  };
-
-  const LOGO_CLEAR_H = 18; // px from top for the floating logo // px of clear (non-frosted) area behind the logo
-
-  const menuShell = {
-    width: 'min(1320px, 96vw)',
-    height: 'min(960px, 94vh)',
-    position: 'relative',
-    background: 'transparent',
-    // Layout wrapper only — no visible “outer window”
-    border: 'none',
-    boxShadow: 'none',
-    borderRadius: 0,
-    overflow: 'visible',
-  };
-  const shellGlassBelow = {
-    display: 'none', // backmost frosted window disabled (shell stays for layout)
-  };
-
-
-  const overlayVignette = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: LOGO_CLEAR_H,      // 👈 add this
-    bottom: 0,
-    // keep the rest the same
-  };
-
-  const grain = {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    opacity: 0.085,
-    background:
-      'repeating-linear-gradient(180deg, rgba(255,255,255,0.11) 0px, rgba(255,255,255,0.11) 1px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 7px)',
-    mixBlendMode: 'overlay',
-  };
-
-  const topBar = {
-    position: 'absolute',
-    top: LOGO_CLEAR_H,
-    left: 0,
-    right: 0,
-    zIndex: 3,
-    padding: '14px 18px 10px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    background: 'transparent',
-  };
-
-  const chip = {
-    padding: '7px 10px',
-    borderRadius: 999,
-    border: `1px solid ${THEME.line}`,
-    background: 'rgba(255,245,220,0.06)',
-    color: THEME.creamSoft,
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 0.35,
-    userSelect: 'none',
-    boxShadow: '0 10px 28px rgba(0,0,0,0.25)',
-    whiteSpace: 'nowrap',
-    justifySelf: 'start',
-  };
-
-  const logoCenter = {
-
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-  };
-
-  const logoImg = {
-    width: 'min(1180px, 96vw)',
-    height: 'auto',
-    maxHeight: 'clamp(220px, 28vh, 340px)',
-    objectFit: 'contain',
-    userSelect: 'none',
-    pointerEvents: 'none',
-    filter: 'drop-shadow(0 22px 54px rgba(0,0,0,0.85))',
-    animation: 'logoSparkle 4s ease-in-out infinite',
-  };
-
-  const logoSparkleKeyframes = nightMode
-    ? `
-        @keyframes logoSparkle {
-          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.22)) drop-shadow(0 0 24px rgba(220,236,255,0.12)); }
-          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.06) drop-shadow(0 0 18px rgba(248,252,255,0.30)) drop-shadow(0 0 32px rgba(226,240,255,0.16)); }
-          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.20)) drop-shadow(0 0 24px rgba(220,236,255,0.10)); }
-          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-        }
-      `
-    : `
-        @keyframes logoSparkle {
-          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.45)) drop-shadow(0 0 40px rgba(255,200,120,0.20)); }
-          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.14) drop-shadow(0 0 28px rgba(255,255,255,0.55)) drop-shadow(0 0 60px rgba(255,220,160,0.28)); }
-          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.40)) drop-shadow(0 0 40px rgba(255,200,120,0.18)); }
-          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-        }
-      `;
-
-  const logoSub = {
-    color: 'rgba(255,245,220,0.70)',
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    textShadow: '0 2px 10px rgba(0,0,0,0.65)',
-    userSelect: 'none',
-    textAlign: 'center',
-    lineHeight: 1.1,
-  };
-
-
-  const leftMenuTitle = {
-    margin: '10px 0 4px 16px',
-    fontSize: 12,
-    letterSpacing: 2.2,
-    fontWeight: 950,
-    color: THEME.creamText,
-    textShadow: '0 2px 12px rgba(0,0,0,0.55)',
-    userSelect: 'none',
-  };
-
-
-  const rightChips = {
-    justifySelf: 'end',
-    display: 'flex',
-    gap: 10,
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  };
-
-  const contentGrid = {
-    position: 'absolute',
-    inset: 0,
-    padding: '0 20px 26px',
-    paddingTop: 'clamp(290px, 36vh, 380px)',
-    display: 'grid',
-    gridTemplateColumns: 'min(520px, 44%) minmax(0, 1fr)',
-    gap: 18,
-  };
-
-  const panelCard = {
-    borderRadius: 22,
-    position: 'relative',
-    overflow: 'hidden',
-    border: `1px solid ${THEME.line}`,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-    boxShadow: '0 22px 60px rgba(0,0,0,0.52)',
-    backdropFilter: 'blur(10px)',
-  };
-
-  const edgeGlow = {
-    position: 'absolute',
-    inset: -2,
-    borderRadius: 24,
-    pointerEvents: 'none',
-    background: 'linear-gradient(135deg, rgba(176,101,0,0.34), rgba(255,140,60,0.18), rgba(255,80,80,0.14))',
-    filter: 'blur(18px)',
-    opacity: 0.46,
-  };
-
-  const divider = {
-    height: 1,
-    background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.18), transparent)',
-    margin: '8px 0',
-    opacity: 0.9,
-  };
-
-  /* ---------- left: commands ---------- */
-  const commandList = {
-    padding: '16px 14px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  };
 
   const cmdRow = (active) => ({
     position: 'relative',
@@ -356,24 +148,6 @@ export default function MenuPanel({
       : 'rgba(255,245,220,0.10)',
     boxShadow: active ? '0 0 18px rgba(255,140,60,0.22)' : 'none',
   });
-
-  const cursorWrap = {
-    position: 'absolute',
-    left: -6,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: 22,
-    height: 22,
-    pointerEvents: 'none',
-    filter: 'drop-shadow(0 10px 18px rgba(0,0,0,0.55))',
-  };
-
-  const cmdLeft = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-  };
 
   const cmdIconWrap = (active) => ({
     width: 38,
@@ -419,141 +193,6 @@ export default function MenuPanel({
     opacity: active ? 1 : 0.82,
     fontSize: 18,
   });
-
-  /* ---------- right: content ---------- */
-  const previewWrap = {
-    ...panelCard,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
-    padding: 18,
-    paddingBottom: 22,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-    overflow: 'hidden', // clip the card itself
-    position: 'relative',
-  };
-
-  const leftPanelWrap = {
-    ...panelCard,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
-    position: 'relative',
-    paddingTop: 6,
-  };
-
-  const previewTitle = {
-    fontSize: 20,
-    fontWeight: 950,
-    letterSpacing: 0.65,
-    color: THEME.creamText,
-    textShadow: '0 2px 14px rgba(0,0,0,0.82)',
-    margin: 0,
-  };
-
-  const previewBody = {
-    color: 'rgba(255,245,220,0.92)',
-    fontSize: 13.5,
-    lineHeight: 1.65,
-    fontWeight: 900,
-    letterSpacing: 0.2,
-    textShadow: '0 2px 10px rgba(0,0,0,0.72)',
-  };
-
-  const cardMini = {
-    borderRadius: 18,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(30,22,16,0.68), rgba(12,10,8,0.56))',
-    padding: 16,
-    boxShadow: '0 20px 50px rgba(0,0,0,0.56)',
-  };
-
-  const label = {
-    color: 'rgba(255,245,220,0.90)',
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: 0.45,
-    textShadow: '0 2px 10px rgba(0,0,0,0.70)',
-  };
-
-  const input = {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '10px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'rgba(6,6,6,0.42)',
-    color: THEME.creamText,
-    outline: 'none',
-    fontWeight: 850,
-    fontSize: 13,
-    fontFamily: fontStack,
-  };
-
-  const textarea = {
-    ...input,
-    minHeight: 96,
-    resize: 'vertical',
-    lineHeight: 1.5,
-  };
-
-  const actionBtn = {
-    padding: '12px 14px',
-    borderRadius: 16,
-    border: '1px solid rgba(255,220,160,0.28)',
-    background: 'linear-gradient(180deg, rgba(72,50,34,0.84), rgba(34,24,16,0.80))',
-    backdropFilter: 'blur(12px)',
-    cursor: 'pointer',
-    color: THEME.creamText,
-    fontWeight: 950,
-    letterSpacing: 0.45,
-    textShadow: '0 2px 10px rgba(0,0,0,0.55)',
-    boxShadow: '0 18px 40px rgba(0,0,0,0.42)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-  };
-
-  const ghostBtn = {
-    padding: '10px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(58,42,30,0.78), rgba(24,18,14,0.72))',
-    backdropFilter: 'blur(12px)',
-    cursor: 'pointer',
-    color: THEME.creamText,
-    fontWeight: 950,
-    letterSpacing: 0.35,
-    boxShadow: '0 14px 34px rgba(0,0,0,0.35)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-  };
-
-  const dangerBtn = {
-    ...ghostBtn,
-    border: '1px solid rgba(255,160,160,0.22)',
-    background: `linear-gradient(180deg, ${THEME.dangerA}, ${THEME.dangerB})`,
-  };
-
-  const btnHover = (e) => {
-    e.currentTarget.style.transform = 'translateY(-1px)';
-    e.currentTarget.style.filter = 'brightness(1.12)';
-    e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)';
-  };
-
-  const btnLeave = (e) => {
-    e.currentTarget.style.transform = 'translateY(0px)';
-    e.currentTarget.style.filter = 'none';
-    e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)';
-  };
-
-  const btnDown = (e) => {
-    e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
-    e.currentTarget.style.filter = 'brightness(0.98)';
-  };
 
   // Minimal inline SVG icons to avoid extra assets.
   const Icon = ({ name, active }) => {
@@ -736,178 +375,75 @@ export default function MenuPanel({
 
   return (
     <>
-      <div style={panelStyle(panelType === 'menu')}
+      <div
+        className={styles.menuPanel}
+        style={panelStyle(panelType === 'menu')}
         onMouseDown={(e) => {
           // stop accidental drag ghost images
           if (e.target?.tagName === 'IMG') e.preventDefault();
         }}
       >
-        <style>{`
-		::placeholder {
-		  color: rgba(255, 245, 220, 0.90);
-		  opacity: 1;
-		}
-        @keyframes shimmerSweep {
-          from { transform: translateX(-120%) skewX(-18deg); opacity: 0; }
-          30% { opacity: 0.65; }
-          to { transform: translateX(220%) skewX(-18deg); opacity: 0; }
-        }
-        @keyframes cursorBob {
-          0% { transform: translateY(-50%) translateX(0px); opacity: 0.90; }
-          50% { transform: translateY(-50%) translateX(3px); opacity: 1; }
-          100% { transform: translateY(-50%) translateX(0px); opacity: 0.90; }
-        }
-        .jrpgShimmer::after{
-          content:"";
-          position:absolute;
-          top:-30%;
-          left:-40%;
-          width:55%;
-          height:160%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
-          transform: skewX(-18deg);
-          opacity:0;
-          pointer-events:none;
-        }
-        .jrpgShimmer:hover::after{
-          opacity:1;
-          animation: shimmerSweep 720ms ease forwards;
-        }
-        ${logoSparkleKeyframes}
-
-        .jrpgShimmer:hover .cmd-title {
-          color: rgba(20,10,2,0.95) !important;
-          text-shadow: none !important;
-        }
-        .jrpgShimmer:hover .cmd-sub {
-          color: rgba(40,20,5,0.90) !important;
-        }
-        .jrpgShimmer:hover .cmd-chevron {
-          color: rgba(140,70,10,0.95) !important;
-        }
-      `}</style>
         {/* PRESS TO START overlay */}
         {!menuStarted && (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 60,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background:
-                'radial-gradient(1200px 520px at 50% 28%, rgba(255,245,220,0.30), rgba(0,0,0,0.35))',
-              backdropFilter: 'blur(2px)',
-              WebkitBackdropFilter: 'blur(2px)',
-              transition: 'opacity 520ms ease, transform 520ms ease',
-              opacity: startFading ? 0 : 1,
-              transform: startFading ? 'translateY(8px) scale(0.99)' : 'translateY(0px) scale(1)',
-              pointerEvents: startFading ? 'none' : 'auto',
-            }}
+            className={`${styles.startOverlay} ${startFading ? styles.startOverlayFading : ''}`}
             onMouseDown={startMenu}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') startMenu(nMenuStarted = () => { });
+              if (e.key === 'Enter' || e.key === ' ') startMenu();
             }}
             role="button"
             tabIndex={0}
             aria-label="Press to start"
           >
-            <div
-              style={{
-                width: 'min(560px, 92vw)',
-                borderRadius: 22,
-                padding: '18px 18px 16px',
-                border: `1px solid ${THEME.line}`,
-                background: `linear-gradient(180deg, rgba(255,245,220,0.10), rgba(255,245,220,0.04))`,
-                boxShadow: '0 22px 60px rgba(0,0,0,0.55)',
-                textAlign: 'center',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 14,
-                  letterSpacing: 2.6,
-                  fontWeight: 950,
-                  color: 'rgba(255,245,220,0.85)',
-                  textTransform: 'uppercase',
-                  marginBottom: 10,
-                }}
-              >
+            <div className={styles.startCard}>
+              <div className={styles.startKicker}>
                 Welcome Envoys
               </div>
 
-              <div
-                style={{
-                  fontSize: 26,
-                  fontWeight: 950,
-                  letterSpacing: 0.8,
-                  color: THEME.creamText,
-                  textShadow: '0 2px 18px rgba(0,0,0,0.65)',
-                }}
-              >
+              <div className={styles.startTitle}>
                 Press to Start
               </div>
 
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: 0.5,
-                  color: 'rgba(255,245,220,0.70)',
-                }}
-              >
+              <div className={styles.startHint}>
                 Click anywhere
               </div>
             </div>
           </div>
         )}
 
-
-        <div style={{ ...menuRoot, opacity: menuStarted ? 1 : 0, transform: menuStarted ? 'translateY(0px)' : 'translateY(8px)', transition: 'opacity 520ms ease, transform 520ms ease', pointerEvents: menuStarted ? 'auto' : 'none' }}>
-          <div style={menuShell}>
-            <div style={shellGlassBelow} />
+        <div
+          className={`${styles.menuRootBase} ${styles.menuRootTransition} ${menuStarted ? styles.menuRootShown : styles.menuRootHidden}`}
+        >
+          <div className={styles.menuShell}>
+            <div className={styles.shellGlassBelow} />
 
             {/* Logo (no surrounding panel) */}
-            <div style={{ textAlign: 'center', paddingTop: 16, marginBottom: 6 }}>
+            <div className={styles.logoWrap}>
               <img
                 src={koaTitle}
                 alt="Knights of Avalon"
                 draggable={false}
-                style={logoImg}
+                className={`${styles.logoImg} ${nightMode ? styles.logoImgNight : styles.logoImgDay}`}
               />
             </div>
 
-            <div style={contentGrid}>
+            <div className={styles.contentGrid}>
               {/* LEFT: Command List */}
-              <div style={leftPanelWrap}>
-                <div style={edgeGlow} />
-                <div style={leftMenuTitle}>CAMPAIGN HUB</div>
+              <div className={styles.leftPanelWrap}>
+                <div className={styles.edgeGlow} />
+                <div className={styles.leftMenuTitle}>CAMPAIGN HUB</div>
 
-                <div style={commandList}>
+                <div className={styles.commandList}>
                   {items.map((it) => {
                     const active = it.key === activeKey;
                     return (
                       <div
                         key={it.key}
-                        className="jrpgShimmer"
+                        className={styles.jrpgShimmer}
                         style={cmdRow(active)}
                         onMouseEnter={() => {
                           if (it.key !== activeKey) playHover();
                           setActiveKey(it.key);
-                        }}
-                        onMouseDown={(e) => {
-                          e.currentTarget.style.transform = 'translateY(1px) scale(0.995)';
-                          e.currentTarget.style.filter = 'brightness(0.98)';
-                        }}
-                        onMouseUp={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-1px)';
-                          e.currentTarget.style.filter = 'brightness(1.06)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0px)';
-                          e.currentTarget.style.filter = 'none';
                         }}
                         // IMPORTANT: clicking the row navigates (fixes “links broken”)
                         onClick={it.primary.onClick}
@@ -918,7 +454,7 @@ export default function MenuPanel({
                         <div style={selectBar(active)} />
 
                         {active && (
-                          <div style={{ ...cursorWrap, animation: 'cursorBob 760ms ease-in-out infinite' }}>
+                          <div className={styles.cursorWrap}>
                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                               <path d="M7 5L19 12L7 19V5Z" fill="rgba(255,245,220,0.92)" />
                               <path d="M7 5L19 12L7 19V5Z" stroke="rgba(255,220,160,0.55)" strokeWidth="1.5" />
@@ -926,17 +462,17 @@ export default function MenuPanel({
                           </div>
                         )}
 
-                        <div style={cmdLeft}>
+                        <div className={styles.cmdLeft}>
                           <div style={cmdIconWrap(active)}>
                             <Icon name={it.key} active={active} />
                           </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div className="cmd-title" style={cmdTitle(active, it.titleColor)}>{it.label}</div>
-                            <div className="cmd-sub" style={cmdSub(active)}>{it.sub}</div>
+                          <div className={styles.cmdTextWrap}>
+                            <div className={styles.cmdTitle} style={cmdTitle(active, it.titleColor)}>{it.label}</div>
+                            <div className={styles.cmdSub} style={cmdSub(active)}>{it.sub}</div>
                           </div>
                         </div>
 
-                        <div className="cmd-chevron" style={cmdChevron(active)}>›</div>
+                        <div className={styles.cmdChevron} style={cmdChevron(active)}>›</div>
                       </div>
                     );
                   })}
@@ -944,37 +480,31 @@ export default function MenuPanel({
               </div>
 
               {/* RIGHT: Useful panel (changes by selection) */}
-              <div style={previewWrap}>
-                <div style={edgeGlow} />
+              <div className={styles.previewWrap}>
+                <div className={styles.edgeGlow} />
 
                 {/* Fixed header — never scrolls */}
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <h3 style={previewTitle}>{activeItem.title}</h3>
-                  <div style={previewBody}>{activeItem.desc}</div>
+                <div className={styles.previewHeader}>
+                  <h3 className={styles.previewTitle}>{activeItem.title}</h3>
+                  <div className={styles.previewBody}>{activeItem.desc}</div>
 
                   {/* Move campaign recap into the fixed header so it appears higher */}
                   {activeKey === 'campaign' && (
-                    <div style={{ display: 'grid', gap: 14, marginTop: 10 }}>
-                      <div style={cardMini}>
+                    <div className={styles.previewSectionGrid}>
+                      <div className={styles.cardMini}>
                         <video
                           src={recapVideo}
                           controls
                           preload="metadata"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            display: 'block',
-                            objectFit: 'cover',
-                            background: 'rgba(0,0,0,0.25)',
-                          }}
+                          className={styles.previewVideo}
                         />
                       </div>
                     </div>
                   )}
 
                   {activeKey === 'combat' && (
-                    <div style={{ display: 'grid', gap: 14, marginTop: 10 }}>
-                      <div style={cardMini}>
+                    <div className={styles.previewSectionGrid}>
+                      <div className={styles.cardMini}>
                         <video
                           src={combatVideo}
                           autoPlay
@@ -982,57 +512,28 @@ export default function MenuPanel({
                           muted
                           playsInline
                           preload="auto"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            display: 'block',
-                            objectFit: 'cover',
-                            background: 'rgba(0,0,0,0.25)',
-                          }}
+                          className={styles.previewVideo}
                         />
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div style={{ ...divider, flexShrink: 0 }} />
+                <div className={`koa-divider-line ${styles.divider} ${styles.previewDivider}`} />
 
                 {/* Scrollable body */}
-                <div
-                  style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10,
-                    paddingRight: 4,
-                    /* thin custom scrollbar */
-                    scrollbarWidth: 'thin',
-                    scrollbarColor: 'rgba(176,101,0,0.45) transparent',
-                  }}
-                >
+                <div className={`${styles.bodyScroll} koa-scrollbar-thin`}>
 
                   {/* Campaign brief (moved to header) */}
 
                   {/* Character book helpers */}
                   {activeKey === 'characters' && (
-                    <div style={{ display: 'grid', gap: 14 }}>
+                    <div className={styles.sectionGrid}>
                       {menuBackdrop && (
                         <div
                           aria-hidden
-                          style={{
-                            height: 300,
-                            borderRadius: 18,
-                            overflow: 'hidden',
-                            border: '1px solid rgba(255,220,160,0.18)',
-                            boxShadow: '0 18px 40px rgba(0,0,0,0.45)',
-                            backgroundImage: `url(${menuBackdrop})`,
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center center',
-                            backgroundRepeat: 'no-repeat',
-                            position: 'relative',
-                          }}
+                          className={styles.characterBackdrop}
+                          style={{ backgroundImage: `url(${menuBackdrop})` }}
                         >
                         </div>
                       )}
@@ -1043,18 +544,8 @@ export default function MenuPanel({
 
                   {/* Video preview — Theater hover panel */}
                   {activeKey === 'video' && (
-                    <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                      <div
-                        style={{
-                          width: '100%',
-                          height: 300,
-                          borderRadius: 16,
-                          overflow: 'hidden',
-                          border: '1px solid rgba(255,220,160,0.18)',
-                          boxShadow: '0 14px 34px rgba(0,0,0,0.5)',
-                          background: '#000',
-                        }}
-                      >
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
                         <video
                           ref={theaterPreviewRef}
                           src={theaterPreviewVideo}
@@ -1062,13 +553,7 @@ export default function MenuPanel({
                           loop
                           playsInline
                           preload="auto"
-                          style={{
-                            height: '100%',
-                            width: '100%',
-                            display: 'block',
-                            objectFit: 'cover',
-                            objectPosition: 'center center',
-                          }}
+                          className={styles.videoFill}
                         />
                       </div>
                     </div>
@@ -1076,25 +561,25 @@ export default function MenuPanel({
 
                   {/* Lore panel CTA */}
                   {activeKey === 'lore' && (
-                    <div style={{ display: 'grid', gap: 14 }}>
-                      <div style={cardMini}>
-                        <div style={label}>World Lore Archive</div>
-                        <div style={{ marginTop: 10, color: 'rgba(255,245,220,0.88)', fontSize: 12.5, fontWeight: 900, lineHeight: 1.65, textShadow: '0 1px 8px rgba(0,0,0,0.72)' }}>
+                    <div className={styles.sectionGrid}>
+                      <div className={styles.cardMini}>
+                        <div className={styles.label}>World Lore Archive</div>
+                        <div className={styles.loreBody}>
                           Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
                         </div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12 }}>
-                          <button style={actionBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={goLore}>
+                        <div className={styles.loreActions}>
+                          <button className={`${styles.actionBtn} koa-glass-btn koa-interactive-lift`} onMouseEnter={playHover} onClick={goLore}>
                             Open World Lore
                           </button>
                         </div>
                       </div>
-                      <div style={cardMini}>
-                        <div style={label}>Lore Scratchpad</div>
+                      <div className={styles.cardMini}>
+                        <div className={styles.label}>Lore Scratchpad</div>
                         <textarea
                           value={notes.lore}
                           onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
                           placeholder="Factions, locations, mysteries…"
-                          style={{ ...textarea, marginTop: 8 }}
+                          className={styles.loreTextarea}
                         />
                       </div>
                     </div>
@@ -1102,13 +587,11 @@ export default function MenuPanel({
 
                 </div>{/* end scrollable body */}
 
-                <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap', paddingTop: 4 }}>
+                <div className={styles.footerActions}>
                   {/* Primary action mirrors row click */}
                   <button
-                    style={actionBtn}
-                    onMouseEnter={btnHover}
-                    onMouseLeave={btnLeave}
-                    onMouseDown={btnDown}
+                    className={`${styles.actionBtn} koa-glass-btn koa-interactive-lift`}
+                    onMouseEnter={playHover}
                     onClick={activeItem.primary.onClick}
                   >
                     {activeItem.primary.label}

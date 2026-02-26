@@ -72,13 +72,13 @@ export default function VideoPanel({
 
   return (
     <ShellLayout active={isActive}>
-      <div className={styles.scrollWrap}>
+      <div className={`${styles.scrollWrap} koa-scrollbar-thin`}>
         <div className={styles.pageHeader}>
           <button
             onClick={goBack}
             onMouseEnter={playHover}
             onMouseDown={playNav}
-            className={styles.backBtn}
+            className={`${styles.backBtn} koa-glass-btn`}
           >
             {TXT_RETURN}
           </button>
@@ -95,7 +95,7 @@ export default function VideoPanel({
           <section>
             <SectionDivider label="Playback" />
 
-            <div className={styles.controlsBar}>
+            <div className={`${styles.controlsBar} koa-glass-card`}>
               <button
                 onClick={() => playVideo('intro')}
                 onMouseEnter={playHover}
