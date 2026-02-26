@@ -16,6 +16,7 @@ export default function MenuPanel({
   panelType,
   koaTitle,
   menuBackdrop,
+  nightMode = false,
 
   cinematicNav,
   cinematicDo,
@@ -225,6 +226,26 @@ export default function MenuPanel({
     filter: 'drop-shadow(0 22px 54px rgba(0,0,0,0.85))',
     animation: 'logoSparkle 4s ease-in-out infinite',
   };
+
+  const logoSparkleKeyframes = nightMode
+    ? `
+        @keyframes logoSparkle {
+          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
+          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.22)) drop-shadow(0 0 24px rgba(220,236,255,0.12)); }
+          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.06) drop-shadow(0 0 18px rgba(248,252,255,0.30)) drop-shadow(0 0 32px rgba(226,240,255,0.16)); }
+          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.20)) drop-shadow(0 0 24px rgba(220,236,255,0.10)); }
+          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
+        }
+      `
+    : `
+        @keyframes logoSparkle {
+          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
+          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.45)) drop-shadow(0 0 40px rgba(255,200,120,0.20)); }
+          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.14) drop-shadow(0 0 28px rgba(255,255,255,0.55)) drop-shadow(0 0 60px rgba(255,220,160,0.28)); }
+          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.40)) drop-shadow(0 0 40px rgba(255,200,120,0.18)); }
+          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
+        }
+      `;
 
   const logoSub = {
     color: 'rgba(255,245,220,0.70)',
@@ -752,13 +773,7 @@ export default function MenuPanel({
           opacity:1;
           animation: shimmerSweep 720ms ease forwards;
         }
-        @keyframes logoSparkle {
-          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.45)) drop-shadow(0 0 40px rgba(255,200,120,0.20)); }
-          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.14) drop-shadow(0 0 28px rgba(255,255,255,0.55)) drop-shadow(0 0 60px rgba(255,220,160,0.28)); }
-          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.40)) drop-shadow(0 0 40px rgba(255,200,120,0.18)); }
-          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-        }
+        ${logoSparkleKeyframes}
 
         .jrpgShimmer:hover .cmd-title {
           color: rgba(20,10,2,0.95) !important;

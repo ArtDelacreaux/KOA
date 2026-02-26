@@ -28,6 +28,9 @@ export default function AudioHUD({
   fireVol,
   setFireVol,
 
+  nightMode,
+  toggleNightMode,
+
   playHover = () => {},
 }) {
   /* ── shared button style: frosted glass, no orange ── */
@@ -169,6 +172,17 @@ export default function AudioHUD({
         title="Audio mix"
       >
         🎚️ <span>Mix</span>
+      </button>
+
+      <button
+        onClick={toggleNightMode}
+        style={{ ...hudBtnStyle, right: 258 }}
+        onMouseEnter={btnHover}
+        onMouseLeave={btnLeave}
+        onMouseDown={btnDown}
+        title="Toggle day/night mode"
+      >
+        <span>{nightMode ? 'Day Mode' : 'Night Mode'}</span>
       </button>
 
       {/* ── Mix Panel ── */}

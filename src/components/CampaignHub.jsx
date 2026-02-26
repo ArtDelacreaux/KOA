@@ -772,7 +772,7 @@ export default function CampaignHub(props) {
               </div>
               <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />
               <div style={{ padding: 12, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[['Title *', 'title', 'text', 'e.g. Retrieve the stolen signet ring'], ['Quest Giver', 'giver', 'text', 'e.g. Lord Harwick'], ['Location', 'location', 'text', 'e.g. The Thornwall Keep']].map(([lbl, key, type, ph]) => (
+                {[['Title *', 'title', 'text', 'e.g. Find Allies for the Kingdom of Avalon'], ['Quest Giver', 'giver', 'text', 'e.g. Bartrem'], ['Location', 'location', 'text', 'e.g. Qonza']].map(([lbl, key, type, ph]) => (
                   <div key={key}>
                     <div style={invLabel}>{lbl}</div>
                     <input type={type} value={questDraft[key] || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, [key]: e.target.value }))} placeholder={ph} style={invInput} />
@@ -786,7 +786,7 @@ export default function CampaignHub(props) {
                 </div>
                 <div>
                   <div style={invLabel}>Description</div>
-                  <textarea value={questDraft.description || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, description: e.target.value }))} placeholder="What's the hook? What's at stake?" rows={4} style={{ ...invInput, resize: 'none' }} />
+                  <textarea value={questDraft.description || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, description: e.target.value }))} placeholder="Who do we need to rob?" rows={4} style={{ ...invInput, resize: 'none' }} />
                 </div>
               </div>
               <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.15), transparent)' }} />

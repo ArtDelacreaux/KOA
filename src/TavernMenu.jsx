@@ -13,7 +13,9 @@ import CombatPanel from './components/CombatPanel';
 //Assets
 import background from './assets/background.jpeg';
 import tavernBgVideo from './assets/BackgroundLoop.mp4';
+import tavernBgVideoNight from './assets/BackgroundLoopNight.mp4';
 import tavernMusic from './assets/music.mp3';
+import tavernMusicNight from './assets/nightMusic.mp3';
 import fireCrackle from './assets/fire_crackle.mp3';
 import koaTitle from './assets/koaTitle.png';
 
@@ -60,6 +62,7 @@ export default function TavernMenu() {
   const [musicOn, setMusicOn] = useState(false);
   const [panelType, setPanelType] = useState('menu');
   const [bgVideoReady, setBgVideoReady] = useState(false);
+  const [nightMode, setNightMode] = useState(false);
 
   const [selectedChar, setSelectedChar] = useState(null);
   const [charView, setCharView] = useState('grid');
@@ -180,6 +183,9 @@ export default function TavernMenu() {
     return arr;
   }, []);
 
+  const activeBgVideo = nightMode ? tavernBgVideoNight : tavernBgVideo;
+  const activeMusic = nightMode ? tavernMusicNight : tavernMusic;
+
   /* ================= AUDIO ================= */
   useAudioLoop(musicRef, { volume: musicVol, loop: true });
   useAudioLoop(fireRef, { volume: fireVol, loop: true });
@@ -198,6 +204,17 @@ export default function TavernMenu() {
       fireRef.current.pause();
     }
     setMusicOn(!musicOn);
+  };
+
+  const toggleNightMode = () => {
+    const nextNightMode = !nightMode;
+    setBgVideoReady(false);
+    setNightMode(nextNightMode);
+
+    if (nextNightMode) {
+      setMusicVol(0.25);
+      setFireVol(0.02);
+    }
   };
 
   const autoPlayAudio = () => {
@@ -221,6 +238,25 @@ export default function TavernMenu() {
     if (musicRef.current) musicRef.current.play().catch(() => {});
     if (fireRef.current)  fireRef.current.play().catch(() => {});
   };
+
+  useEffect(() => {
+    const music = musicRef.current;
+    if (!music || !musicOn) return;
+
+    const restart = () => {
+      music.currentTime = 0;
+      music.volume = musicVol;
+      music.play().catch(() => {});
+    };
+
+    if (music.readyState >= 2) {
+      restart();
+      return;
+    }
+
+    music.addEventListener('canplay', restart, { once: true });
+    return () => music.removeEventListener('canplay', restart);
+  }, [activeMusic]);
 
 
   const FADE_TOTAL_MS = 260;
@@ -327,7 +363,8 @@ export default function TavernMenu() {
     <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', color: 'white', fontFamily: 'serif' }}>
       {/* Background video (preferred) */}
       <video
-        src={tavernBgVideo}
+        key={activeBgVideo}
+        src={activeBgVideo}
         autoPlay
         muted
         loop
@@ -421,7 +458,7 @@ export default function TavernMenu() {
       `}</style>
 
       {/* Audio */}
-      <audio ref={musicRef} src={tavernMusic} />
+      <audio ref={musicRef} src={activeMusic} />
       <audio ref={fireRef} src={fireCrackle} />
       <audio ref={pageFlipRef} src={pageFlip} preload="auto" />
 
@@ -442,6 +479,8 @@ export default function TavernMenu() {
             setMusicVol={setMusicVol}
             fireVol={fireVol}
             setFireVol={setFireVol}
+            nightMode={nightMode}
+            toggleNightMode={toggleNightMode}
             playHover={playHover}
             // HUD is NOT navigation; keep it silent
             playButton={silentClick}
@@ -455,6 +494,7 @@ export default function TavernMenu() {
           panelType={panelType}
           koaTitle={koaTitle}
           menuBackdrop={background}
+          nightMode={nightMode}
           cinematicNav={cinematicNav}
           cinematicDo={cinematicDo}
           setPanelType={setPanelType}
