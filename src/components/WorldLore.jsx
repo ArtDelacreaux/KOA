@@ -33,7 +33,6 @@ const GALLERY = {
   scenes: [
     { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
     { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
-    { id: 3, title: "The Oracle's Vision", src: '', description: 'A dream sequence revealing the ancient prophecy.' },
   ],
   locations: [
     {

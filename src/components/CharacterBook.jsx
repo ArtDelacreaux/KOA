@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
+import styles from './CharacterBook.module.css';
 
 // Character theme music — one import per character
 // Place each MP3 in: src/assets/music/<filename>
@@ -199,52 +200,6 @@ export default function CharacterBook({
   };
 
   /* ---------- styles ---------- */
-  // Full-panel shell (match WorldLore: header sits at the very top)
-  // IMPORTANT: Keep background transparent so we don't darken your global tavern backdrop.
-  const cardShell = {
-    width: '100%',
-    height: '100%',
-    borderRadius: 0,
-    background: 'transparent',
-    border: 'none',
-    backdropFilter: 'none',
-    WebkitBackdropFilter: 'none',
-    fontFamily: fontStack,
-    boxShadow: 'none',
-    position: 'relative',
-    overflow: 'hidden',
-    color: THEME.creamText,
-  };
-
-  const edgeGlow = {
-    position: 'absolute',
-    inset: -2,
-    borderRadius: 0,
-    pointerEvents: 'none',
-    background: 'linear-gradient(135deg, rgba(176,101,0,0.34), rgba(255,140,60,0.18), rgba(255,80,80,0.14))',
-    filter: 'blur(18px)',
-    opacity: 0.18,
-    zIndex: 0,
-  };
-
-  const headerBar = {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 5,
-    padding: '12px 18px',
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    background: `linear-gradient(180deg, rgba(10,8,6,0.72), rgba(10,8,6,0.30))`,
-    backdropFilter: 'blur(14px)',
-    borderBottom: `1px solid ${THEME.line}`,
-    boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-    fontFamily: fontStack,
-  };
 
   const tabButtonStyle = (active) => ({
     padding: '7px 10px',
@@ -266,41 +221,6 @@ export default function CharacterBook({
     transition: 'all 140ms ease',
   });
 
-  const backButton = {
-    padding: '10px 16px',
-    borderRadius: 16,
-    border: '1px solid rgba(255,160,160,0.22)',
-    background: `linear-gradient(180deg, ${THEME.dangerA}, ${THEME.dangerB})`,
-    color: THEME.creamText,
-    cursor: 'pointer',
-    fontWeight: 950,
-    fontSize: 13,
-    letterSpacing: 0.4,
-    boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-    textShadow: '0 2px 10px rgba(0,0,0,0.55)',
-  };
-
-  const goldBtn = {
-    padding: '10px 16px',
-    borderRadius: 16,
-    border: `1px solid ${THEME.line}`,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-    backdropFilter: 'blur(12px)',
-    color: THEME.creamText,
-    cursor: 'pointer',
-    fontWeight: 950,
-    fontSize: 13,
-    letterSpacing: 0.4,
-    boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-    textShadow: '0 2px 10px rgba(0,0,0,0.55)',
-  };
-
   const btnHover = (e) => {
     e.currentTarget.style.transform = 'translateY(-1px)';
     e.currentTarget.style.filter = 'brightness(1.12)';
@@ -316,108 +236,6 @@ export default function CharacterBook({
   const btnDown = (e) => {
     e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
     e.currentTarget.style.filter = 'brightness(0.98)';
-  };
-
-  // Content card (dark, like MenuPanel's cardMini but darker for legibility)
-  const darkCard = {
-    borderRadius: 18,
-    border: `1px solid ${THEME.lineSoft}`,
-    background: 'linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))',
-    padding: 16,
-    boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
-    fontFamily: fontStack,
-    color: THEME.creamText,
-  };
-
-  // Slightly brighter card for variety
-  const lightCard = {
-    ...darkCard,
-    background: 'linear-gradient(180deg, rgba(40,26,12,0.82), rgba(24,16,8,0.90))',
-    border: `1px solid ${THEME.line}`,
-  };
-
-  const fieldLabel = {
-    fontSize: 11,
-    fontWeight: 950,
-    opacity: 0.72,
-    marginBottom: 4,
-    letterSpacing: 0.45,
-    color: THEME.creamSoft,
-  };
-
-  const inputBase = {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '9px 12px',
-    borderRadius: 12,
-    border: `1px solid ${THEME.lineSoft}`,
-    background: 'rgba(0,0,0,0.22)',
-    color: THEME.creamText,
-    outline: 'none',
-    fontWeight: 850,
-    fontSize: 13,
-    fontFamily: fontStack,
-  };
-  // Space reserved for the header is measured dynamically via headerRef.
-
-  const bodyArea = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: headerH,
-    bottom: 0,
-    padding: 14,
-    overflowY: 'auto',
-    scrollbarWidth: 'thin',
-    scrollbarColor: 'rgba(176,101,0,0.45) transparent',
-  };
-
-  const charGridCard = {
-    padding: 12,
-    borderRadius: 18,
-    cursor: 'pointer',
-    background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
-    border: `1px solid ${THEME.lineSoft}`,
-    backdropFilter: 'blur(8px)',
-    transition: 'all 0.22s ease',
-    boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
-    userSelect: 'none',
-    color: THEME.creamText,
-    fontFamily: fontStack,
-  };
-
-  const divider = {
-    height: 1,
-    background: `linear-gradient(90deg, transparent, ${THEME.line}, transparent)`,
-    margin: '12px 0',
-  };
-
-  const tinyBtn = {
-    padding: '5px 10px',
-    borderRadius: 10,
-    border: `1px solid ${THEME.lineSoft}`,
-    cursor: 'pointer',
-    fontWeight: 900,
-    fontSize: 11,
-    letterSpacing: 0.2,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-    color: THEME.creamSoft,
-    fontFamily: fontStack,
-    transition: 'all 120ms ease',
-    userSelect: 'none',
-    lineHeight: 1,
-    backdropFilter: 'blur(8px)',
-  };
-
-  const worldNpcControlBtn = {
-    ...tinyBtn,
-    padding: '7px 12px',
-    border: '1px solid rgba(255,220,160,0.42)',
-    background: 'linear-gradient(180deg, rgba(58,38,18,0.92), rgba(28,18,9,0.94))',
-    color: THEME.creamText,
-    boxShadow: '0 12px 30px rgba(0,0,0,0.46)',
-    textShadow: '0 1px 8px rgba(0,0,0,0.62)',
-    opacity: 1,
   };
 
   const tinyBtnHover = (e) => {
@@ -1552,68 +1370,13 @@ export default function CharacterBook({
       active={panelType === 'characters'}
       style={{ alignItems: 'stretch', justifyContent: 'stretch' }}
     >
-      <div style={cardShell}>
-        <style>{`
-          ::placeholder { color: rgba(255,245,220,0.55); opacity: 1; }
-          .cb-rng {
-            width: 100%;
-            height: 6px;
-            border-radius: 999px;
-            outline: none;
-            cursor: pointer;
-            -webkit-appearance: none;
-            appearance: none;
-          }
-          .cb-rng::-webkit-slider-runnable-track { height: 6px; border-radius: 999px; }
-          .cb-rng::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 14px; height: 14px;
-            border-radius: 999px;
-            background: currentColor;
-            border: 2px solid rgba(255,255,255,0.8);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-            margin-top: -4px;
-          }
-          .cb-rng::-moz-range-thumb {
-            width: 14px; height: 14px;
-            border-radius: 999px;
-            background: currentColor;
-            border: 2px solid rgba(255,255,255,0.8);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.35);
-          }
-          .cb-card-hover:hover {
-            transform: translateY(-3px) scale(1.02) !important;
-            box-shadow: 0 26px 60px rgba(0,0,0,0.55) !important;
-            border-color: rgba(255,220,160,0.30) !important;
-          }
-          .cb-npc-hover:hover {
-            transform: translateY(-2px) !important;
-            box-shadow: 0 24px 52px rgba(0,0,0,0.52) !important;
-            border-color: rgba(255,220,160,0.28) !important;
-          }
-        `}</style>
-
+      <div className={styles.cardShell}>
         {/* Edge glow */}
-        <div style={edgeGlow} />
+        <div className={styles.edgeGlow} />
 
         {/* Header */}
-        <div ref={headerRef} style={{
-          ...headerBar,
-          padding: '44px 36px 16px',
-          gap: 12,
-          background: 'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))',
-          borderBottom: `1px solid ${THEME.lineSoft}`,
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            flexWrap: 'wrap',
-            position: 'relative',
-            zIndex: 1,
-          }}>
+        <div ref={headerRef} className={`${styles.headerBar} ${styles.headerBarInset}`}>
+          <div className={styles.headerTopRow}>
             <button
               onClick={() => { navClick(); cinematicNav('menu'); }}
               onMouseEnter={(e) => {
@@ -1626,55 +1389,22 @@ export default function CharacterBook({
                 e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
                 e.currentTarget.style.transform = 'translateY(0)';
               }}
-              style={{
-                background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                padding: '9px 18px',
-                borderRadius: 14,
-                cursor: 'pointer',
-                fontSize: 12,
-                letterSpacing: '0.14em',
-                fontFamily: fontStack,
-                fontWeight: 950,
-                backdropFilter: 'blur(10px)',
-                transition: 'all 150ms ease',
-                boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
-                userSelect: 'none',
-              }}
+              className={styles.returnBtn}
             >
               ← RETURN
             </button>
 
-            <div style={{ textAlign: 'center', flex: 1, minWidth: 240 }}>
-              <div style={{
-                fontSize: 10,
-                letterSpacing: '0.38em',
-                color: 'rgba(255,220,160,0.45)',
-                marginBottom: 10,
-                marginTop: -6,
-                fontFamily: fontStack,
-                textTransform: 'uppercase',
-                userSelect: 'none',
-              }}>
+            <div className={styles.headerCenter}>
+              <div className={styles.headerKicker}>
                 ✦ &nbsp; CODEX OF THE PARTY &nbsp; ✦
               </div>
-              <div style={{
-                margin: 0,
-                fontFamily: fontStack,
-                fontSize: 'clamp(1.35rem, 2.6vw, 2.05rem)',
-                fontWeight: 950,
-                color: THEME.creamText,
-                letterSpacing: '0.18em',
-                textShadow: '0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
-                lineHeight: 1.05,
-              }}>
+              <div className={styles.headerTitleMain}>
                 CHARACTER BOOK
               </div>
             </div>
 
             {/* Spacer to balance */}
-            <div style={{ width: 120 }} />
+            <div className={styles.headerSpacer} />
           </div>
 
           {/* Context tabs (only show when applicable) */}
@@ -1682,17 +1412,11 @@ export default function CharacterBook({
         </div>
 
         {/* Body */}
-        <div style={bodyArea}>
-          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div className={styles.bodyArea} style={{ top: headerH }}>
+          <div className={styles.bodyInner}>
 
             {/* Buttons (below header, above content) — NOT sticky, no overlay bar */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              margin: '6px 0 14px',
-            }}>
+            <div className={styles.tabRow}>
               {(charView === 'worldnpcs' || showProfileTab) && (
                 <button
                   type="button"
@@ -1780,8 +1504,8 @@ export default function CharacterBook({
                 <button
                   type="button"
                   disabled={!charSongSrc}
+                  className={styles.tinyBtn}
                   style={{
-                    ...tinyBtn,
                     padding: '10px 14px',
                     borderRadius: 999,
                     opacity: charSongSrc ? 1 : 0.45,
@@ -1804,21 +1528,20 @@ export default function CharacterBook({
 
             {/* GRID */}
             {charView === 'grid' && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
+              <div className={styles.charGrid}>
                 {characters.map((char) => (
                   <div
                     key={char.name}
-                    className="cb-card-hover"
-                    style={{ ...charGridCard, transition: 'all 0.22s ease' }}
+                    className={`${styles.charGridCard} ${styles.cardHover}`}
                     onMouseDown={navClick}
                     onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
                     onMouseEnter={() => setHoveredCharName(char.name)}
                     onMouseLeave={() => setHoveredCharName(null)}
                   >
                     <img src={getCharPortrait(char)} alt={char.name}
-                      style={{ width: '100%', height: 'auto', objectFit: 'contain', borderRadius: 12, marginBottom: 10, boxShadow: '0 10px 26px rgba(0,0,0,0.45)', display: 'block' }} />
-                    <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{char.name}</div>
-                    <div style={{ opacity: 0.72, marginTop: 5, fontSize: 11.5, lineHeight: 1.45, color: THEME.creamSoft }}>{char.synopsis}</div>
+                      className={styles.charCardImage} />
+                    <div className={styles.charCardName}>{char.name}</div>
+                    <div className={styles.charCardSynopsis}>{char.synopsis}</div>
                   </div>
                 ))}
               </div>
@@ -1826,15 +1549,16 @@ export default function CharacterBook({
 
             {/* WORLD NPCs */}
             {showWorldNpcTab && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-                <div style={{ ...lightCard, display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className={styles.worldNpcStack}>
+                <div className={`${styles.lightCard} ${styles.worldNpcHeader}`}>
                   <div>
-                    <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>World NPC Codex</div>
-                    <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4, color: THEME.creamSoft }}>NPCs you meet in the world — not tied to any one player.</div>
+                    <div className={styles.worldNpcTitle}>World NPC Codex</div>
+                    <div className={styles.worldNpcSubtitle}>NPCs you meet in the world — not tied to any one player.</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <div className={styles.worldNpcActions}>
                     <button
-                      style={{ ...tinyBtn, padding: '10px 14px', opacity: 0.95 }}
+                      className={styles.tinyBtn}
+                      style={{ padding: '10px 14px', opacity: 0.95 }}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1843,7 +1567,8 @@ export default function CharacterBook({
                       Connection Web
                     </button>
                     <button
-                      style={{ ...tinyBtn, padding: '10px 14px', opacity: 0.95 }}
+                      className={styles.tinyBtn}
+                      style={{ padding: '10px 14px', opacity: 0.95 }}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1851,38 +1576,38 @@ export default function CharacterBook({
                     >
                       Import Character NPCs
                     </button>
-                    <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
+                    <button className={styles.goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
                       + Add NPC
                     </button>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
+                <div className={styles.worldNpcFilterGrid}>
                   {[
                     { label: 'Faction', val: npcFilterFaction, set: setNpcFilterFaction, opts: factions },
                     { label: 'Location', val: npcFilterLocation, set: setNpcFilterLocation, opts: locations },
                   ].map(({ label: lbl, val, set, opts }) => (
-                    <div key={lbl} style={darkCard}>
-                      <div style={fieldLabel}>{lbl}</div>
-                      <select value={val} onChange={(e) => set(e.target.value)} style={{ ...inputBase, fontWeight: 850 }}>
+                    <div key={lbl} className={styles.darkCard}>
+                      <div className={styles.fieldLabel}>{lbl}</div>
+                      <select value={val} onChange={(e) => set(e.target.value)} className={styles.inputBase}>
                         {opts.map((o) => <option key={o} value={o}>{o}</option>)}
                       </select>
                     </div>
                   ))}
-                  <div style={darkCard}>
-                    <div style={fieldLabel}>Search</div>
+                  <div className={styles.darkCard}>
+                    <div className={styles.fieldLabel}>Search</div>
                     <input value={npcSearch} onChange={(e) => setNpcSearch(e.target.value)}
-                      placeholder="Name, age, faction, occupation, location, summary…" style={inputBase} />
+                      placeholder="Name, age, faction, occupation, location, summary…" className={styles.inputBase} />
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft }}>
+                <div className={styles.worldNpcRangeRow}>
+                  <div className={styles.worldNpcRangeText}>
                     {worldNpcRangeLabel} <strong style={{ color: THEME.creamText }}>filtered</strong> (total <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>)
                   </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className={styles.worldNpcControls}>
                     <button
-                      style={worldNpcControlBtn}
+                      className={styles.worldNpcControlBtn}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1893,7 +1618,8 @@ export default function CharacterBook({
                     {worldNpcListMode === 'paged' && filteredWorldNpcs.length > WORLD_NPC_PAGE_SIZE && (
                       <>
                         <button
-                          style={{ ...worldNpcControlBtn, opacity: worldNpcPage > 1 ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage > 1 ? 'pointer' : 'not-allowed' }}
+                          className={styles.worldNpcControlBtn}
+                          style={{ opacity: worldNpcPage > 1 ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage > 1 ? 'pointer' : 'not-allowed' }}
                           disabled={worldNpcPage <= 1}
                           onMouseEnter={(e) => { if (worldNpcPage > 1) tinyBtnHover(e); }}
                           onMouseLeave={(e) => { if (worldNpcPage > 1) tinyBtnLeave(e); }}
@@ -1902,11 +1628,12 @@ export default function CharacterBook({
                         >
                           Prev
                         </button>
-                        <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamText, minWidth: 76, textAlign: 'center', textShadow: '0 1px 6px rgba(0,0,0,0.45)' }}>
+                        <div className={styles.worldNpcPageLabel}>
                           Page {worldNpcPage}/{worldNpcTotalPages}
                         </div>
                         <button
-                          style={{ ...worldNpcControlBtn, opacity: worldNpcPage < worldNpcTotalPages ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage < worldNpcTotalPages ? 'pointer' : 'not-allowed' }}
+                          className={styles.worldNpcControlBtn}
+                          style={{ opacity: worldNpcPage < worldNpcTotalPages ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage < worldNpcTotalPages ? 'pointer' : 'not-allowed' }}
                           disabled={worldNpcPage >= worldNpcTotalPages}
                           onMouseEnter={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnHover(e); }}
                           onMouseLeave={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnLeave(e); }}
@@ -1917,7 +1644,7 @@ export default function CharacterBook({
                         </button>
                       </>
                     )}
-                    <button style={worldNpcControlBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
+                    <button className={styles.worldNpcControlBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
                       onClick={() => { setNpcFilterFaction('All'); setNpcFilterLocation('All'); setNpcSearch(''); }}>
                       Clear Filters
                     </button>
@@ -1925,16 +1652,14 @@ export default function CharacterBook({
                 </div>
 
                 {filteredWorldNpcs.length === 0 ? (
-                  <div style={darkCard}>
-                    <div style={{ fontWeight: 950, marginBottom: 6 }}>No NPCs match your filters.</div>
-                    <div style={{ lineHeight: 1.6, opacity: 0.8 }}>Try clearing filters, or add your first World NPC.</div>
+                  <div className={styles.darkCard}>
+                    <div className={styles.emptyStateTitle}>No NPCs match your filters.</div>
+                    <div className={styles.emptyStateText}>Try clearing filters, or add your first World NPC.</div>
                   </div>
                 ) : (
                   <div
+                    className={styles.worldNpcList}
                     style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
                       maxHeight: worldNpcListMode === 'all' ? 520 : 'none',
                       overflowY: worldNpcListMode === 'all' ? 'auto' : 'visible',
                       paddingRight: worldNpcListMode === 'all' ? 4 : 0,
@@ -1948,63 +1673,51 @@ export default function CharacterBook({
                         .map((l) => worldNpcById[l.targetId]?.name)
                         .filter(Boolean);
                       return (
-                        <div key={n.id} className="cb-npc-hover" style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                        <div
+                          key={n.id}
+                          className={`${styles.darkCard} ${styles.npcHover} ${styles.npcCardClickable}`}
                           onMouseDown={navClick}
                           onClick={() => openEditWorldNpc(n)}
-                          role="button" tabIndex={0}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 220 }}>
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className={styles.npcTopRow}>
+                            <div className={styles.npcLeftGroup}>
                               {n.image ? (
                                 <img
                                   src={n.image}
                                   alt={n.name || 'NPC'}
-                                  style={{
-                                    width: 44,
-                                    height: 44,
-                                    objectFit: 'cover',
-                                    borderRadius: 12,
-                                    border: `1px solid ${THEME.lineSoft}`,
-                                    boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
-                                    flex: '0 0 auto',
-                                  }}
+                                  className={styles.npcThumb44}
                                 />
                               ) : (
                                 <div
                                   aria-hidden
-                                  style={{
-                                    width: 44,
-                                    height: 44,
-                                    borderRadius: 12,
-                                    border: `1px solid ${THEME.lineSoft}`,
-                                    background: 'linear-gradient(180deg, rgba(30,20,10,0.70), rgba(18,12,6,0.78))',
-                                    boxShadow: '0 10px 22px rgba(0,0,0,0.30)',
-                                    flex: '0 0 auto',
-                                  }}
+                                  className={styles.npcThumb44Empty}
                                 />
                               )}
-                              <div style={{ fontSize: 15, fontWeight: 950, color: THEME.creamText }}>{n.name}</div>
+                              <div className={styles.npcName}>{n.name}</div>
                             </div>
-                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                            <div className={styles.npcMetaRow}>
+                              <span className={styles.npcMetaText} style={{ color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
                                 Faction: {(n.faction || '').trim() || '—'}
                               </span>
-                              <span style={{ fontSize: 12, fontWeight: 900, color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                              <span className={styles.npcMetaText} style={{ color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
                                 Location: {(n.location || '').trim() || '—'}
                               </span>
                             </div>
                           </div>
 
                           {(n.summary || n.bio) && (
-                            <div style={{ marginTop: 8, opacity: 0.88, lineHeight: 1.55, fontSize: 13 }}>
+                            <div className={styles.npcSummary}>
                               {(n.summary || n.bio || '').trim()}
                             </div>
                           )}
 
-                          <div style={{ marginTop: 8, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 900, color: linkedChars.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                          <div className={styles.npcLinksRow}>
+                            <span className={styles.npcLinksText} style={{ color: linkedChars.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
                               Linked Characters: {linkedChars.length ? linkedChars.join(', ') : 'None'}
                             </span>
-                            <span style={{ fontSize: 11.5, fontWeight: 900, color: connectedNames.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                            <span className={styles.npcLinksText} style={{ color: connectedNames.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
                               Connected NPCs: {connectedNames.length ? connectedNames.join(', ') : 'None'}
                             </span>
                           </div>
@@ -2019,58 +1732,50 @@ export default function CharacterBook({
 
             {/* DETAIL */}
             {charView === 'detail' && selectedChar && (
-              <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
-                <div style={darkCard}>
+              <div className={styles.detailGrid}>
+                <div className={styles.darkCard}>
                   <img
                     src={selectedChar.name === 'Arlis' ? (hoveredCharName === 'Arlis' ? (arlisFrame === 0 ? arlisImgA : arlisImgB) : arlisImgA) : selectedChar.image}
                     alt={selectedChar.name}
-                    style={{ width: '100%', height: 310, objectFit: 'cover', borderRadius: 14, boxShadow: '0 14px 36px rgba(0,0,0,0.55)' }}
+                    className={styles.detailPortrait}
                     onMouseEnter={() => setHoveredCharName(selectedChar.name)}
                     onMouseLeave={() => setHoveredCharName(null)}
                   />
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 21, fontWeight: 950, color: THEME.creamText, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{selectedChar.name}</div>
-                    <div style={{ marginTop: 6, opacity: 0.78, lineHeight: 1.5, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.synopsis}</div>
-                    <div style={divider} />
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className={styles.detailHeader}>
+                    <div className={styles.detailName}>{selectedChar.name}</div>
+                    <div className={styles.detailSynopsis}>{selectedChar.synopsis}</div>
+                    <div className={styles.divider} />
+                    <div className={styles.detailStatsGrid}>
                       {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
                         <div key={k}>
-                          <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>{k}</div>
-                          <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{v}</div>
+                          <div className={styles.statLabel}>{k}</div>
+                          <div className={styles.statValue}>{v}</div>
                         </div>
                       ))}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Class</div>
-                        <div style={{ fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>{selectedChar.class}</div>
+                      <div className={styles.fullSpan}>
+                        <div className={styles.statLabel}>Class</div>
+                        <div className={styles.statValue}>{selectedChar.class}</div>
                       </div>
 
                       {/* Character Theme Song (start with Von'Ghul) */}
                       {/* Character Theme Song (Von'Ghul for now) */}
-                      <div style={{ gridColumn: '1 / -1' }}>
-                        <div style={divider} />
-                        <div
-                          style={{
-                            padding: 12,
-                            borderRadius: 14,
-                            background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
-                            border: `1px solid ${THEME.lineSoft}`,
-                            boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
-                          }}
-                        >
+                      <div className={styles.fullSpan}>
+                        <div className={styles.divider} />
+                        <div className={styles.themeCard}>
                           {/* Single persistent audio element — lives outside this block, see below */}
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                          <div className={styles.themeHeaderRow}>
                             <div>
-                              <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>
+                              <div className={styles.themeLabel}>
                                 Theme
                               </div>
 
                               {charSongSrc ? (
-                                <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamText, marginTop: 2 }}>
+                                <div className={styles.themeValue}>
                                   {fmtTime(charSongTime)} / {fmtTime(charSongDur)}
                                 </div>
                               ) : (
-                                <div style={{ fontSize: 12, fontWeight: 900, color: THEME.creamSoft, marginTop: 2, opacity: 0.85 }}>
+                                <div className={styles.themeValueMuted}>
                                   No theme assigned.
                                 </div>
                               )}
@@ -2078,8 +1783,8 @@ export default function CharacterBook({
 
                             <button
                               disabled={!charSongSrc}
+                              className={styles.tinyBtn}
                               style={{
-                                ...tinyBtn,
                                 padding: '8px 12px',
                                 opacity: charSongSrc ? 1 : 0.45,
                                 cursor: charSongSrc ? 'pointer' : 'not-allowed',
@@ -2094,7 +1799,7 @@ export default function CharacterBook({
                           </div>
 
                           <input
-                            className="cb-rng"
+                            className={styles.rng}
                             type="range"
                             min={0}
                             max={Math.max(1, Math.floor(charSongDur || 1))}
@@ -2116,10 +1821,10 @@ export default function CharacterBook({
                             }}
                           />
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, opacity: charSongSrc ? 1 : 0.55 }}>
-                            <div style={{ fontSize: 11, fontWeight: 950, opacity: 0.65, color: THEME.creamSoft, letterSpacing: 0.4 }}>Vol</div>
+                          <div className={styles.themeVolumeRow} style={{ opacity: charSongSrc ? 1 : 0.55 }}>
+                            <div className={styles.themeLabel}>Vol</div>
                             <input
-                              className="cb-rng"
+                              className={styles.rng}
                               type="range"
                               min={0}
                               max={1}
@@ -2140,70 +1845,66 @@ export default function CharacterBook({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <div style={darkCard}>
-                    <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Lore</div>
-                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.lore}</div>
+                <div className={styles.rightColStack}>
+                  <div className={styles.darkCard}>
+                    <div className={styles.sectionTitle}>Lore</div>
+                    <div className={styles.sectionBody}>{selectedChar.lore}</div>
                   </div>
 
-                  <div style={darkCard}>
-                    <div style={{ fontSize: 16, fontWeight: 950, marginBottom: 8, color: THEME.creamText }}>Current Goals</div>
-                    <div style={{ opacity: 0.85, lineHeight: 1.65, fontSize: 13, color: THEME.creamSoft }}>{selectedChar.goals}</div>
+                  <div className={styles.darkCard}>
+                    <div className={styles.sectionTitle}>Current Goals</div>
+                    <div className={styles.sectionBody}>{selectedChar.goals}</div>
                   </div>
 
-                  <div style={darkCard}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <div className={styles.darkCard}>
+                    <div className={styles.partyHeader}>
                       <div>
-                        <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Party Relationship Tree</div>
-                        <div style={{ opacity: 0.72, marginTop: 5, fontSize: 12, color: THEME.creamSoft }}>How {selectedChar.name} feels about the party.</div>
+                        <div className={styles.partyTitle}>Party Relationship Tree</div>
+                        <div className={styles.partySubtitle}>How {selectedChar.name} feels about the party.</div>
                       </div>
-                      <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
+                      <button className={styles.goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave}
                         onMouseDown={(e) => { btnDown(e); navClick(); }}
                         onClick={() => { setSelectedNpc(null); setCharView('relations'); }}>
                         View NPCs
                       </button>
                     </div>
 
-                    <div style={divider} />
+                    <div className={styles.divider} />
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div className={styles.partyGrid}>
                       {partyMateNames.length === 0 ? (
-                        <div style={{ opacity: 0.72 }}>No other party members found.</div>
+                        <div className={styles.noPartyText}>No other party members found.</div>
                       ) : partyMateNames.map((otherName) => {
                         const rel = getRelObj(selectedChar.name, otherName);
                         const { score: value, note, editing: isEditing } = rel;
                         return (
-                          <div key={otherName} style={{
-                            padding: 12, borderRadius: 14,
-                            background: 'linear-gradient(180deg, rgba(30,20,10,0.82), rgba(18,12,6,0.90))',
-                            border: `1px solid ${THEME.lineSoft}`,
-                            boxShadow: '0 10px 26px rgba(0,0,0,0.35)',
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                              <div style={{ fontWeight: 950, fontSize: 13, color: THEME.creamText }}>{otherName}</div>
+                          <div key={otherName} className={styles.relationCard}>
+                            <div className={styles.relationTopRow}>
+                              <div className={styles.relationName}>{otherName}</div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <div style={{ fontWeight: 950, color: relTempColor(value), fontSize: 13 }}>{value}</div>
-                                <button style={tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
+                                <div className={styles.relationValue} style={{ color: relTempColor(value) }}>{value}</div>
+                                <button className={styles.tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
                                   onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
                               </div>
                             </div>
 
-                            <input className="cb-rng"
+                            <input className={styles.rng}
                               style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 10 }}
                               type="range" min={0} max={100} value={value}
                               onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
                             />
 
-                            <div style={{ marginTop: 10, opacity: 0.88, lineHeight: 1.45 }}>
+                            <div className={styles.relationNoteWrap} style={{ opacity: 0.88 }}>
                               {isEditing ? (
                                 <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
                                   onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
                                   onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
                                   rows={2}
-                                  style={{ ...inputBase, minHeight: 64, resize: 'vertical', lineHeight: 1.5 }}
+                                  className={styles.inputBase}
+                                  style={{ minHeight: 64, resize: 'vertical', lineHeight: 1.5 }}
                                 />
                               ) : (
-                                <div style={{ opacity: note ? 0.88 : 0.5, fontStyle: note ? 'normal' : 'italic', fontSize: 12, color: THEME.creamSoft }}>
+                                <div className={styles.relationNoteText} style={{ opacity: note ? 0.88 : 0.5, fontStyle: note ? 'normal' : 'italic' }}>
                                   {note || 'No notes yet. Click ✎ to add one.'}
                                 </div>
                               )}
@@ -2220,12 +1921,13 @@ export default function CharacterBook({
             {/* NPC RELATIONS LIST */}
             {charView === 'relations' && selectedChar && (
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ fontSize: 17, fontWeight: 950, color: THEME.creamText }}>{selectedChar.name} — Family & Related NPCs</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <div style={{ opacity: 0.65, fontWeight: 900, fontSize: 12, color: THEME.creamSoft }}>{selectedCharNpcs.length} entries</div>
+                <div className={styles.relationsHeader}>
+                  <div className={styles.relationsTitle}>{selectedChar.name} — Family & Related NPCs</div>
+                  <div className={styles.relationsMeta}>
+                    <div className={styles.relationsCount}>{selectedCharNpcs.length} entries</div>
                     <button
-                      style={{ ...tinyBtn, padding: '7px 12px', opacity: 0.95 }}
+                      className={styles.tinyBtn}
+                      style={{ padding: '7px 12px', opacity: 0.95 }}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -2236,50 +1938,38 @@ export default function CharacterBook({
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className={styles.npcListColumn}>
                   {selectedCharNpcs.map((npc) => (
-                    <div key={npc.id || npc.name} className="cb-npc-hover"
-                      style={{ ...darkCard, cursor: 'pointer', transition: 'all 0.2s ease' }}
+                    <div
+                      key={npc.id || npc.name}
+                      className={`${styles.darkCard} ${styles.npcHover} ${styles.npcCardClickable}`}
                       onMouseDown={navClick}
                       onClick={() => { setSelectedNpc(npc); setCharView('npc'); }}
-                      role="button" tabIndex={0}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 240 }}>
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className={styles.npcCardHeader}>
+                        <div className={styles.npcCardLeft}>
                           {npc.image ? (
                             <img
                               src={npc.image}
                               alt={npc.name || 'NPC'}
-                              style={{
-                                width: 48,
-                                height: 48,
-                                objectFit: 'cover',
-                                borderRadius: 12,
-                                border: `1px solid ${THEME.lineSoft}`,
-                                boxShadow: '0 10px 24px rgba(0,0,0,0.45)',
-                                flex: '0 0 auto',
-                              }}
+                              className={styles.npcThumb48}
                             />
                           ) : (
                             <div
                               aria-hidden
-                              style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: 12,
-                                border: `1px solid ${THEME.lineSoft}`,
-                                background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
-                                boxShadow: '0 10px 24px rgba(0,0,0,0.30)',
-                                flex: '0 0 auto',
-                              }}
+                              className={styles.npcThumb48Empty}
                             />
                           )}
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 950, fontSize: 15, color: THEME.creamText }}>{npc.name}</div>
-                            <div style={{ opacity: 0.75, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft, marginTop: 2 }}>{npc.relation || 'Relation unknown'}</div>
+                          <div className={styles.npcTextWrap}>
+                            <div className={styles.npcName}>{npc.name}</div>
+                            <div className={styles.npcRelationText}>{npc.relation || 'Relation unknown'}</div>
                           </div>
                         </div>
                         <button
-                          style={{ ...tinyBtn, opacity: 0.95 }}
+                          className={styles.tinyBtn}
+                          style={{ opacity: 0.95 }}
                           onMouseEnter={tinyBtnHover}
                           onMouseLeave={tinyBtnLeave}
                           onMouseDown={navClick}
@@ -2291,7 +1981,7 @@ export default function CharacterBook({
                           Edit
                         </button>
                       </div>
-                      <div style={{ marginTop: 8, opacity: 0.85, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>
+                      <div className={styles.npcSummaryText}>
                         {(npc.summary || npc.bio || '').trim() || 'No synopsis yet. Click Edit to add one.'}
                       </div>
                     </div>
@@ -2302,74 +1992,51 @@ export default function CharacterBook({
 
             {/* NPC DETAIL */}
             {charView === 'npc' && selectedChar && activeSelectedNpc && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
-                <div style={lightCard}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: 14, alignItems: 'start' }}>
+              <div className={styles.npcDetailStack}>
+                <div className={styles.lightCard}>
+                  <div className={styles.npcDetailGrid}>
                     {activeSelectedNpc.image ? (
                       <img
                         src={activeSelectedNpc.image}
                         alt={activeSelectedNpc.name || 'NPC'}
-                        style={{
-                          width: 130,
-                          height: 130,
-                          objectFit: 'cover',
-                          borderRadius: 14,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          boxShadow: '0 14px 30px rgba(0,0,0,0.48)',
-                        }}
+                        className={styles.npcDetailThumb130}
                       />
                     ) : (
                       <div
                         aria-hidden
-                        style={{
-                          width: 130,
-                          height: 130,
-                          borderRadius: 14,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
-                          boxShadow: '0 14px 30px rgba(0,0,0,0.32)',
-                        }}
+                        className={styles.npcDetailThumb130Empty}
                       />
                     )}
                     <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
-                        <div style={{ fontSize: 19, fontWeight: 950, color: THEME.creamText }}>{activeSelectedNpc.name}</div>
-                        <div style={{ opacity: 0.72, fontWeight: 900, fontStyle: 'italic', color: THEME.creamSoft }}>
+                      <div className={styles.npcDetailTopRow}>
+                        <div className={styles.npcDetailName}>{activeSelectedNpc.name}</div>
+                        <div className={styles.npcDetailRelation}>
                           {(activeSelectedNpc.relation || 'Relation unknown')} of {selectedChar.name}
                         </div>
                       </div>
-                      <div style={divider} />
-                      <div style={{ opacity: 0.90, lineHeight: 1.65, fontSize: 13.5, color: THEME.creamSoft }}>
+                      <div className={styles.divider} />
+                      <div className={styles.npcDetailSummary}>
                         {(activeSelectedNpc.summary || activeSelectedNpc.bio || '').trim() || 'No synopsis yet.'}
                       </div>
-                      <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr', gap: 4, lineHeight: 1.55, fontSize: 13, color: THEME.creamSoft }}>
-                        <div><strong style={{ color: THEME.creamText }}>Age:</strong> {(activeSelectedNpc.age || '').trim() || 'Unknown'}</div>
-                        <div><strong style={{ color: THEME.creamText }}>Faction:</strong> {(activeSelectedNpc.faction || '').trim() || 'Unknown'}</div>
-                        <div><strong style={{ color: THEME.creamText }}>Occupation:</strong> {(activeSelectedNpc.occupation || '').trim() || 'Unknown'}</div>
+                      <div className={styles.npcDetailFacts}>
+                        <div><strong className={styles.npcDetailFactStrong}>Age:</strong> {(activeSelectedNpc.age || '').trim() || 'Unknown'}</div>
+                        <div><strong className={styles.npcDetailFactStrong}>Faction:</strong> {(activeSelectedNpc.faction || '').trim() || 'Unknown'}</div>
+                        <div><strong className={styles.npcDetailFactStrong}>Occupation:</strong> {(activeSelectedNpc.occupation || '').trim() || 'Unknown'}</div>
                       </div>
-                      <div
-                        style={{
-                          marginTop: 12,
-                          borderRadius: 12,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: 'linear-gradient(180deg, rgba(16,11,7,0.50), rgba(8,6,4,0.36))',
-                          boxShadow: 'inset 0 1px 0 rgba(255,240,200,0.06)',
-                          padding: '10px 12px',
-                        }}
-                      >
-                        <div style={{ fontSize: 11, letterSpacing: 0.35, fontWeight: 900, color: THEME.creamSoft, opacity: 0.74 }}>
+                      <div className={styles.npcLoreCard}>
+                        <div className={styles.npcLoreLabel}>
                           Lore
                         </div>
-                        <div style={{ marginTop: 6, opacity: 0.92, lineHeight: 1.62, fontSize: 13, color: THEME.creamSoft, whiteSpace: 'pre-wrap' }}>
+                        <div className={styles.npcLoreBody}>
                           {(activeSelectedNpc.bio && activeSelectedNpc.bio.trim() ? activeSelectedNpc.bio : 'No lore yet.')}
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 18 }}>
+                  <div className={styles.npcDetailActions}>
                     <button
-                      style={goldBtn}
+                      className={styles.goldBtn}
                       onMouseEnter={btnHover}
                       onMouseLeave={btnLeave}
                       onMouseDown={(e) => { btnDown(e); navClick(); }}
@@ -2432,7 +2099,8 @@ export default function CharacterBook({
                   </div>
                 </div>
                 <button
-                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  className={styles.backButton}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={btnDown}
@@ -2444,7 +2112,7 @@ export default function CharacterBook({
 
               <div style={{ padding: 16, overflowY: 'auto' }}>
                 {connectionWeb.nodes.length === 0 ? (
-                  <div style={{ ...darkCard, lineHeight: 1.6, color: THEME.creamSoft }}>
+                  <div className={styles.darkCard} style={{ lineHeight: 1.6, color: THEME.creamSoft }}>
                     Add NPCs and links to build your relationship web.
                   </div>
                 ) : (
@@ -2549,7 +2217,8 @@ export default function CharacterBook({
                   <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 2 }}>{selectedChar?.name || 'Character'} codex entry</div>
                 </div>
                 <button
-                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  className={styles.backButton}
+                  style={{ padding: '8px 14px', fontSize: 12 }}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={btnDown}
@@ -2591,18 +2260,20 @@ export default function CharacterBook({
                     )}
                   </div>
                   <div>
-                    <div style={fieldLabel}>Thumbnail Image (optional)</div>
+                    <div className={styles.fieldLabel}>Thumbnail Image (optional)</div>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                       <input
                         type="file"
                         accept="image/*"
                         onChange={(e) => onCharNpcImagePick(e.target.files && e.target.files[0])}
-                        style={{ ...inputBase, padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                        className={styles.inputBase}
+                        style={{ padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
                       />
                       {charNpcDraft.image && (
                         <button
                           type="button"
-                          style={{ ...tinyBtn, opacity: 0.95 }}
+                          className={styles.tinyBtn}
+                          style={{ opacity: 0.95 }}
                           onMouseEnter={tinyBtnHover}
                           onMouseLeave={tinyBtnLeave}
                           onClick={() => setCharNpcDraft((d) => ({ ...d, image: '' }))}
@@ -2615,70 +2286,73 @@ export default function CharacterBook({
                 </div>
 
                 <div>
-                  <div style={fieldLabel}>Name</div>
+                  <div className={styles.fieldLabel}>Name</div>
                   <input
                     value={charNpcDraft.name}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, name: e.target.value }))}
                     placeholder="e.g. Captain Rell"
-                    style={{ ...inputBase, fontWeight: 900 }}
+                    className={styles.inputBase}
+                    style={{ fontWeight: 900 }}
                   />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Relation</div>
+                  <div className={styles.fieldLabel}>Relation</div>
                   <input
                     value={charNpcDraft.relation}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, relation: e.target.value }))}
                     placeholder="e.g. Mentor, Parent, Patron"
-                    style={inputBase}
+                    className={styles.inputBase}
                   />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Age</div>
+                  <div className={styles.fieldLabel}>Age</div>
                   <input
                     value={charNpcDraft.age}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, age: e.target.value }))}
                     placeholder="e.g. 42"
-                    style={inputBase}
+                    className={styles.inputBase}
                   />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Faction</div>
+                  <div className={styles.fieldLabel}>Faction</div>
                   <input
                     value={charNpcDraft.faction}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, faction: e.target.value }))}
                     placeholder="e.g. Church of Amiras"
-                    style={inputBase}
+                    className={styles.inputBase}
                   />
                 </div>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Occupation</div>
+                  <div className={styles.fieldLabel}>Occupation</div>
                   <input
                     value={charNpcDraft.occupation}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, occupation: e.target.value }))}
                     placeholder="e.g. Captain, Scholar, Merchant"
-                    style={inputBase}
+                    className={styles.inputBase}
                   />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Quick Synopsis (shown on cards)</div>
+                  <div className={styles.fieldLabel}>Quick Synopsis (shown on cards)</div>
                   <textarea
                     value={charNpcDraft.summary}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, summary: e.target.value }))}
                     placeholder="One to two lines for quick reference."
                     rows={3}
-                    style={{ ...inputBase, resize: 'vertical', minHeight: 84, lineHeight: 1.5 }}
+                    className={styles.inputBase}
+                    style={{ resize: 'vertical', minHeight: 84, lineHeight: 1.5 }}
                   />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Lore</div>
+                  <div className={styles.fieldLabel}>Lore</div>
                   <textarea
                     value={charNpcDraft.bio}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, bio: e.target.value }))}
                     placeholder="Long-form lore, history, hooks, secrets..."
                     rows={6}
-                    style={{ ...inputBase, resize: 'vertical', minHeight: 140, lineHeight: 1.5 }}
+                    className={styles.inputBase}
+                    style={{ resize: 'vertical', minHeight: 140, lineHeight: 1.5 }}
                   />
                 </div>
               </div>
@@ -2687,7 +2361,7 @@ export default function CharacterBook({
                 <div>
                   {editingCharNpcId && (
                     <button
-                      style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                      className={styles.backButton}
                       onMouseEnter={btnHover}
                       onMouseLeave={btnLeave}
                       onMouseDown={btnDown}
@@ -2699,7 +2373,7 @@ export default function CharacterBook({
                 </div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button
-                    style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                    className={styles.backButton}
                     onMouseEnter={btnHover}
                     onMouseLeave={btnLeave}
                     onMouseDown={btnDown}
@@ -2708,7 +2382,7 @@ export default function CharacterBook({
                     Cancel
                   </button>
                   <button
-                    style={goldBtn}
+                    className={styles.goldBtn}
                     onMouseEnter={btnHover}
                     onMouseLeave={btnLeave}
                     onMouseDown={btnDown}
@@ -2747,7 +2421,7 @@ export default function CharacterBook({
             }}>
               <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
                 <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
-                <button style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                <button className={styles.backButton} style={{ padding: '8px 14px', fontSize: 12 }}
                   onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
                   onClick={() => setWorldNpcModalOpen(false)}>
                   Close
@@ -2777,52 +2451,55 @@ export default function CharacterBook({
               )}
               <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Name</div>
+                  <div className={styles.fieldLabel}>Name</div>
                   <input value={worldNpcDraft.name} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder="e.g. Captain Rell" style={{ ...inputBase, fontWeight: 900 }} />
+                    placeholder="e.g. Captain Rell" className={styles.inputBase} style={{ fontWeight: 900 }} />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Age</div>
+                  <div className={styles.fieldLabel}>Age</div>
                   <input value={worldNpcDraft.age} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, age: e.target.value }))}
-                    placeholder="e.g. 42" style={inputBase} />
+                    placeholder="e.g. 42" className={styles.inputBase} />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Faction</div>
+                  <div className={styles.fieldLabel}>Faction</div>
                   <input value={worldNpcDraft.faction} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, faction: e.target.value }))}
-                    placeholder="e.g. Church of Amiras" style={inputBase} />
+                    placeholder="e.g. Church of Amiras" className={styles.inputBase} />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Occupation</div>
+                  <div className={styles.fieldLabel}>Occupation</div>
                   <input value={worldNpcDraft.occupation} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, occupation: e.target.value }))}
-                    placeholder="e.g. Captain, Scholar, Merchant" style={inputBase} />
+                    placeholder="e.g. Captain, Scholar, Merchant" className={styles.inputBase} />
                 </div>
                 <div>
-                  <div style={fieldLabel}>Location</div>
+                  <div className={styles.fieldLabel}>Location</div>
                   <input value={worldNpcDraft.location} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, location: e.target.value }))}
-                    placeholder="e.g. Avalon" style={inputBase} />
+                    placeholder="e.g. Avalon" className={styles.inputBase} />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Quick Synopsis</div>
+                  <div className={styles.fieldLabel}>Quick Synopsis</div>
                   <textarea value={worldNpcDraft.summary} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, summary: e.target.value }))}
                     placeholder="One or two lines used for quick cards and previews."
                     rows={3}
-                    style={{ ...inputBase, resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} />
+                    className={styles.inputBase}
+                    style={{ resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Image (optional)</div>
+                  <div className={styles.fieldLabel}>Image (optional)</div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={(e) => onWorldNpcImagePick(e.target.files && e.target.files[0])}
-                      style={{ ...inputBase, padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                      className={styles.inputBase}
+                      style={{ padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
                     />
                     {worldNpcDraft.image && (
                       <button
                         type="button"
-                        style={{ ...tinyBtn, opacity: 0.95 }}
+                        className={styles.tinyBtn}
+                        style={{ opacity: 0.95 }}
                         onMouseEnter={tinyBtnHover}
                         onMouseLeave={tinyBtnLeave}
                         onClick={() => setWorldNpcDraft((d) => ({ ...d, image: '' }))}
@@ -2835,15 +2512,16 @@ export default function CharacterBook({
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={fieldLabel}>Lore</div>
+                  <div className={styles.fieldLabel}>Lore</div>
                   <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
                     placeholder="Long-form lore, history, hooks, secrets…" rows={5}
-                    style={{ ...inputBase, resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
+                    className={styles.inputBase}
+                    style={{ resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                    <div style={fieldLabel}>Related Characters</div>
+                    <div className={styles.fieldLabel}>Related Characters</div>
                     <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
                       {(worldNpcDraft.characterLinks || []).length} linked
                     </div>
@@ -2852,7 +2530,8 @@ export default function CharacterBook({
                     value={worldNpcCharSearch}
                     onChange={(e) => setWorldNpcCharSearch(e.target.value)}
                     placeholder="Find character..."
-                    style={{ ...inputBase, marginTop: 6, fontSize: 12 }}
+                    className={styles.inputBase}
+                    style={{ marginTop: 6, fontSize: 12 }}
                   />
                   <div
                     style={{
@@ -2930,7 +2609,8 @@ export default function CharacterBook({
                             value={link?.relation || ''}
                             onChange={(e) => setWorldNpcCharacterRelation(link.characterName, e.target.value)}
                             placeholder="Relation (e.g. Mentor)"
-                            style={{ ...inputBase, fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                            className={styles.inputBase}
+                            style={{ fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
                           />
                         </div>
                       ))}
@@ -2940,7 +2620,7 @@ export default function CharacterBook({
 
                 <div style={{ gridColumn: '1 / -1' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                    <div style={fieldLabel}>Connected NPCs</div>
+                    <div className={styles.fieldLabel}>Connected NPCs</div>
                     <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
                       {(worldNpcDraft.links || []).length} linked
                     </div>
@@ -2955,7 +2635,8 @@ export default function CharacterBook({
                         value={worldNpcConnectionSearch}
                         onChange={(e) => setWorldNpcConnectionSearch(e.target.value)}
                         placeholder="Find world NPC..."
-                        style={{ ...inputBase, marginTop: 6, fontSize: 12 }}
+                        className={styles.inputBase}
+                        style={{ marginTop: 6, fontSize: 12 }}
                       />
                       <div
                         style={{
@@ -3036,7 +2717,8 @@ export default function CharacterBook({
                             value={link?.note || ''}
                             onChange={(e) => setWorldNpcConnectionNote(link.targetId, e.target.value)}
                             placeholder="Connection note (optional)"
-                            style={{ ...inputBase, fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                            className={styles.inputBase}
+                            style={{ fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
                           />
                         </div>
                       ))}
@@ -3047,13 +2729,13 @@ export default function CharacterBook({
 
               <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
                 {editingWorldNpcId && (
-                  <button style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                  <button className={styles.backButton}
                     onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
                     onClick={() => { setWorldNpcModalOpen(false); setEditingWorldNpcId(null); }}>
                     Cancel
                   </button>
                 )}
-                <button style={goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={saveWorldNpc}>
+                <button className={styles.goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={saveWorldNpc}>
                   {editingWorldNpcId ? 'Save Changes' : 'Add NPC'}
                 </button>
               </div>
@@ -3090,7 +2772,8 @@ export default function CharacterBook({
                     <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
                       <div style={{ fontSize: 16, fontWeight: 950 }}>Crop Image</div>
                       <button
-                        style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                        className={styles.backButton}
+                        style={{ padding: '8px 14px', fontSize: 12 }}
                         onMouseEnter={btnHover}
                         onMouseLeave={btnLeave}
                         onMouseDown={(e) => { btnDown(e); navClick(); }}
@@ -3196,10 +2879,10 @@ export default function CharacterBook({
                       </div>
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div style={{ ...darkCard, padding: 14 }}>
+                        <div className={styles.darkCard} style={{ padding: 14 }}>
                           <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.8, marginBottom: 8 }}>Zoom</div>
                           <input
-                            className="cb-rng"
+                            className={styles.rng}
                             type="range"
                             min={1}
                             max={2.5}
@@ -3217,7 +2900,7 @@ export default function CharacterBook({
 
                         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                           <button
-                            style={{ ...backButton, padding: '10px 16px', fontSize: 13 }}
+                            className={styles.backButton}
                             onMouseEnter={btnHover}
                             onMouseLeave={btnLeave}
                             onMouseDown={(e) => { btnDown(e); navClick(); }}
@@ -3226,7 +2909,7 @@ export default function CharacterBook({
                             Cancel
                           </button>
                           <button
-                            style={goldBtn}
+                            className={styles.goldBtn}
                             onMouseEnter={btnHover}
                             onMouseLeave={btnLeave}
                             onMouseDown={(e) => { btnDown(e); navClick(); }}
@@ -3258,4 +2941,5 @@ export default function CharacterBook({
     </ShellLayout>
   );
 }
+
 
