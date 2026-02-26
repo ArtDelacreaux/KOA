@@ -1420,25 +1420,7 @@ export default function CharacterBook({
               {(charView === 'worldnpcs' || showProfileTab) && (
                 <button
                   type="button"
-                  style={{
-                    ...tabButtonStyle(charView !== 'worldnpcs'),
-                    padding: '10px 14px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    letterSpacing: '0.16em',
-                    fontWeight: 900,
-                    fontFamily: fontStack,
-                    cursor: 'pointer',
-                    border: charView !== 'worldnpcs'
-                      ? '1px solid rgba(255,220,160,0.35)'
-                      : '1px solid rgba(255,220,160,0.18)',
-                    background: charView !== 'worldnpcs'
-                      ? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
-                      : 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
-                    color: 'rgba(255,245,220,0.92)',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
-                    transition: 'all 150ms ease',
-                  }}
+                  className={`${styles.tabPill} ${charView !== 'worldnpcs' ? styles.tabPillActive : styles.tabPillInactive}`}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={navClick}
@@ -1472,25 +1454,7 @@ export default function CharacterBook({
               {!showProfileTab && charView !== 'worldnpcs' && (
                 <button
                   type="button"
-                  style={{
-                    ...tabButtonStyle(charView === 'worldnpcs'),
-                    padding: '10px 14px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    letterSpacing: '0.16em',
-                    fontWeight: 900,
-                    fontFamily: fontStack,
-                    cursor: 'pointer',
-                    border: charView !== 'worldnpcs'
-                      ? '1px solid rgba(255,220,160,0.35)'
-                      : '1px solid rgba(255,220,160,0.18)',
-                    background: charView !== 'worldnpcs'
-                      ? 'linear-gradient(180deg, rgba(8,5,2,0.88), rgba(8,5,2,0.72))'
-                      : 'linear-gradient(180deg, rgba(8,5,2,0.75), rgba(8,5,2,0.60))',
-                    color: 'rgba(255,245,220,0.92)',
-                    boxShadow: '0 12px 30px rgba(0,0,0,0.45)',
-                    transition: 'all 150ms ease',
-                  }}
+                  className={`${styles.tabPill} ${charView !== 'worldnpcs' ? styles.tabPillActive : styles.tabPillInactive}`}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={navClick}
@@ -1504,15 +1468,7 @@ export default function CharacterBook({
                 <button
                   type="button"
                   disabled={!charSongSrc}
-                  className={styles.tinyBtn}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: 999,
-                    opacity: charSongSrc ? 1 : 0.45,
-                    cursor: charSongSrc ? 'pointer' : 'not-allowed',
-                    fontSize: 12,
-                    letterSpacing: '0.08em',
-                  }}
+                  className={`${styles.tinyBtn} ${styles.themeTinyPill}`}
                   onMouseEnter={(e) => { if (charSongSrc) tinyBtnHover(e); }}
                   onMouseLeave={(e) => { if (charSongSrc) tinyBtnLeave(e); }}
                   onMouseDown={(e) => { if (charSongSrc) navClick(e); }}
@@ -1557,8 +1513,7 @@ export default function CharacterBook({
                   </div>
                   <div className={styles.worldNpcActions}>
                     <button
-                      className={styles.tinyBtn}
-                      style={{ padding: '10px 14px', opacity: 0.95 }}
+                      className={`${styles.tinyBtn} ${styles.worldNpcActionBtn}`}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1567,8 +1522,7 @@ export default function CharacterBook({
                       Connection Web
                     </button>
                     <button
-                      className={styles.tinyBtn}
-                      style={{ padding: '10px 14px', opacity: 0.95 }}
+                      className={`${styles.tinyBtn} ${styles.worldNpcActionBtn}`}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1603,7 +1557,7 @@ export default function CharacterBook({
 
                 <div className={styles.worldNpcRangeRow}>
                   <div className={styles.worldNpcRangeText}>
-                    {worldNpcRangeLabel} <strong style={{ color: THEME.creamText }}>filtered</strong> (total <strong style={{ color: THEME.creamText }}>{(worldNpcs || []).length}</strong>)
+                    {worldNpcRangeLabel} <strong className={styles.textCreamStrong}>filtered</strong> (total <strong className={styles.textCreamStrong}>{(worldNpcs || []).length}</strong>)
                   </div>
                   <div className={styles.worldNpcControls}>
                     <button
@@ -1618,8 +1572,7 @@ export default function CharacterBook({
                     {worldNpcListMode === 'paged' && filteredWorldNpcs.length > WORLD_NPC_PAGE_SIZE && (
                       <>
                         <button
-                          className={styles.worldNpcControlBtn}
-                          style={{ opacity: worldNpcPage > 1 ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage > 1 ? 'pointer' : 'not-allowed' }}
+                          className={`${styles.worldNpcControlBtn} ${styles.worldNpcControlBtnCompact}`}
                           disabled={worldNpcPage <= 1}
                           onMouseEnter={(e) => { if (worldNpcPage > 1) tinyBtnHover(e); }}
                           onMouseLeave={(e) => { if (worldNpcPage > 1) tinyBtnLeave(e); }}
@@ -1632,8 +1585,7 @@ export default function CharacterBook({
                           Page {worldNpcPage}/{worldNpcTotalPages}
                         </div>
                         <button
-                          className={styles.worldNpcControlBtn}
-                          style={{ opacity: worldNpcPage < worldNpcTotalPages ? 1 : 0.55, padding: '7px 10px', cursor: worldNpcPage < worldNpcTotalPages ? 'pointer' : 'not-allowed' }}
+                          className={`${styles.worldNpcControlBtn} ${styles.worldNpcControlBtnCompact}`}
                           disabled={worldNpcPage >= worldNpcTotalPages}
                           onMouseEnter={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnHover(e); }}
                           onMouseLeave={(e) => { if (worldNpcPage < worldNpcTotalPages) tinyBtnLeave(e); }}
@@ -1698,10 +1650,10 @@ export default function CharacterBook({
                               <div className={styles.npcName}>{n.name}</div>
                             </div>
                             <div className={styles.npcMetaRow}>
-                              <span className={styles.npcMetaText} style={{ color: (n.faction || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                              <span className={`${styles.npcMetaText} ${(n.faction || '').trim() ? styles.textCreamSoft : styles.textCreamMuted38}`}>
                                 Faction: {(n.faction || '').trim() || '—'}
                               </span>
-                              <span className={styles.npcMetaText} style={{ color: (n.location || '').trim() ? THEME.creamSoft : 'rgba(255,245,220,0.38)' }}>
+                              <span className={`${styles.npcMetaText} ${(n.location || '').trim() ? styles.textCreamSoft : styles.textCreamMuted38}`}>
                                 Location: {(n.location || '').trim() || '—'}
                               </span>
                             </div>
@@ -1714,10 +1666,10 @@ export default function CharacterBook({
                           )}
 
                           <div className={styles.npcLinksRow}>
-                            <span className={styles.npcLinksText} style={{ color: linkedChars.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                            <span className={`${styles.npcLinksText} ${linkedChars.length ? styles.textCreamSoft : styles.textCreamMuted42}`}>
                               Linked Characters: {linkedChars.length ? linkedChars.join(', ') : 'None'}
                             </span>
-                            <span className={styles.npcLinksText} style={{ color: connectedNames.length ? THEME.creamSoft : 'rgba(255,245,220,0.42)' }}>
+                            <span className={`${styles.npcLinksText} ${connectedNames.length ? styles.textCreamSoft : styles.textCreamMuted42}`}>
                               Connected NPCs: {connectedNames.length ? connectedNames.join(', ') : 'None'}
                             </span>
                           </div>
@@ -1783,12 +1735,7 @@ export default function CharacterBook({
 
                             <button
                               disabled={!charSongSrc}
-                              className={styles.tinyBtn}
-                              style={{
-                                padding: '8px 12px',
-                                opacity: charSongSrc ? 1 : 0.45,
-                                cursor: charSongSrc ? 'pointer' : 'not-allowed',
-                              }}
+                              className={`${styles.tinyBtn} ${styles.themePlayBtn}`}
                               onMouseEnter={(e) => { if (charSongSrc) tinyBtnHover(e); }}
                               onMouseLeave={(e) => { if (charSongSrc) tinyBtnLeave(e); }}
                               onMouseDown={(e) => { if (charSongSrc) navClick(e); }}
@@ -1821,7 +1768,7 @@ export default function CharacterBook({
                             }}
                           />
 
-                          <div className={styles.themeVolumeRow} style={{ opacity: charSongSrc ? 1 : 0.55 }}>
+                          <div className={`${styles.themeVolumeRow} ${charSongSrc ? '' : styles.themeVolumeRowMuted}`}>
                             <div className={styles.themeLabel}>Vol</div>
                             <input
                               className={styles.rng}
@@ -1881,7 +1828,7 @@ export default function CharacterBook({
                           <div key={otherName} className={styles.relationCard}>
                             <div className={styles.relationTopRow}>
                               <div className={styles.relationName}>{otherName}</div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div className={styles.relationValueRow}>
                                 <div className={styles.relationValue} style={{ color: relTempColor(value) }}>{value}</div>
                                 <button className={styles.tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
                                   onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
@@ -1894,17 +1841,16 @@ export default function CharacterBook({
                               onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
                             />
 
-                            <div className={styles.relationNoteWrap} style={{ opacity: 0.88 }}>
+                            <div className={`${styles.relationNoteWrap} ${styles.relationNoteWrapSoft}`}>
                               {isEditing ? (
                                 <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
                                   onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
                                   onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
                                   rows={2}
-                                  className={styles.inputBase}
-                                  style={{ minHeight: 64, resize: 'vertical', lineHeight: 1.5 }}
+                                  className={`${styles.inputBase} ${styles.relationTextarea}`}
                                 />
                               ) : (
-                                <div className={styles.relationNoteText} style={{ opacity: note ? 0.88 : 0.5, fontStyle: note ? 'normal' : 'italic' }}>
+                                <div className={`${styles.relationNoteText} ${note ? styles.relationNoteTextHas : styles.relationNoteTextEmpty}`}>
                                   {note || 'No notes yet. Click ✎ to add one.'}
                                 </div>
                               )}
@@ -1926,8 +1872,7 @@ export default function CharacterBook({
                   <div className={styles.relationsMeta}>
                     <div className={styles.relationsCount}>{selectedCharNpcs.length} entries</div>
                     <button
-                      className={styles.tinyBtn}
-                      style={{ padding: '7px 12px', opacity: 0.95 }}
+                      className={`${styles.tinyBtn} ${styles.tinyBtnWide}`}
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
@@ -1968,8 +1913,7 @@ export default function CharacterBook({
                           </div>
                         </div>
                         <button
-                          className={styles.tinyBtn}
-                          style={{ opacity: 0.95 }}
+                          className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
                           onMouseEnter={tinyBtnHover}
                           onMouseLeave={tinyBtnLeave}
                           onMouseDown={navClick}
@@ -2054,53 +1998,19 @@ export default function CharacterBook({
         {/* CONNECTION WEB MODAL */}
         {connectionWebModalOpen && (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 31,
-              background: 'rgba(0,0,0,0.72)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-              backdropFilter: 'blur(4px)',
-            }}
+            className={`${styles.modalOverlay} ${styles.modalZ31}`}
             onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectionWebModalOpen(false); }}
           >
-            <div
-              style={{
-                width: 'min(1120px, 98vw)',
-                borderRadius: 22,
-                background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-                boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-                border: `1px solid ${THEME.line}`,
-                color: THEME.creamText,
-                fontFamily: fontStack,
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                maxHeight: 'min(860px, 92vh)',
-              }}
-            >
-              <div
-                style={{
-                  padding: '14px 18px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 10,
-                  borderBottom: `1px solid ${THEME.lineSoft}`,
-                }}
-              >
+            <div className={`${styles.modalShell} ${styles.modalShellConn}`}>
+              <div className={styles.modalHeader}>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 950 }}>Connection Web</div>
-                  <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 2 }}>
+                  <div className={styles.connTitle}>Connection Web</div>
+                  <div className={styles.connSubtitle}>
                     Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
                   </div>
                 </div>
                 <button
-                  className={styles.backButton}
-                  style={{ padding: '8px 14px', fontSize: 12 }}
+                  className={`${styles.backButton} ${styles.backButtonSm}`}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={btnDown}
@@ -2110,23 +2020,14 @@ export default function CharacterBook({
                 </button>
               </div>
 
-              <div style={{ padding: 16, overflowY: 'auto' }}>
+              <div className={styles.modalBodyPad}>
                 {connectionWeb.nodes.length === 0 ? (
-                  <div className={styles.darkCard} style={{ lineHeight: 1.6, color: THEME.creamSoft }}>
+                  <div className={`${styles.darkCard} ${styles.darkCardInfo}`}>
                     Add NPCs and links to build your relationship web.
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      position: 'relative',
-                      height: 'min(72vh, 620px)',
-                      borderRadius: 14,
-                      border: `1px solid ${THEME.lineSoft}`,
-                      background: 'linear-gradient(180deg, rgba(8,6,4,0.56), rgba(8,6,4,0.30))',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                  <div className={styles.connCanvas}>
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className={styles.connSvg}>
                       {connectionWeb.edges.map((edge, idx) => {
                         if (!edge.d) return null;
                         return (
@@ -2148,28 +2049,14 @@ export default function CharacterBook({
                       <div
                         key={node.id}
                         title={node.label}
+                        className={styles.connNode}
                         style={{
-                          position: 'absolute',
                           left: `${node.x}%`,
                           top: `${node.y}%`,
-                          transform: 'translate(-50%, -50%)',
-                          minWidth: 66,
-                          maxWidth: 118,
-                          padding: '5px 8px',
-                          borderRadius: 999,
                           border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
                           background: node.type === 'character'
                             ? 'linear-gradient(180deg, rgba(26,44,72,0.90), rgba(14,26,44,0.92))'
                             : 'linear-gradient(180deg, rgba(42,28,14,0.90), rgba(20,14,8,0.92))',
-                          boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
-                          color: THEME.creamText,
-                          fontSize: 11,
-                          fontWeight: 900,
-                          letterSpacing: 0.2,
-                          textAlign: 'center',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
                         }}
                       >
                         {node.label}
@@ -2185,40 +2072,17 @@ export default function CharacterBook({
         {/* CHARACTER NPC MODAL */}
         {charNpcModalOpen && (
           <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 32,
-              background: 'rgba(0,0,0,0.72)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-              backdropFilter: 'blur(4px)',
-            }}
+            className={`${styles.modalOverlay} ${styles.modalZ32}`}
             onMouseDown={(e) => { if (e.target === e.currentTarget) closeCharNpcModal(); }}
           >
-            <div style={{
-              width: 'min(720px, 96vw)',
-              borderRadius: 22,
-              background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-              boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-              border: `1px solid ${THEME.line}`,
-              color: THEME.creamText,
-              fontFamily: fontStack,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              maxHeight: 'min(660px, 88vh)',
-            }}>
-              <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
+            <div className={`${styles.modalShell} ${styles.modalShellChar}`}>
+              <div className={styles.modalHeader}>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 950 }}>{editingCharNpcId ? 'Edit Related NPC' : 'Add Related NPC'}</div>
-                  <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 2 }}>{selectedChar?.name || 'Character'} codex entry</div>
+                  <div className={styles.modalTitle17}>{editingCharNpcId ? 'Edit Related NPC' : 'Add Related NPC'}</div>
+                  <div className={styles.modalSub11}>{selectedChar?.name || 'Character'} codex entry</div>
                 </div>
                 <button
-                  className={styles.backButton}
-                  style={{ padding: '8px 14px', fontSize: 12 }}
+                  className={`${styles.backButton} ${styles.backButtonSm}`}
                   onMouseEnter={btnHover}
                   onMouseLeave={btnLeave}
                   onMouseDown={btnDown}
@@ -2228,52 +2092,35 @@ export default function CharacterBook({
                 </button>
               </div>
 
-              <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
-                <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '110px 1fr', gap: 12, alignItems: 'center' }}>
+              <div className={styles.modalFormGrid}>
+                <div className={styles.modalMediaRow}>
                   <div>
                     {charNpcDraft.image ? (
                       <img
                         src={charNpcDraft.image}
                         alt="NPC"
-                        style={{
-                          width: 110,
-                          height: 110,
-                          objectFit: 'cover',
-                          borderRadius: 14,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
-                          display: 'block',
-                        }}
+                        className={styles.thumb110}
                       />
                     ) : (
                       <div
                         aria-hidden
-                        style={{
-                          width: 110,
-                          height: 110,
-                          borderRadius: 14,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: 'linear-gradient(180deg, rgba(30,20,10,0.72), rgba(18,12,6,0.82))',
-                          boxShadow: '0 12px 28px rgba(0,0,0,0.32)',
-                        }}
+                        className={styles.thumb110Empty}
                       />
                     )}
                   </div>
                   <div>
                     <div className={styles.fieldLabel}>Thumbnail Image (optional)</div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className={styles.inlineWrap}>
                       <input
                         type="file"
                         accept="image/*"
                         onChange={(e) => onCharNpcImagePick(e.target.files && e.target.files[0])}
-                        className={styles.inputBase}
-                        style={{ padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                        className={`${styles.inputBase} ${styles.fileInput}`}
                       />
                       {charNpcDraft.image && (
                         <button
                           type="button"
-                          className={styles.tinyBtn}
-                          style={{ opacity: 0.95 }}
+                          className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
                           onMouseEnter={tinyBtnHover}
                           onMouseLeave={tinyBtnLeave}
                           onClick={() => setCharNpcDraft((d) => ({ ...d, image: '' }))}
@@ -2291,8 +2138,7 @@ export default function CharacterBook({
                     value={charNpcDraft.name}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, name: e.target.value }))}
                     placeholder="e.g. Captain Rell"
-                    className={styles.inputBase}
-                    style={{ fontWeight: 900 }}
+                    className={`${styles.inputBase} ${styles.inputStrong}`}
                   />
                 </div>
                 <div>
@@ -2322,7 +2168,7 @@ export default function CharacterBook({
                     className={styles.inputBase}
                   />
                 </div>
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Occupation</div>
                   <input
                     value={charNpcDraft.occupation}
@@ -2332,32 +2178,30 @@ export default function CharacterBook({
                   />
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Quick Synopsis (shown on cards)</div>
                   <textarea
                     value={charNpcDraft.summary}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, summary: e.target.value }))}
                     placeholder="One to two lines for quick reference."
                     rows={3}
-                    className={styles.inputBase}
-                    style={{ resize: 'vertical', minHeight: 84, lineHeight: 1.5 }}
+                    className={`${styles.inputBase} ${styles.textareaSummary}`}
                   />
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Lore</div>
                   <textarea
                     value={charNpcDraft.bio}
                     onChange={(e) => setCharNpcDraft((d) => ({ ...d, bio: e.target.value }))}
                     placeholder="Long-form lore, history, hooks, secrets..."
                     rows={6}
-                    className={styles.inputBase}
-                    style={{ resize: 'vertical', minHeight: 140, lineHeight: 1.5 }}
+                    className={`${styles.inputBase} ${styles.textareaLore}`}
                   />
                 </div>
               </div>
 
-              <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'space-between', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
+              <div className={`${styles.modalFooter} ${styles.modalFooterBetween}`}>
                 <div>
                   {editingCharNpcId && (
                     <button
@@ -2371,7 +2215,7 @@ export default function CharacterBook({
                     </button>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
+                <div className={styles.actionsRow}>
                   <button
                     className={styles.backButton}
                     onMouseEnter={btnHover}
@@ -2399,61 +2243,32 @@ export default function CharacterBook({
         {/* WORLD NPC MODAL */}
         {worldNpcModalOpen && (
           <div
-            style={{
-              position: 'absolute', inset: 0, zIndex: 30,
-              background: 'rgba(0,0,0,0.70)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-              backdropFilter: 'blur(4px)',
-            }}
+            className={`${styles.modalOverlay} ${styles.modalOverlaySoft} ${styles.modalZ30}`}
             onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcModalOpen(false); }}
           >
-            <div style={{
-              width: 'min(760px, 96vw)',
-              borderRadius: 22,
-              background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-              boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-              border: `1px solid ${THEME.line}`,
-              color: THEME.creamText,
-              fontFamily: fontStack,
-              overflow: 'hidden',
-              display: 'flex', flexDirection: 'column',
-              maxHeight: 'min(760px, 90vh)',
-            }}>
-              <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
-                <div style={{ fontSize: 17, fontWeight: 950 }}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
-                <button className={styles.backButton} style={{ padding: '8px 14px', fontSize: 12 }}
+            <div className={`${styles.modalShell} ${styles.modalShellWorld}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle17}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
+                <button className={`${styles.backButton} ${styles.backButtonSm}`}
                   onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
                   onClick={() => setWorldNpcModalOpen(false)}>
                   Close
                 </button>
               </div>
               {worldNpcDraft.image && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    paddingLeft: 20, // 👈 move it slightly right
-                  }}
-                >
+                <div className={styles.worldImagePreviewWrap}>
                   <img
                     src={worldNpcDraft.image}
                     alt="NPC"
-                    style={{
-                      width: 110,
-                      height: 110,
-                      objectFit: 'cover',
-                      borderRadius: 14,
-                      border: `1px solid ${THEME.lineSoft}`,
-                      boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
-                      display: 'block',
-                    }}
+                    className={styles.thumb110}
                   />
                 </div>
               )}
-              <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, alignContent: 'start', overflowY: 'auto' }}>
-                <div style={{ gridColumn: '1 / -1' }}>
+              <div className={styles.modalFormGrid}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Name</div>
                   <input value={worldNpcDraft.name} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder="e.g. Captain Rell" className={styles.inputBase} style={{ fontWeight: 900 }} />
+                    placeholder="e.g. Captain Rell" className={`${styles.inputBase} ${styles.inputStrong}`} />
                 </div>
                 <div>
                   <div className={styles.fieldLabel}>Age</div>
@@ -2476,30 +2291,27 @@ export default function CharacterBook({
                     placeholder="e.g. Avalon" className={styles.inputBase} />
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Quick Synopsis</div>
                   <textarea value={worldNpcDraft.summary} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, summary: e.target.value }))}
                     placeholder="One or two lines used for quick cards and previews."
                     rows={3}
-                    className={styles.inputBase}
-                    style={{ resize: 'vertical', minHeight: 80, lineHeight: 1.5 }} />
+                    className={`${styles.inputBase} ${styles.textareaWorldSummary}`} />
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Image (optional)</div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className={styles.inlineWrap}>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={(e) => onWorldNpcImagePick(e.target.files && e.target.files[0])}
-                      className={styles.inputBase}
-                      style={{ padding: '8px 10px', width: 'auto', flex: '1 1 260px' }}
+                      className={`${styles.inputBase} ${styles.fileInput}`}
                     />
                     {worldNpcDraft.image && (
                       <button
                         type="button"
-                        className={styles.tinyBtn}
-                        style={{ opacity: 0.95 }}
+                        className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
                         onMouseEnter={tinyBtnHover}
                         onMouseLeave={tinyBtnLeave}
                         onClick={() => setWorldNpcDraft((d) => ({ ...d, image: '' }))}
@@ -2511,18 +2323,17 @@ export default function CharacterBook({
 
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
+                <div className={styles.fullSpan}>
                   <div className={styles.fieldLabel}>Lore</div>
                   <textarea value={worldNpcDraft.bio} onChange={(e) => setWorldNpcDraft((d) => ({ ...d, bio: e.target.value }))}
                     placeholder="Long-form lore, history, hooks, secrets…" rows={5}
-                    className={styles.inputBase}
-                    style={{ resize: 'none', minHeight: 110, maxHeight: 180, lineHeight: 1.5 }} />
+                    className={`${styles.inputBase} ${styles.textareaWorldLore}`} />
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                <div className={styles.fullSpan}>
+                  <div className={styles.pickerHeader}>
                     <div className={styles.fieldLabel}>Related Characters</div>
-                    <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
+                    <div className={styles.pickerCount}>
                       {(worldNpcDraft.characterLinks || []).length} linked
                     </div>
                   </div>
@@ -2530,66 +2341,29 @@ export default function CharacterBook({
                     value={worldNpcCharSearch}
                     onChange={(e) => setWorldNpcCharSearch(e.target.value)}
                     placeholder="Find character..."
-                    className={styles.inputBase}
-                    style={{ marginTop: 6, fontSize: 12 }}
+                    className={`${styles.inputBase} ${styles.inputSearch}`}
                   />
-                  <div
-                    style={{
-                      marginTop: 8,
-                      borderRadius: 12,
-                      border: `1px solid ${THEME.lineSoft}`,
-                      background: 'rgba(0,0,0,0.16)',
-                      padding: 8,
-                    }}
-                  >
+                  <div className={styles.pickerBox}>
                     {filteredWorldNpcCharacterNames.length === 0 ? (
-                      <div style={{ fontSize: 12, opacity: 0.72, color: THEME.creamSoft, padding: '6px 4px' }}>
+                      <div className={styles.pickerEmpty}>
                         No matching characters.
                       </div>
                     ) : (
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, maxHeight: 138, overflowY: 'auto', paddingRight: 2 }}>
+                      <div className={`${styles.pickerGrid} ${styles.pickerGridChars}`}>
                         {filteredWorldNpcCharacterNames.map((charName) => {
                           const checked = (worldNpcDraft.characterLinks || []).some((l) => l.characterName === charName);
                           return (
                             <button
                               key={charName}
                               type="button"
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 7,
-                                width: '100%',
-                                padding: '8px 10px',
-                                borderRadius: 10,
-                                border: checked ? '1px solid rgba(255,220,160,0.45)' : `1px solid ${THEME.lineSoft}`,
-                                background: checked
-                                  ? 'linear-gradient(180deg, rgba(56,38,18,0.62), rgba(26,18,10,0.72))'
-                                  : 'linear-gradient(180deg, rgba(20,14,8,0.54), rgba(12,8,4,0.62))',
-                                color: checked ? THEME.creamText : THEME.creamSoft,
-                                fontSize: 12,
-                                fontWeight: 900,
-                                cursor: 'pointer',
-                                textAlign: 'left',
-                              }}
+                              className={`${styles.pickerButton} ${checked ? styles.pickerButtonChecked : styles.pickerButtonUnchecked}`}
                               onMouseDown={navClick}
                               onClick={() => toggleWorldNpcCharacterLink(charName)}
                             >
-                              <span style={{
-                                width: 13,
-                                height: 13,
-                                borderRadius: 4,
-                                border: checked ? '1px solid rgba(255,220,160,0.65)' : `1px solid ${THEME.lineSoft}`,
-                                background: checked ? 'rgba(255,220,160,0.24)' : 'transparent',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: 10,
-                                lineHeight: 1,
-                                flex: '0 0 auto',
-                              }}>
+                              <span className={`${styles.pickerCheck} ${checked ? styles.pickerCheckChecked : styles.pickerCheckUnchecked}`}>
                                 {checked ? '✓' : ''}
                               </span>
-                              <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <span className={styles.ellipsisText}>
                                 {charName}
                               </span>
                             </button>
@@ -2599,18 +2373,17 @@ export default function CharacterBook({
                     )}
                   </div>
                   {(worldNpcDraft.characterLinks || []).length > 0 && (
-                    <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
+                    <div className={styles.linkNotesGrid}>
                       {(worldNpcDraft.characterLinks || []).map((link) => (
-                        <div key={`char-rel-${link.characterName}`} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, alignItems: 'center' }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div key={`char-rel-${link.characterName}`} className={styles.linkNoteRow}>
+                          <div className={styles.linkNoteLabel}>
                             {link.characterName}
                           </div>
                           <input
                             value={link?.relation || ''}
                             onChange={(e) => setWorldNpcCharacterRelation(link.characterName, e.target.value)}
                             placeholder="Relation (e.g. Mentor)"
-                            className={styles.inputBase}
-                            style={{ fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                            className={`${styles.inputBase} ${styles.inputCompact}`}
                           />
                         </div>
                       ))}
@@ -2618,15 +2391,15 @@ export default function CharacterBook({
                   )}
                 </div>
 
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+                <div className={styles.fullSpan}>
+                  <div className={styles.pickerHeader}>
                     <div className={styles.fieldLabel}>Connected NPCs</div>
-                    <div style={{ fontSize: 11, opacity: 0.72, fontWeight: 900, color: THEME.creamSoft }}>
+                    <div className={styles.pickerCount}>
                       {(worldNpcDraft.links || []).length} linked
                     </div>
                   </div>
                   {worldNpcConnectionTargets.length === 0 ? (
-                    <div style={{ opacity: 0.72, fontSize: 12, color: THEME.creamSoft, lineHeight: 1.5 }}>
+                    <div className={styles.pickerInfo}>
                       Add at least one other world NPC to create NPC-to-NPC links.
                     </div>
                   ) : (
@@ -2635,24 +2408,15 @@ export default function CharacterBook({
                         value={worldNpcConnectionSearch}
                         onChange={(e) => setWorldNpcConnectionSearch(e.target.value)}
                         placeholder="Find world NPC..."
-                        className={styles.inputBase}
-                        style={{ marginTop: 6, fontSize: 12 }}
+                        className={`${styles.inputBase} ${styles.inputSearch}`}
                       />
-                      <div
-                        style={{
-                          marginTop: 8,
-                          borderRadius: 12,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: 'rgba(0,0,0,0.16)',
-                          padding: 8,
-                        }}
-                      >
+                      <div className={styles.pickerBox}>
                         {filteredWorldNpcConnectionTargets.length === 0 ? (
-                          <div style={{ fontSize: 12, opacity: 0.72, color: THEME.creamSoft, padding: '6px 4px' }}>
+                          <div className={styles.pickerEmpty}>
                             No matching NPCs.
                           </div>
                         ) : (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, maxHeight: 150, overflowY: 'auto', paddingRight: 2 }}>
+                          <div className={`${styles.pickerGrid} ${styles.pickerGridNpcs}`}>
                             {filteredWorldNpcConnectionTargets.map((target) => {
                               const link = (worldNpcDraft.links || []).find((l) => String(l.targetId) === String(target.id));
                               const checked = !!link;
@@ -2660,42 +2424,14 @@ export default function CharacterBook({
                                 <button
                                   key={target.id}
                                   type="button"
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 7,
-                                    width: '100%',
-                                    padding: '8px 10px',
-                                    borderRadius: 10,
-                                    border: checked ? '1px solid rgba(255,220,160,0.45)' : `1px solid ${THEME.lineSoft}`,
-                                    background: checked
-                                      ? 'linear-gradient(180deg, rgba(56,38,18,0.62), rgba(26,18,10,0.72))'
-                                      : 'linear-gradient(180deg, rgba(20,14,8,0.54), rgba(12,8,4,0.62))',
-                                    color: checked ? THEME.creamText : THEME.creamSoft,
-                                    fontSize: 12,
-                                    fontWeight: 900,
-                                    cursor: 'pointer',
-                                    textAlign: 'left',
-                                  }}
+                                  className={`${styles.pickerButton} ${checked ? styles.pickerButtonChecked : styles.pickerButtonUnchecked}`}
                                   onMouseDown={navClick}
                                   onClick={() => toggleWorldNpcConnection(target.id)}
                                 >
-                                  <span style={{
-                                    width: 13,
-                                    height: 13,
-                                    borderRadius: 4,
-                                    border: checked ? '1px solid rgba(255,220,160,0.65)' : `1px solid ${THEME.lineSoft}`,
-                                    background: checked ? 'rgba(255,220,160,0.24)' : 'transparent',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: 10,
-                                    lineHeight: 1,
-                                    flex: '0 0 auto',
-                                  }}>
+                                  <span className={`${styles.pickerCheck} ${checked ? styles.pickerCheckChecked : styles.pickerCheckUnchecked}`}>
                                     {checked ? '✓' : ''}
                                   </span>
-                                  <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  <span className={styles.ellipsisText}>
                                     {target.name || 'Unnamed NPC'}
                                   </span>
                                 </button>
@@ -2707,18 +2443,17 @@ export default function CharacterBook({
                     </>
                   )}
                   {(worldNpcDraft.links || []).length > 0 && (
-                    <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr', gap: 6, maxHeight: 140, overflowY: 'auto', paddingRight: 2 }}>
+                    <div className={`${styles.linkNotesGrid} ${styles.linkNotesGridScrollable}`}>
                       {(worldNpcDraft.links || []).map((link) => (
-                        <div key={`npc-note-${link.targetId}`} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 8, alignItems: 'center' }}>
-                          <div style={{ fontSize: 11.5, fontWeight: 900, color: THEME.creamSoft, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div key={`npc-note-${link.targetId}`} className={styles.linkNoteRow}>
+                          <div className={styles.linkNoteLabel}>
                             {worldNpcById[link.targetId]?.name || 'Linked NPC'}
                           </div>
                           <input
                             value={link?.note || ''}
                             onChange={(e) => setWorldNpcConnectionNote(link.targetId, e.target.value)}
                             placeholder="Connection note (optional)"
-                            className={styles.inputBase}
-                            style={{ fontSize: 12, paddingTop: 8, paddingBottom: 8 }}
+                            className={`${styles.inputBase} ${styles.inputCompact}`}
                           />
                         </div>
                       ))}
@@ -2727,7 +2462,7 @@ export default function CharacterBook({
                 </div>
               </div>
 
-              <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid ${THEME.lineSoft}` }}>
+              <div className={`${styles.modalFooter} ${styles.modalFooterEnd}`}>
                 {editingWorldNpcId && (
                   <button className={styles.backButton}
                     onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown}
@@ -2744,36 +2479,14 @@ export default function CharacterBook({
               {/* WORLD NPC IMAGE CROP */}
               {worldNpcCropOpen && (
                 <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 40,
-                    background: 'rgba(0,0,0,0.72)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 16,
-                    backdropFilter: 'blur(4px)',
-                  }}
+                  className={`${styles.modalOverlay} ${styles.modalZ40}`}
                   onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcCropOpen(false); }}
                 >
-                  <div style={{
-                    width: 'min(720px, 96vw)',
-                    borderRadius: 22,
-                    background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
-                    boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
-                    border: `1px solid ${THEME.line}`,
-                    color: THEME.creamText,
-                    fontFamily: fontStack,
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}>
-                    <div style={{ padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, borderBottom: `1px solid ${THEME.lineSoft}` }}>
-                      <div style={{ fontSize: 16, fontWeight: 950 }}>Crop Image</div>
+                  <div className={`${styles.modalShell} ${styles.modalShellCrop}`}>
+                    <div className={styles.modalHeader}>
+                      <div className={styles.modalTitle16}>Crop Image</div>
                       <button
-                        className={styles.backButton}
-                        style={{ padding: '8px 14px', fontSize: 12 }}
+                        className={`${styles.backButton} ${styles.backButtonSm}`}
                         onMouseEnter={btnHover}
                         onMouseLeave={btnLeave}
                         onMouseDown={(e) => { btnDown(e); navClick(); }}
@@ -2783,20 +2496,13 @@ export default function CharacterBook({
                       </button>
                     </div>
 
-                    <div style={{ padding: 18, display: 'grid', gridTemplateColumns: '1fr 280px', gap: 16, alignItems: 'start' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div className={styles.cropMainGrid}>
+                      <div className={styles.cropCenter}>
                         <div
+                          className={styles.cropFrame}
                           style={{
                             width: WORLD_NPC_CROP_BOX,
                             height: WORLD_NPC_CROP_BOX,
-                            borderRadius: 18,
-                            border: `1px solid ${THEME.lineSoft}`,
-                            background: 'linear-gradient(180deg, rgba(10,8,6,0.55), rgba(10,8,6,0.25))',
-                            boxShadow: '0 18px 46px rgba(0,0,0,0.55)',
-                            overflow: 'hidden',
-                            position: 'relative',
-                            touchAction: 'none',
-                            userSelect: 'none',
                           }}
                           onPointerDown={(e) => {
                             const img = worldNpcCropImgRef.current;
@@ -2852,37 +2558,23 @@ export default function CharacterBook({
                               }
                               clampCropOffset();
                             }}
+                            className={styles.cropImage}
                             style={{
-                              position: 'absolute',
-                              left: '50%',
-                              top: '50%',
                               transform: `translate(-50%, -50%) translate(${worldNpcCropOffset.x}px, ${worldNpcCropOffset.y}px) scale(${worldNpcCropBaseScale * worldNpcCropZoom})`,
-                              transformOrigin: 'center center',
-                              willChange: 'transform',
-                              userSelect: 'none',
-                              pointerEvents: 'none',
-                              maxWidth: 'none',
-                              maxHeight: 'none',
                             }}
                             draggable={false}
                           />
 
                           {/* subtle corner marks */}
-                          <div style={{
-                            position: 'absolute',
-                            inset: 10,
-                            borderRadius: 14,
-                            border: '1px dashed rgba(255,220,160,0.18)',
-                            pointerEvents: 'none',
-                          }} />
+                          <div className={styles.cropGuide} />
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                        <div className={styles.darkCard} style={{ padding: 14 }}>
-                          <div style={{ fontSize: 12, fontWeight: 950, opacity: 0.8, marginBottom: 8 }}>Zoom</div>
+                      <div className={styles.cropSide}>
+                        <div className={`${styles.darkCard} ${styles.darkCardPad14}`}>
+                          <div className={styles.zoomTitle}>Zoom</div>
                           <input
-                            className={styles.rng}
+                            className={`${styles.rng} ${styles.cropZoomRng}`}
                             type="range"
                             min={1}
                             max={2.5}
@@ -2891,14 +2583,13 @@ export default function CharacterBook({
                             onChange={(e) => { setWorldNpcCropZoom(parseFloat(e.target.value) || 1); }}
                             onMouseUp={clampCropOffset}
                             onTouchEnd={clampCropOffset}
-                            style={{ color: 'rgba(255,220,160,0.9)', accentColor: 'rgba(255,220,160,0.9)', background: 'rgba(255,245,220,0.12)' }}
                           />
-                          <div style={{ marginTop: 8, fontSize: 11, opacity: 0.72, color: THEME.creamSoft }}>
+                          <div className={styles.zoomHint}>
                             Drag the image to position it inside the frame.
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <div className={styles.cropActionRow}>
                           <button
                             className={styles.backButton}
                             onMouseEnter={btnHover}
@@ -2936,7 +2627,7 @@ export default function CharacterBook({
         onTimeUpdate={(e) => setCharSongTime(e.currentTarget.currentTime || 0)}
         onEnded={() => setCharSongOn(false)}
         onError={() => setCharSongOn(false)}
-        style={{ display: 'none' }}
+        className={styles.hiddenAudio}
       />
     </ShellLayout>
   );
