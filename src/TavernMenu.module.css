@@ -1,0 +1,90 @@
+.root {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  font-family: serif;
+}
+
+.backgroundMedia {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 260ms ease;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.78) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.mote {
+  position: absolute;
+  border-radius: 999px;
+  background: rgba(255, 210, 140, 1);
+  z-index: 2;
+  filter: blur(0.2px);
+  transform: translateX(0px) translateY(0px);
+  pointer-events: none;
+  animation-name: moteFloat;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+.fadeOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 50;
+  pointer-events: none;
+  transition-property: opacity;
+  transition-timing-function: ease;
+}
+
+.hudLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.hudDock {
+  position: absolute;
+  top: 0;
+  right: 0;
+  pointer-events: auto;
+}
+
+.panelsLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+@keyframes moteFloat {
+  0% {
+    transform: translateY(0px) translateX(0px);
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 0.85;
+  }
+
+  70% {
+    opacity: 0.45;
+  }
+
+  100% {
+    transform: translateY(-190px) translateX(70px);
+    opacity: 0;
+  }
+}
