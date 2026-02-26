@@ -1,6 +1,7 @@
 // ===== COMBAT PANEL — with Battle Background Selector =====
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
+import styles from './CombatPanel.module.css';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
 import battleback1  from '../assets/Backgrounds/battleback1.png';
@@ -28,7 +29,6 @@ const BATTLE_BACKGROUNDS = [
 ];
 
 const LS_KEY = 'koa:combat:v4';
-const fontStack = "Cinzel, 'Trajan Pro', Georgia, serif";
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -291,8 +291,14 @@ function CropImage({ src, imgRef, cropBox, zoom, offset, onLoad }) {
   const left = (cropBox / 2) - (rw / 2) + offset.x;
   const top  = (cropBox / 2) - (rh / 2) + offset.y;
   return (
-    <img ref={imgRef} src={src} alt="crop" onLoad={onLoad} draggable={false}
-      style={{ position:'absolute', left, top, width:rw, height:rh, pointerEvents:'none', userSelect:'none' }} />
+    <img
+      ref={imgRef}
+      src={src}
+      alt="crop"
+      onLoad={onLoad}
+      draggable={false}
+      style={{ position: 'absolute', left, top, width: rw, height: rh, pointerEvents: 'none', userSelect: 'none' }}
+    />
   );
 }
 
@@ -304,58 +310,59 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
 
   const EnemyRender = ENEMY_TYPES.find(e => e.key === c.enemyType)?.Render || GoblinSVG;
   const pcColor = PC_COLORS[c.pcColorIndex % PC_COLORS.length];
+  const rootClass = `${styles.tokenRoot} ${c.dead ? styles.tokenDead : ''}`;
+  const ringShadow = c.side === 'Enemy'
+    ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
+    : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)';
+  const circleBorder = isSelected
+    ? '3px solid rgba(255,210,80,0.95)'
+    : isActive
+    ? '3px solid rgba(255,255,255,0.55)'
+    : `2px solid ${c.side === 'Enemy' ? 'rgba(200,60,60,0.45)' : 'rgba(80,160,120,0.45)'}`;
+  const circleBg = c.side === 'Enemy'
+    ? 'radial-gradient(circle at 40% 35%, rgba(60,20,20,0.95), rgba(20,8,8,0.98))'
+    : 'radial-gradient(circle at 40% 35%, rgba(20,30,50,0.95), rgba(8,12,22,0.98))';
+  const circleShadow = c.side === 'Enemy'
+    ? '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(180,40,40,0.15)'
+    : '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(60,120,200,0.12)';
+  const labelBg = isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)';
+  const labelBorder = `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`;
+  const nameColor = c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)';
 
   return (
     <div
       onClick={onClick}
       onMouseEnter={onHover}
       title={`${c.name} — Click to edit`}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-        cursor: 'pointer', userSelect: 'none',
-        opacity: c.dead ? 0.30 : 1,
-        filter: c.dead ? 'grayscale(0.9)' : 'none',
-        transition: 'opacity 300ms, filter 300ms',
-        position: 'relative',
-      }}
+      className={rootClass}
     >
       {/* Active turn glow ring */}
       {isActive && (
-        <div style={{
-          position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)',
-          width: size + 16, height: size + 16, borderRadius: '50%',
-          background: 'transparent',
-          boxShadow: c.side === 'Enemy'
-            ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
-            : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)',
-          animation: 'pulse 1.6s ease-in-out infinite',
-          zIndex: 1,
-        }} />
+        <div
+          className={styles.tokenActiveRing}
+          style={{ width: size + 16, height: size + 16, boxShadow: ringShadow }}
+        />
       )}
 
       {/* Token circle / image */}
-      <div style={{
-        width: size, height: size, borderRadius: '50%', overflow: 'hidden',
-        border: isSelected
-          ? '3px solid rgba(255,210,80,0.95)'
-          : isActive
-          ? '3px solid rgba(255,255,255,0.55)'
-          : `2px solid ${c.side === 'Enemy' ? 'rgba(200,60,60,0.45)' : 'rgba(80,160,120,0.45)'}`,
-        background: c.side === 'Enemy'
-          ? 'radial-gradient(circle at 40% 35%, rgba(60,20,20,0.95), rgba(20,8,8,0.98))'
-          : 'radial-gradient(circle at 40% 35%, rgba(20,30,50,0.95), rgba(8,12,22,0.98))',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: c.side === 'Enemy'
-          ? '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(180,40,40,0.15)'
-          : '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(60,120,200,0.12)',
-        position: 'relative', zIndex: 2,
-        transform: flipped ? 'scaleX(-1)' : 'none',
-        flexShrink: 0,
-      }}>
+      <div
+        className={styles.tokenCircle}
+        style={{
+          width: size,
+          height: size,
+          border: circleBorder,
+          background: circleBg,
+          boxShadow: circleShadow,
+          transform: flipped ? 'scaleX(-1)' : 'none',
+        }}
+      >
         {c.customImage ? (
-          <img src={c.customImage} alt={c.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover',
-              transform: flipped ? 'scaleX(-1)' : 'none' }} />
+          <img
+            src={c.customImage}
+            alt={c.name}
+            className={styles.tokenImage}
+            style={{ transform: flipped ? 'scaleX(-1)' : 'none' }}
+          />
         ) : c.side === 'Enemy' ? (
           <EnemyRender size={size * 0.72} />
         ) : (
@@ -364,58 +371,42 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
       </div>
 
       {/* Name tag + status */}
-      <div style={{
-        background: isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)',
-        border: `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`,
-        backdropFilter: 'blur(10px)',
-        borderRadius: 8, padding: '3px 8px 4px', zIndex: 3,
-        maxWidth: size + 30, textAlign: 'center',
-      }}>
-        <div style={{
-          color: c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)',
-          fontWeight: 950, fontSize: 10, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: size + 20,
-          textDecoration: c.dead ? 'line-through' : 'none',
-        }}>{c.name}</div>
+      <div
+        className={styles.tokenLabelBox}
+        style={{ background: labelBg, border: labelBorder, maxWidth: size + 30 }}
+      >
+        <div
+          className={styles.tokenName}
+          style={{ color: nameColor, maxWidth: size + 20, textDecoration: c.dead ? 'line-through' : 'none' }}
+        >
+          {c.name}
+        </div>
         {/* HP bar */}
-        <div style={{ height: 2, borderRadius: 999, background: 'rgba(255,255,255,0.10)', marginTop: 2, overflow: 'hidden', width: '100%' }}>
-          <div style={{ height: '100%', width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct), borderRadius: 999 }} />
+        <div className={styles.tokenHpTrack}>
+          <div className={styles.tokenHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
         </div>
         {/* Status badges */}
         {c.status && c.status.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center', marginTop: 3 }}>
+          <div className={styles.tokenStatusRow}>
             {c.status.slice(0, 4).map(s => (
-              <span key={s} style={{
-                fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
-                padding: '1px 4px', borderRadius: 4,
-                background: 'rgba(180,120,20,0.35)',
-                border: '1px solid rgba(255,200,80,0.30)',
-                color: 'rgba(255,220,120,0.92)',
-                whiteSpace: 'nowrap',
-              }}>{s}</span>
+              <span key={s} className={styles.tokenStatusBadge}>{s}</span>
             ))}
             {c.status.length > 4 && (
-              <span style={{ fontSize: 8, color: 'rgba(255,220,120,0.60)', fontWeight: 900 }}>+{c.status.length - 4}</span>
+              <span className={styles.tokenStatusMore}>+{c.status.length - 4}</span>
             )}
           </div>
         )}
         {/* Concentration indicator */}
         {c.concentration && (
-          <div style={{
-            marginTop: 2, fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
-            color: 'rgba(160,200,255,0.85)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: size + 20,
-          }}>⚬ {c.concentration}</div>
+          <div className={styles.tokenConcentration} style={{ maxWidth: size + 20 }}>
+            ⚬ {c.concentration}
+          </div>
         )}
       </div>
 
       {/* Dead skull */}
       {c.dead && (
-        <div style={{
-          position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%,-50%)',
-          fontSize: size * 0.35, zIndex: 5, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.80))',
-        }}>💀</div>
+        <div className={styles.tokenDeadSkull} style={{ fontSize: size * 0.35 }}>💀</div>
       )}
     </div>
   );
@@ -425,27 +416,24 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
 function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEditorFor, playHover, playNav, battleBg }) {
   const pcs    = combatants.filter(c => c.side === 'PC' || c.side === 'Ally');
   const enemies = combatants.filter(c => c.side === 'Enemy');
+  const bgStyle = {
+    background: battleBg
+      ? `url(${battleBg}) center/cover no-repeat`
+      : 'linear-gradient(180deg, rgba(8,6,4,0.30) 0%, rgba(0,0,0,0) 40%)',
+  };
+  const enemyGap = Math.max(6, 48 - enemies.length * 4);
+  const pcGap = Math.max(8, 52 - pcs.length * 5);
 
   return (
-    <div style={{
-      position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 14,
-      background: battleBg
-        ? `url(${battleBg}) center/cover no-repeat`
-        : 'linear-gradient(180deg, rgba(8,6,4,0.30) 0%, rgba(0,0,0,0) 40%)',
-      transition: 'background-image 300ms ease',
-    }}>
+    <div className={styles.sceneRoot} style={bgStyle}>
 
       {/* Dark overlay to keep tokens readable over bright backgrounds */}
       {battleBg && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 0, borderRadius: 14,
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.10) 50%, rgba(0,0,0,0.44) 100%)',
-          pointerEvents: 'none',
-        }} />
+        <div className={styles.sceneOverlay} />
       )}
 
       {/* Ground plane perspective lines */}
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }} viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+      <svg className={styles.sceneSvg} viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
         {/* Horizon fog */}
         <defs>
           <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
@@ -495,24 +483,15 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 
       {/* Empty state */}
       {combatants.length === 0 && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 2, flexDirection: 'column', gap: 10,
-          color: 'rgba(255,245,220,0.40)', fontWeight: 900, textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 44, opacity: 0.3 }}>⚔️</div>
-          <div style={{ fontSize: 13 }}>Add combatants to see the battlefield</div>
+        <div className={styles.sceneEmpty}>
+          <div className={styles.sceneEmptyIcon}>⚔️</div>
+          <div className={styles.sceneEmptyText}>Add combatants to see the battlefield</div>
         </div>
       )}
 
       {/* ENEMIES — upper half, facing toward us, spread horizontally */}
       {enemies.length > 0 && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, top: '19%',
-          display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(6, 48 - enemies.length * 4),
-          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
-        }}>
+        <div className={styles.sceneEnemiesRow} style={{ gap: enemyGap }}>
           {enemies.map((c, i) => {
             const scale = 0.68 + (enemies.length <= 2 ? 0.18 : enemies.length <= 4 ? 0.08 : 0);
             const tokenSize = Math.round(108 * scale);
@@ -533,21 +512,12 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 
       {/* VS divider label */}
       {pcs.length > 0 && enemies.length > 0 && (
-        <div style={{
-          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
-          zIndex: 4, color: 'rgba(255,210,80,0.22)', fontWeight: 950, fontSize: 28, letterSpacing: 6,
-          textShadow: '0 0 20px rgba(255,180,40,0.30)', userSelect: 'none', pointerEvents: 'none',
-        }}>VS</div>
+        <div className={styles.sceneVs}>VS</div>
       )}
 
       {/* PCs — lower half, facing away (backs shown), larger (closer) */}
       {pcs.length > 0 && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: '12%',
-          display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(8, 52 - pcs.length * 5),
-          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
-        }}>
+        <div className={styles.scenePcsRow} style={{ gap: pcGap }}>
           {pcs.map((c, i) => {
             const scale = 0.80 + (pcs.length <= 2 ? 0.22 : pcs.length <= 4 ? 0.10 : 0);
             const tokenSize = Math.round(132 * scale);
@@ -565,14 +535,6 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
           })}
         </div>
       )}
-
-      {/* Pulse keyframe injected once */}
-      <style>{`
-        @keyframes pulse {
-          0%,100% { opacity: 1; }
-          50% { opacity: 0.45; }
-        }
-      `}</style>
     </div>
   );
 }
@@ -855,312 +817,103 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const WINDOW_BAR_H = 40;
   const PAD    = 14;
   const WINDOW_MAX_W = 1560;
-  const BATTLEFIELD_MAX_W = 1220;
-  const BATTLEFIELD_MAX_H = 640;
 
-  // ── Shared micro-styles ────────────────────────────────────────────────────
-  const inp = {
-    width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:10,
-    border:'1px solid rgba(255,220,160,0.14)', background:'rgba(0,0,0,0.42)',
-    color:'var(--koa-cream)', outline:'none', fontFamily:fontStack, fontSize:13,
+  // ── Shared class helpers ────────────────────────────────────────────────────
+  const btnClass = (variant = 'gold', size = 'md', extra = '') => {
+    const variantClass = variant === 'danger' ? styles.btnDanger : variant === 'ghost' ? styles.btnGhost : styles.btnGold;
+    const sizeClass = size === 'sm' ? styles.btnSmall : '';
+    return [styles.btnBase, variantClass, sizeClass, extra].filter(Boolean).join(' ');
   };
-  const lbl = {
-    color:'rgba(255,220,160,0.60)', fontSize:10, fontWeight:950,
-    letterSpacing:'0.18em', textTransform:'uppercase', marginBottom:5, userSelect:'none',
-  };
-  const compactInp = {
-    ...inp,
-    height:34,
-    padding:'6px 9px',
-    fontSize:12,
-  };
-  const compactStatField = { width:108, flex:'0 0 auto' };
-  const compactSideField = { width:146, flex:'0 0 auto' };
-  const btn = (v='gold') => ({
-    height:34,
-    padding:'0 12px',
-    borderRadius:12,
-    border:
-      v === 'danger'
-        ? '1px solid rgba(255,160,160,0.26)'
-        : v === 'ghost'
-        ? '1px solid rgba(255,220,160,0.20)'
-        : '1px solid rgba(255,220,160,0.26)',
-    background:
-      v === 'danger'
-        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
-        : v === 'ghost'
-        ? 'linear-gradient(180deg, rgba(82,60,42,0.62), rgba(30,22,16,0.54))'
-        : 'linear-gradient(180deg, rgba(74,52,36,0.88), rgba(34,24,16,0.84))',
-    color:'var(--koa-cream)',
-    fontWeight:950,
-    cursor:'pointer',
-    boxShadow:'0 14px 34px rgba(0,0,0,0.38)',
-    textShadow:'0 1px 8px rgba(0,0,0,0.75)',
-    userSelect:'none',
-    whiteSpace:'nowrap',
-    fontFamily:fontStack,
-    fontSize:11,
-    letterSpacing:'0.10em',
-    transition:'transform 150ms ease, filter 150ms ease, box-shadow 150ms ease',
-    backdropFilter:'blur(8px)',
-  });
-  const sBtn = (v='gold') => ({
-    ...btn(v),
-    height:28,
-    padding:'0 9px',
-    borderRadius:9,
-    fontSize:11,
-    letterSpacing:'0.10em',
-  });
-  const iconMiniBtn = (v='ghost') => ({
-    width:20,
-    height:20,
-    borderRadius:6,
-    border: v === 'danger' ? '1px solid rgba(255,160,160,0.26)' : '1px solid rgba(255,220,160,0.18)',
-    padding:0,
-    background:
-      v === 'danger'
-        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
-        : 'linear-gradient(180deg, rgba(80,58,40,0.72), rgba(30,22,16,0.60))',
-    color: v === 'danger' ? 'rgba(255,210,210,0.88)' : 'rgba(255,220,160,0.82)',
-    cursor:'pointer',
-    fontSize:10,
-    display:'flex',
-    alignItems:'center',
-    justifyContent:'center',
-    boxShadow:'0 8px 18px rgba(0,0,0,0.38)',
-    textShadow:'0 1px 6px rgba(0,0,0,0.65)',
-    transition:'transform 140ms ease, filter 140ms ease',
-  });
-  const enemyTypeBtn = (activeType) => ({
-    padding:'3px 9px',
-    borderRadius:8,
-    cursor:'pointer',
-    fontFamily:fontStack,
-    fontSize:11,
-    fontWeight:950,
-    border:`1px solid ${activeType ? 'rgba(255,220,150,0.44)' : 'rgba(255,220,160,0.20)'}`,
-    background: activeType
-      ? 'linear-gradient(180deg, rgba(92,66,40,0.88), rgba(40,28,18,0.84))'
-      : 'linear-gradient(180deg, rgba(80,58,40,0.68), rgba(28,20,14,0.56))',
-    color: activeType ? 'rgba(255,235,205,0.96)' : 'rgba(255,245,220,0.78)',
-    boxShadow: activeType ? '0 10px 22px rgba(0,0,0,0.42)' : '0 8px 18px rgba(0,0,0,0.30)',
-    transition:'all 140ms ease',
-    backdropFilter:'blur(10px)',
-  });
-  const btnHover = (e) => {
-    playHover();
-    e.currentTarget.style.transform = 'translateY(-1px)';
-    e.currentTarget.style.filter = 'brightness(1.08)';
-    e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)';
-  };
-  const btnLeave = (e) => {
-    e.currentTarget.style.transform = 'translateY(0px)';
-    e.currentTarget.style.filter = 'none';
-    e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)';
-  };
-  const glass = {
-    borderRadius:16, border:'1px solid rgba(255,220,160,0.11)',
-    background:'linear-gradient(180deg,rgba(8,6,4,0.74),rgba(4,3,2,0.56))',
-    backdropFilter:'blur(12px)', boxShadow:'0 16px 40px rgba(0,0,0,0.52)',
-  };
-  const modalBack = {
-    position:'absolute', inset:0, background:'rgba(0,0,0,0.68)',
-    display:'flex', alignItems:'center', justifyContent:'center', padding:14, zIndex:20,
-  };
-  const divider = {
-    height:1, background:'linear-gradient(to right,transparent,rgba(255,220,160,0.13),transparent)',
-    margin:'12px 0',
-  };
+  const iconMiniBtnClass = (variant = 'ghost') => [styles.btnIconMini, variant === 'danger' ? styles.btnIconDanger : styles.btnIconGhost].join(' ');
+  const enemyTypeBtnClass = (activeType) => [styles.enemyTypeBtn, activeType ? styles.enemyTypeBtnActive : ''].filter(Boolean).join(' ');
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <ShellLayout
       active={active}
-      style={{ alignItems:'stretch', justifyContent:'stretch', fontFamily:fontStack }}
+      style={{ alignItems: 'stretch', justifyContent: 'stretch', fontFamily: 'var(--koa-font-display)' }}
     >
-      <div style={{
-        position:'relative',
-        width:'100%',
-        height:'100%',
-        overflow:'hidden',
-        fontFamily:fontStack,
-      }}>
+      <div className={styles.root}>
 
         {/* ── HEADER ── */}
-        <div ref={headerRef} style={{
-          position:'absolute',
-          left:0,
-          right:0,
-          top:0,
-          padding:'26px 36px 14px',
-          background:'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))',
-          backdropFilter:'blur(14px)',
-          WebkitBackdropFilter:'blur(14px)',
-          borderBottom:'1px solid rgba(255,220,160,0.10)',
-          boxShadow:'0 14px 30px rgba(0,0,0,0.35)',
-          zIndex:8,
-        }}>
-          <div style={{
-            display:'flex',
-            alignItems:'center',
-            justifyContent:'space-between',
-            gap:10,
-            flexWrap:'wrap',
-            position:'relative',
-            zIndex:1,
-          }}>
+        <div ref={headerRef} className={styles.header}>
+          <div className={styles.headerRow}>
             <button
               onClick={() => { playNav(); cinematicNav('menu'); }}
-              onMouseEnter={(e) => {
-                playHover();
-                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
-                e.currentTarget.style.color = 'var(--koa-cream)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.24)';
-                e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-              style={{
-                ...btn('ghost'),
-                height:36,
-                padding:'9px 18px',
-                borderRadius:14,
-                color:'rgba(255,220,160,0.8)',
-                fontSize:12,
-                letterSpacing:'0.14em',
-                boxShadow:'0 10px 28px rgba(0,0,0,0.3)',
-              }}
+              onMouseEnter={playHover}
+              className={styles.returnBtn}
             >
               ← RETURN
             </button>
 
-            <div style={{ textAlign:'center', flex:1, minWidth:240, userSelect:'none' }}>
-              <div style={{
-                fontSize:10,
-                letterSpacing:'0.38em',
-                color:'rgba(255,220,160,0.45)',
-                marginBottom:8,
-                marginTop:-6,
-                fontFamily:fontStack,
-                textTransform:'uppercase',
-                fontWeight:900,
-              }}>
+            <div className={styles.titleWrap}>
+              <div className={styles.titleKicker}>
                 ✦ &nbsp; BATTLEFIELD COMMAND &nbsp; ✦
               </div>
-              <div style={{
-                margin:0,
-                fontFamily:fontStack,
-                fontSize:'clamp(1.35rem, 2.6vw, 2.05rem)',
-                fontWeight:950,
-                color:'var(--koa-cream)',
-                letterSpacing:'0.18em',
-                textShadow:'0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
-                lineHeight:1.05,
-              }}>
+              <div className={styles.titleMain}>
                 COMBAT TRACKER
               </div>
             </div>
 
-            <div style={{ width:120 }} />
+            <div className={styles.headerSpacer} />
           </div>
         </div>
 
         {/* ── COMBAT WINDOW (separate from header) ── */}
-        <div style={{
-          position:'absolute',
-          left:'50%',
-          width:`min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
-          transform:'translateX(-50%)',
-          top:headerH + HUD_GAP,
-          bottom:PAD,
-          borderRadius:18,
-          overflow:'hidden',
-          border:'1px solid var(--koa-line-strong)',
-          boxShadow:'0 26px 70px rgba(0,0,0,0.64)',
-          background:'var(--koa-shell-bg)',
-          zIndex:4,
-        }}>
+        <div
+          className={styles.combatWindow}
+          style={{
+            width: `min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
+            top: headerH + HUD_GAP,
+            bottom: PAD,
+          }}
+        >
           {/* Vignette overlay */}
-          <div style={{
-            position:'absolute', inset:0, pointerEvents:'none',
-            background:'radial-gradient(1000px 580px at 32% 20%,rgba(255,245,220,0.05),transparent 60%),linear-gradient(180deg,rgba(0,0,0,0.45),rgba(0,0,0,0.78))',
-          }}/>
+          <div className={styles.windowVignette} />
 
           {/* ── WINDOW CONTROLS (moved out of top header) ── */}
-          <div style={{
-            position:'absolute',
-            left:PAD,
-            right:PAD,
-            top:PAD,
-            height:WINDOW_BAR_H,
-            borderRadius:10,
-            border:'1px solid rgba(255,220,160,0.10)',
-            background:'linear-gradient(180deg, rgba(10,8,6,0.84), rgba(10,8,6,0.68))',
-            backdropFilter:'blur(10px)',
-            WebkitBackdropFilter:'blur(10px)',
-            boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
-            zIndex:3,
-            display:'grid',
-            gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',
-            alignItems:'center',
-            gap:10,
-            padding:'0 8px',
-          }}>
+          <div
+            className={styles.windowControls}
+            style={{
+              left: PAD,
+              right: PAD,
+              top: PAD,
+              height: WINDOW_BAR_H,
+            }}
+          >
             <div />
 
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
-                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
-                <div style={{
-                  height:34, padding:'0 14px', borderRadius:999, border:'1px solid rgba(255,220,160,0.18)',
-                  background:'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))', color:'var(--koa-cream)',
-                  display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
-                  boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
-                }}>
-                  <span style={{ color:'rgba(255,220,160,0.72)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.16em', fontWeight:900 }}>Round</span>
-                  <span style={{ fontSize:17, fontWeight:950 }}>{encounter.round}</span>
+            <div className={styles.windowControlsCenter}>
+                <button
+                  className={btnClass('gold')}
+                  onMouseEnter={playHover}
+                  onClick={() => { playNav(); gotoPrev(); }}
+                >
+                  ◀ Prev
+                </button>
+                <div className={styles.roundBadge}>
+                  <span className={styles.roundLabel}>Round</span>
+                  <span className={styles.roundValue}>{encounter.round}</span>
                 </div>
-                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
+                <button
+                  className={btnClass('gold')}
+                  onMouseEnter={playHover}
+                  onClick={() => { playNav(); gotoNext(); }}
+                >
+                  Next ▶
+                </button>
               </div>
 
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8, minWidth:0 }}>
-              <label style={{
-                color:'rgba(255,220,160,0.58)',
-                fontSize:10,
-                textTransform:'uppercase',
-                letterSpacing:'0.16em',
-                userSelect:'none',
-                whiteSpace:'nowrap',
-                fontFamily:fontStack,
-                fontWeight:900,
-              }}>
-                Scene
-              </label>
+            <div className={styles.controlsRight}>
+              <label className={styles.sceneLabel}>Scene</label>
               <select
                 value={battleBg || ''}
                 onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
                 onMouseEnter={playHover}
-                style={{
-                  height:31,
-                  padding:'0 10px',
-                  borderRadius:10,
-                  border:'1px solid rgba(255,220,160,0.22)',
-                  background:'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
-                  color:'var(--koa-cream)',
-                  fontSize:11,
-                  fontWeight:900,
-                  letterSpacing:'0.08em',
-                  cursor:'pointer',
-                  outline:'none',
-                  maxWidth:170,
-                  fontFamily:fontStack,
-                }}
+                className={styles.sceneSelect}
               >
                 {BATTLE_BACKGROUNDS.map((b, i) => (
-                  <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
+                  <option key={i} value={b.src || ''}>
                     {b.label}
                   </option>
                 ))}
@@ -1169,157 +922,94 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
           </div>
 
         {/* ── MAIN LAYOUT — initiative bar above battlefield ── */}
-        <div style={{
-          position:'absolute',
-          left:PAD,
-          right:PAD,
-          top: PAD + WINDOW_BAR_H + 8,
-          bottom: PAD,
-          zIndex:2,
-          minHeight:0,
-        }}>
-          <div style={{
-            ...glass,
-            overflow:'hidden',
-            position:'relative',
-            height:'100%',
-            display:'flex',
-            flexDirection:'column',
-          }}>
+        <div
+          className={styles.mainLayout}
+          style={{
+            left: PAD,
+            right: PAD,
+            top: PAD + WINDOW_BAR_H + 8,
+            bottom: PAD,
+          }}
+        >
+          <div className={styles.glassPanel}>
             {/* ── INITIATIVE STRIP ── */}
-            <div style={{
-              padding:'7px 8px',
-              borderBottom:'1px solid rgba(255,220,160,0.08)',
-              background:'linear-gradient(180deg,rgba(10,8,6,0.54),rgba(10,8,6,0.30))',
-              display:'flex',
-              flexDirection:'column',
-              gap:4,
-              minWidth:0,
-              flexShrink:0,
-            }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', minWidth:0 }}>
+            <div className={styles.initStrip}>
+              <div className={styles.initHeaderGrid}>
                 <div />
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-                  <div style={{
-                    color:'rgba(255,245,220,0.78)',
-                    fontWeight:950,
-                    fontSize:11,
-                    letterSpacing:'0.10em',
-                    textTransform:'uppercase',
-                    userSelect:'none',
-                    whiteSpace:'nowrap',
-                  }}>
+                <div className={styles.initHeaderCenter}>
+                  <div className={styles.initHeading}>
                     Initiative
                   </div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
-                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                    <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                  <div className={styles.initButtons}>
+                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+                    <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
                   </div>
                 </div>
                 <div />
               </div>
 
-              <div style={{ flex:1, minWidth:0, overflowX:'auto', overflowY:'hidden', paddingBottom:2 }}>
+              <div className={`${styles.initScroll} koa-scrollbar-thin`}>
                 {combatants.length === 0 ? (
-                  <div style={{
-                    minHeight:26,
-                    display:'flex',
-                    alignItems:'center',
-                    justifyContent:'center',
-                    color:'rgba(255,245,220,0.40)',
-                    fontWeight:900,
-                    fontSize:12,
-                    lineHeight:1.35,
-                    padding:'0 4px',
-                    whiteSpace:'nowrap',
-                  }}>
-                    Click <b style={{ color:'rgba(255,220,160,0.72)', margin:'0 4px' }}>+ Add</b> to begin.
+                  <div className={styles.initEmpty}>
+                    Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
                   </div>
                 ) : (
-                  <div style={{ display:'flex', gap:6, width:'max-content', minWidth:'100%', justifyContent:'center' }}>
+                  <div className={styles.initCardsRow}>
                     {combatants.map(c => {
                       const isActive   = c.id === activeCombatantId;
                       const isSelected = c.id === selectedId;
                       const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
                       const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
                       const pct = max > 0 ? (hp / max) * 100 : 100;
+                      const hpColor = pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)';
+                      const cardClass = [
+                        styles.initCard,
+                        isActive ? styles.initCardActive : '',
+                        !isActive && isSelected ? styles.initCardSelected : '',
+                        c.dead ? styles.initCardDead : '',
+                      ].filter(Boolean).join(' ');
+                      const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
 
                       return (
-                        <div key={c.id}
+                        <div
+                          key={c.id}
                           onClick={() => openEditorFor(c.id)}
                           onMouseEnter={playHover}
-                          style={{
-                            borderRadius:10,
-                            border:`1px solid ${isActive ? 'rgba(255,210,130,0.38)' : isSelected ? 'rgba(255,210,130,0.16)' : 'rgba(255,255,255,0.05)'}`,
-                            background: isActive ? 'rgba(176,101,0,0.12)' : 'rgba(255,255,255,0.022)',
-                            padding:'5px 7px',
-                            cursor:'pointer',
-                            opacity: c.dead ? 0.45 : 1,
-                            transition:'background 150ms',
-                            minWidth:186,
-                            maxWidth:232,
-                            flex:'0 0 auto',
-                          }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <div style={{
-                              width:7,
-                              height:7,
-                              borderRadius:'50%',
-                              flexShrink:0,
-                              background: sideAccent(c.side),
-                              boxShadow:`0 0 6px ${sideAccent(c.side)}`,
-                            }}/>
-                            <div style={{
-                              width:22,
-                              textAlign:'center',
-                              fontWeight:950,
-                              fontSize:11,
-                              color: isActive ? 'rgba(255,220,100,0.95)' : 'rgba(255,245,220,0.65)',
-                              flexShrink:0,
-                            }}>
+                          className={cardClass}
+                        >
+                          <div className={styles.initCardTop}>
+                            <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
+                            <div className={initClass}>
                               {toInt(c.init,0)}
                             </div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{
-                                fontWeight:950,
-                                fontSize:11,
-                                color:'var(--koa-cream)',
-                                whiteSpace:'nowrap',
-                                overflow:'hidden',
-                                textOverflow:'ellipsis',
-                                textDecoration: c.dead ? 'line-through' : 'none',
-                              }}>
+                            <div className={styles.initNameWrap}>
+                              <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
                                 {c.name}
                               </div>
-                              {c.role && <div style={{ fontSize:9, color:'rgba(255,220,160,0.45)', fontWeight:900 }}>{c.role}</div>}
+                              {c.role && <div className={styles.initRole}>{c.role}</div>}
                             </div>
-                            <div style={{
-                              fontSize:10,
-                              fontWeight:950,
-                              color: pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)',
-                              flexShrink:0,
-                            }}>
+                            <div className={styles.initHp} style={{ color: hpColor }}>
                               {c.hp===''?'—':c.hp}
                             </div>
-                            <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+                            <div className={styles.initActions}>
                               <button title={c.dead ? 'Revive' : 'Mark dead'}
                                 onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
                                 onMouseEnter={playHover}
-                                style={iconMiniBtn(c.dead ? 'danger' : 'ghost')}>☠</button>
+                                className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}>☠</button>
                               <button title="Remove"
                                 onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
                                 onMouseEnter={playHover}
-                                style={iconMiniBtn('danger')}>✕</button>
+                                className={iconMiniBtnClass('danger')}>✕</button>
                             </div>
                           </div>
 
-                          <div style={{ height:2, borderRadius:999, background:'rgba(255,255,255,0.07)', marginTop:5, overflow:'hidden' }}>
-                            <div style={{ height:'100%', width:`${clamp(pct,0,100)}%`, background:hpGradient(pct), borderRadius:999 }}/>
+                          <div className={styles.initHpTrack}>
+                            <div className={styles.initHpFill} style={{ width:`${clamp(pct,0,100)}%`, background:hpGradient(pct) }}/>
                           </div>
 
                           {isActive && (
-                            <div style={{ marginTop:4, fontSize:9, fontWeight:950, color:'rgba(255,220,100,0.80)', letterSpacing:'0.12em' }}>
+                            <div className={styles.activeTurnTag}>
                               ▶ ACTIVE TURN
                             </div>
                           )}
@@ -1332,8 +1022,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             </div>
 
             {/* ── BATTLEFIELD ── */}
-            <div style={{ flex:1, minHeight:0, padding:'5px 12px 14px', display:'flex', justifyContent:'center', alignItems:'stretch' }}>
-              <div style={{ width:`min(100%, ${BATTLEFIELD_MAX_W}px)`, height:'100%', maxHeight:BATTLEFIELD_MAX_H }}>
+            <div className={styles.battlefieldWrap}>
+              <div className={styles.battlefieldInner}>
                 <BattlefieldScene
                   combatants={combatants}
                   activeCombatantId={activeCombatantId}
@@ -1350,85 +1040,91 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── ADD MODAL ── */}
         {addModalOpen && (
-          <div style={modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setAddModalOpen(false); }}>
-            <div style={{
-              width:'min(840px,96vw)', maxHeight:'90vh', borderRadius:18, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.15)',
-              background:'linear-gradient(180deg,rgba(10,8,6,0.97),rgba(4,3,2,0.90))',
-              backdropFilter:'blur(18px)', boxShadow:'0 28px 72px rgba(0,0,0,0.78)',
-              display:'flex', flexDirection:'column',
-            }}>
-              <div style={{ padding:'0 16px', height:52, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, letterSpacing:0.4, userSelect:'none' }}>Add Combatants</div>
-                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
+          <div className={styles.modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setAddModalOpen(false); }}>
+            <div className={`${styles.modalCard} ${styles.addModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Add Combatants</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
               </div>
 
-              <div style={{ padding:20, overflowY:'auto', display:'grid', gridTemplateColumns:'1fr 1fr', gap:26 }}>
+              <div className={`${styles.addModalBody} koa-scrollbar-thin`}>
                 {/* Add Adventurer */}
                 <div>
-                  <div style={{ color:'rgba(255,245,220,0.84)', fontWeight:950, fontSize:13, marginBottom:14, paddingBottom:8, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>Add Adventurer</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 85px', gap:10, marginBottom:12 }}>
-                    <div><div style={lbl}>Adventurer</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
+                  <div className={styles.addSectionTitle}>Add Adventurer</div>
+                  <div className={styles.twoCol}>
+                    <div><div className={styles.label}>Adventurer</div>
+                      <select className={`${styles.input} ${styles.selectInput}`} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
                         {adventurers.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
                       </select>
                     </div>
-                    <div><div style={lbl}>Side</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={adventurerSide} onChange={e => setAdventurerSide(e.target.value)}>
+                    <div><div className={styles.label}>Side</div>
+                      <select className={`${styles.input} ${styles.selectInput}`} value={adventurerSide} onChange={e => setAdventurerSide(e.target.value)}>
                         <option value="PC">PC</option><option value="Ally">Ally</option>
                       </select>
                     </div>
                   </div>
                   {(() => { const adv = adventurers.find(a => a.name===adventurerPick); return adv ? (
-                    <div style={{ padding:'9px 12px', borderRadius:10, border:'1px solid rgba(255,220,160,0.10)', background:'rgba(0,0,0,0.28)', marginBottom:14, fontSize:12, color:'rgba(255,245,220,0.68)', fontWeight:900, lineHeight:1.7 }}>
-                      <div style={{ color:'var(--koa-cream)', fontWeight:950 }}>{adv.name}</div>
+                    <div className={styles.previewCard}>
+                      <div className={styles.previewName}>{adv.name}</div>
                       <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
                     </div>
                   ) : null; })()}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addAdventurer(); }}>+ Add Adventurer</button>
+                  <button
+                    className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); addAdventurer(); }}
+                  >
+                    + Add Adventurer
+                  </button>
                 </div>
 
                 {/* Add Custom */}
                 <div>
-                  <div style={{ color:'rgba(255,245,220,0.84)', fontWeight:950, fontSize:13, marginBottom:14, paddingBottom:8, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>Add Custom (Enemies / Extras)</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 65px', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>Name</div>
-                      <input style={inp} value={draft.name} placeholder="Goblin / Skeleton #2"
+                  <div className={styles.addSectionTitle}>Add Custom (Enemies / Extras)</div>
+                  <div className={styles.nameInitGrid}>
+                    <div><div className={styles.label}>Name</div>
+                      <input className={styles.input} value={draft.name} placeholder="Goblin / Skeleton #2"
                         onChange={e => setDraft(d => ({ ...d, name:e.target.value }))}/>
                     </div>
-                    <div><div style={lbl}>Init</div>
-                      <input style={inp} value={draft.init} onChange={e => setDraft(d => ({ ...d, init:e.target.value }))}/>
+                    <div><div className={styles.label}>Init</div>
+                      <input className={styles.input} value={draft.init} onChange={e => setDraft(d => ({ ...d, init:e.target.value }))}/>
                     </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>HP</div><input style={inp} value={draft.hp} onChange={e => setDraft(d => ({ ...d, hp:e.target.value }))}/></div>
-                    <div><div style={lbl}>Max HP</div><input style={inp} value={draft.maxHP} onChange={e => setDraft(d => ({ ...d, maxHP:e.target.value }))}/></div>
-                    <div><div style={lbl}>AC</div><input style={inp} value={draft.ac} onChange={e => setDraft(d => ({ ...d, ac:e.target.value }))}/></div>
+                  <div className={styles.threeCol}>
+                    <div><div className={styles.label}>HP</div><input className={styles.input} value={draft.hp} onChange={e => setDraft(d => ({ ...d, hp:e.target.value }))}/></div>
+                    <div><div className={styles.label}>Max HP</div><input className={styles.input} value={draft.maxHP} onChange={e => setDraft(d => ({ ...d, maxHP:e.target.value }))}/></div>
+                    <div><div className={styles.label}>AC</div><input className={styles.input} value={draft.ac} onChange={e => setDraft(d => ({ ...d, ac:e.target.value }))}/></div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>Side</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
+                  <div className={styles.twoColEqual}>
+                    <div><div className={styles.label}>Side</div>
+                      <select className={`${styles.input} ${styles.selectInput}`} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
                         <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
                       </select>
                     </div>
-                    <div><div style={lbl}>Role</div>
-                      <input style={inp} value={draft.role} placeholder="Soldier / Mage" onChange={e => setDraft(d => ({ ...d, role:e.target.value }))}/>
+                    <div><div className={styles.label}>Role</div>
+                      <input className={styles.input} value={draft.role} placeholder="Soldier / Mage" onChange={e => setDraft(d => ({ ...d, role:e.target.value }))}/>
                     </div>
                   </div>
                   {draft.side === 'Enemy' && (
-                    <div style={{ marginBottom:12 }}>
-                      <div style={lbl}>Enemy Type</div>
-                      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    <div className={styles.sectionTopGap}>
+                      <div className={styles.label}>Enemy Type</div>
+                      <div className={styles.enemyTypeRow}>
                         {ENEMY_TYPES.map(et => (
                           <button key={et.key}
                             onClick={() => setDraft(d => ({ ...d, enemyType:et.key }))}
                             onMouseEnter={playHover}
-                            style={enemyTypeBtn(draft.enemyType===et.key)}>{et.label}</button>
+                            className={enemyTypeBtnClass(draft.enemyType===et.key)}>{et.label}</button>
                         ))}
                       </div>
                     </div>
                   )}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addFromDraft(); }}>+ Add Custom</button>
+                  <button
+                    className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); addFromDraft(); }}
+                  >
+                    + Add Custom
+                  </button>
                 </div>
               </div>
             </div>
@@ -1437,56 +1133,39 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── EDITOR MODAL ── */}
         {editorOpen && selected && (
-          <div style={modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
-            <div style={{
-              width:'min(780px,92vw)', maxHeight:'82vh', borderRadius:16, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.15)',
-              background:'linear-gradient(180deg,rgba(8,6,4,0.97),rgba(4,3,2,0.88))',
-              backdropFilter:'blur(14px)', boxShadow:'0 26px 70px rgba(0,0,0,0.76)',
-              display:'grid', gridTemplateRows:'46px 1fr',
-            }}>
-              <div style={{ padding:'0 12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, userSelect:'none' }}>
-                  Editing: <span style={{ color:'rgba(255,220,160,0.88)' }}>{selected.name}</span>
+          <div className={styles.modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
+            <div className={`${styles.modalCard} ${styles.editorModal}`}>
+              <div className={styles.editorHeader}>
+                <div className={styles.editorTitle}>
+                  Editing: <span className={styles.editorNameAccent}>{selected.name}</span>
                 </div>
-                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                <div className={styles.initActions}>
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                 </div>
               </div>
 
-              <div style={{ padding:12, overflowY:'auto' }}>
+              <div className={`${styles.editorBody} koa-scrollbar-thin`}>
                 {/* Appearance section */}
-                <div style={{ marginBottom:10 }}>
-                  <div style={{ color:'rgba(255,245,220,0.80)', fontWeight:950, fontSize:12, marginBottom:10, letterSpacing:0.3 }}>Appearance</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className={styles.sectionTopGap}>
+                  <div className={styles.appearanceTitle}>Appearance</div>
+                  <div className={styles.appearanceGrid}>
                     <div>
-                      <div style={lbl}>Custom Image</div>
-                      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+                      <div className={styles.label}>Custom Image</div>
+                      <div className={styles.uploadRow}>
                         {/* Preview circle */}
                         {selected.customImage && (
-                          <div style={{
-                            width:48, height:48, borderRadius:'50%', overflow:'hidden', flexShrink:0,
-                            border:'2px solid rgba(255,220,160,0.30)',
-                            background:'rgba(0,0,0,0.40)',
-                          }}>
-                            <img src={selected.customImage} alt="token preview"
-                              style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                          <div className={styles.tokenPreview}>
+                            <img src={selected.customImage} alt="token preview" />
                           </div>
                         )}
-                        <label style={{
-                          display:'inline-block', padding:'5px 12px', borderRadius:8,
-                          background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,220,160,0.14)',
-                          color:'rgba(255,245,220,0.75)', fontSize:11, fontWeight:950, cursor:'pointer',
-                          fontFamily:fontStack, userSelect:'none',
-                        }}>
+                        <label className={styles.uploadLabel}>
                           {selected.customImage ? 'Replace Image' : 'Upload & Crop'}
-                          <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload}/>
+                          <input type="file" accept="image/*" className={styles.hiddenInput} onChange={handleImageUpload}/>
                         </label>
                         {selected.customImage && (
                           <button onClick={() => setSelectedField({ customImage:'' })}
-                            onMouseEnter={btnHover}
-                            onMouseLeave={btnLeave}
-                            style={{ ...sBtn('danger'), height:26, padding:'0 10px', borderRadius:8, fontSize:11, letterSpacing:'0.08em' }}>
+                            onMouseEnter={playHover}
+                            className={btnClass('danger', 'sm', styles.btnTiny)}>
                             Remove
                           </button>
                         )}
@@ -1494,13 +1173,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </div>
                     {selected.side === 'Enemy' && (
                       <div>
-                        <div style={lbl}>Enemy Type</div>
-                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                        <div className={styles.label}>Enemy Type</div>
+                        <div className={styles.enemyTypeRow}>
                           {ENEMY_TYPES.map(et => (
                             <button key={et.key}
                               onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
                               onMouseEnter={playHover}
-                              style={enemyTypeBtn(selected.enemyType===et.key)}>{et.label}</button>
+                              className={enemyTypeBtnClass(selected.enemyType===et.key)}>{et.label}</button>
                           ))}
                         </div>
                       </div>
@@ -1508,45 +1187,45 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </div>
                 </div>
 
-                <div style={divider}/>
+                <div className={styles.divider}/>
 
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                  <div><div style={lbl}>Name</div><input style={inp} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
-                  <div><div style={lbl}>Role / Class</div><input style={inp} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
+                <div className={styles.fieldGrid2}>
+                  <div><div className={styles.label}>Name</div><input className={styles.input} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
+                  <div><div className={styles.label}>Role / Class</div><input className={styles.input} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
                 </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'end' }}>
-                  <div style={compactSideField}><div style={lbl}>Side</div>
-                    <select style={{ ...compactInp, cursor:'pointer' }} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
+                <div className={styles.compactFields}>
+                  <div className={styles.compactSideField}><div className={styles.label}>Side</div>
+                    <select className={`${styles.input} ${styles.compactInput} ${styles.selectInput}`} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
                       <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
                     </select>
                   </div>
-                  <div style={compactStatField}><div style={lbl}>Initiative</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>Max HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>Temp HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>AC</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Initiative</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Max HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Temp HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>AC</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
                 </div>
 
-                <div style={divider}/>
+                <div className={styles.divider}/>
 
-                <div><div style={lbl}>Status (comma separated)</div>
-                  <input style={inp} value={selected.status.join(', ')} placeholder="Poisoned, Grappled, Bless"
+                <div><div className={styles.label}>Status (comma separated)</div>
+                  <input className={styles.input} value={selected.status.join(', ')} placeholder="Poisoned, Grappled, Bless"
                     onChange={e => setSelectedField({ status: String(e.target.value||'').split(',').map(s=>s.trim()).filter(Boolean) })}/>
                 </div>
-                <div style={{ marginTop:10 }}><div style={lbl}>Concentration</div>
-                  <input style={inp} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>
+                <div className={styles.sectionTopGap}><div className={styles.label}>Concentration</div>
+                  <input className={styles.input} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>
                 </div>
-                <div style={{ marginTop:10 }}><div style={lbl}>Notes</div>
-                  <textarea style={{ ...inp, minHeight:130, resize:'vertical' }} value={selected.notes}
+                <div className={styles.sectionTopGap}><div className={styles.label}>Notes</div>
+                  <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notes}
                     placeholder="Tactics, resistances, legendary uses..." onChange={e => setSelectedField({ notes:e.target.value })}/>
                 </div>
 
-                <div style={divider}/>
-                <div style={{ display:'flex', gap:10 }}>
-                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); removeCombatant(selected.id); }}>
+                <div className={styles.divider}/>
+                <div className={styles.actionRow}>
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
                     Remove
                   </button>
-                  <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); toggleDead(selected.id); }}>
+                  <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
                     {selected.dead ? 'Revive' : 'Mark dead'}
                   </button>
                 </div>
@@ -1557,34 +1236,23 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── IMAGE CROP MODAL ── */}
         {cropOpen && (
-          <div style={{ ...modalBack, zIndex:30, backdropFilter:'blur(4px)' }}
+          <div className={styles.modalBack} style={{ zIndex: 30, backdropFilter: 'blur(4px)' }}
             onMouseDown={e => { if (e.target===e.currentTarget) setCropOpen(false); }}>
-            <div style={{
-              width:'min(720px,96vw)', borderRadius:18, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.18)',
-              background:'linear-gradient(180deg,rgba(18,12,6,0.98),rgba(8,6,4,0.98))',
-              backdropFilter:'blur(18px)', boxShadow:'0 30px 80px rgba(0,0,0,0.80)',
-              display:'flex', flexDirection:'column',
-            }}>
+            <div className={styles.cropModal}>
               {/* Header */}
-              <div style={{ padding:'0 16px', height:50, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:14, letterSpacing:0.3 }}>Crop Token Image</div>
-                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => setCropOpen(false)}>✕ Cancel</button>
+              <div className={styles.modalHeader} style={{ height: 50 }}>
+                <div className={styles.modalTitle} style={{ fontSize: 14, letterSpacing: 0.3 }}>Crop Token Image</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => setCropOpen(false)}>✕ Cancel</button>
               </div>
 
               {/* Body */}
-              <div style={{ padding:20, display:'grid', gridTemplateColumns:'1fr 220px', gap:20, alignItems:'start' }}>
+              <div className={styles.cropBody}>
 
                 {/* Crop canvas */}
-                <div style={{ display:'flex', justifyContent:'center' }}>
+                <div className={styles.cropCanvasWrap}>
                   <div
-                    style={{
-                      width: CROP_BOX, height: CROP_BOX, borderRadius: '50%',
-                      border: '3px solid rgba(255,210,80,0.55)',
-                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.62)',
-                      overflow: 'hidden', position: 'relative',
-                      cursor: 'grab', userSelect: 'none', touchAction: 'none',
-                    }}
+                    className={styles.cropCircle}
+                    style={{ width: CROP_BOX, height: CROP_BOX }}
                     onMouseDown={e => {
                       cropDragRef.current = { dragging:true, sx:e.clientX, sy:e.clientY, ox:cropOffset.x, oy:cropOffset.y };
                       e.preventDefault();
@@ -1616,26 +1284,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 </div>
 
                 {/* Controls */}
-                <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+                <div className={styles.cropControls}>
                   <div>
-                    <div style={lbl}>Zoom</div>
+                    <div className={styles.label}>Zoom</div>
                     <input type="range" min="0.5" max="4" step="0.01"
                       value={cropZoom}
                       onChange={e => { const z = parseFloat(e.target.value); setCropZoom(z); clampCropOffset(z); }}
-                      style={{ width:'100%', accentColor:'rgba(200,150,40,0.90)' }}
+                      className={styles.rangeInput}
                     />
-                    <div style={{ color:'rgba(255,220,160,0.50)', fontSize:10, marginTop:4, fontWeight:900 }}>
+                    <div className={styles.zoomPercent}>
                       {Math.round(cropZoom * 100)}%
                     </div>
                   </div>
 
-                  <div style={{ color:'rgba(255,245,220,0.45)', fontSize:11, fontWeight:900, lineHeight:1.6 }}>
+                  <div className={styles.cropHint}>
                     Drag to reposition.<br/>Scroll or use slider to zoom.
                   </div>
 
-                  <button style={{ ...btn('gold'), width:'100%' }}
-                    onMouseEnter={btnHover}
-                    onMouseLeave={btnLeave}
+                  <button className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
                     onClick={() => { playNav(); applyCrop(); }}>
                     ✓ Apply Crop
                   </button>
