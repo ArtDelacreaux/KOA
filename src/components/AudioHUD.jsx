@@ -141,6 +141,26 @@ export default function AudioHUD({
     lineHeight: 1,
   };
 
+  const muteBtn = {
+    border: `1px solid ${THEME.line}`,
+    background: 'rgba(255,245,220,0.08)',
+    borderRadius: 10,
+    color: THEME.creamText,
+    fontFamily: FONT,
+    fontSize: 11,
+    fontWeight: 900,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    height: 28,
+    padding: '0 10px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    cursor: 'pointer',
+    transition: 'background 120ms ease, filter 120ms ease',
+    lineHeight: 1,
+  };
+
   const rangeWrap = {
     display: 'flex',
     flexDirection: 'column',
@@ -149,34 +169,22 @@ export default function AudioHUD({
 
   return (
     <>
-      {/* ── Sound Toggle ── */}
+      {/* ── Combined Audio Button ── */}
       <button
-        onClick={toggleAudio}
+        onClick={() => setShowMix((v) => !v)}
         style={{ ...hudBtnStyle, right: 18 }}
         onMouseEnter={btnHover}
         onMouseLeave={btnLeave}
         onMouseDown={btnDown}
-        title="Toggle sound"
+        title="Audio controls"
       >
-        {musicOn ? '🔊' : '🔇'}
+        {musicOn ? '🎚️' : '🔇'}
         <span>{musicOn ? 'Sound' : 'Muted'}</span>
-      </button>
-
-      {/* ── Mix Toggle ── */}
-      <button
-        onClick={() => setShowMix((v) => !v)}
-        style={{ ...hudBtnStyle, right: 138 }}
-        onMouseEnter={btnHover}
-        onMouseLeave={btnLeave}
-        onMouseDown={btnDown}
-        title="Audio mix"
-      >
-        🎚️ <span>Mix</span>
       </button>
 
       <button
         onClick={toggleNightMode}
-        style={{ ...hudBtnStyle, right: 258 }}
+        style={{ ...hudBtnStyle, right: 138 }}
         onMouseEnter={btnHover}
         onMouseLeave={btnLeave}
         onMouseDown={btnDown}
@@ -202,20 +210,38 @@ export default function AudioHUD({
           <div style={{ position: 'relative' }}>
             <div style={mixHeader}>
               <div style={mixTitle}>Audio Mix</div>
-              <button
-                style={closeBtn}
-                onClick={() => setShowMix(false)}
-                onMouseEnter={(e) => {
-                  playHover();
-                  e.currentTarget.style.background = 'rgba(255,245,220,0.14)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(255,245,220,0.08)';
-                }}
-                title="Close"
-              >
-                ✕
-              </button>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  style={muteBtn}
+                  onClick={toggleAudio}
+                  onMouseEnter={(e) => {
+                    playHover();
+                    e.currentTarget.style.background = 'rgba(255,245,220,0.14)';
+                    e.currentTarget.style.filter = 'brightness(1.06)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,245,220,0.08)';
+                    e.currentTarget.style.filter = 'none';
+                  }}
+                  title={musicOn ? 'Mute' : 'Unmute'}
+                >
+                  {musicOn ? '🔊' : '🔇'} <span>{musicOn ? 'Mute' : 'Unmute'}</span>
+                </button>
+                <button
+                  style={closeBtn}
+                  onClick={() => setShowMix(false)}
+                  onMouseEnter={(e) => {
+                    playHover();
+                    e.currentTarget.style.background = 'rgba(255,245,220,0.14)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,245,220,0.08)';
+                  }}
+                  title="Close"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div style={divider} />
