@@ -593,6 +593,7 @@ export default function CharacterBook({
   }, [worldNpcTotalPages]);
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
+  const [connectionWebModalOpen, setConnectionWebModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
   const [worldNpcDraft, setWorldNpcDraft] = useState({
     name: '',
@@ -1171,6 +1172,27 @@ export default function CharacterBook({
     });
   };
 
+  const npcNameKey = (name) => (name || '').trim().toLowerCase();
+
+  const normalizeCharacterLinks = (links) =>
+    (Array.isArray(links) ? links : [])
+      .map((l) => ({
+        characterName: (l?.characterName || '').trim(),
+        relation: (l?.relation || '').trim(),
+      }))
+      .filter((l) => l.characterName);
+
+  const areCharacterLinksEqual = (a, b) => {
+    const aa = normalizeCharacterLinks(a);
+    const bb = normalizeCharacterLinks(b);
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i += 1) {
+      if (aa[i].characterName !== bb[i].characterName) return false;
+      if ((aa[i].relation || '') !== (bb[i].relation || '')) return false;
+    }
+    return true;
+  };
+
   const importCharacterNpcsIntoWorld = () => {
     const seedsByName = new Map();
 
@@ -1179,7 +1201,7 @@ export default function CharacterBook({
       owned.forEach((npc) => {
         const name = (npc.name || '').trim();
         if (!name) return;
-        const key = name.toLowerCase();
+        const key = npcNameKey(name);
         const prev = seedsByName.get(key) || {
           name,
           age: '',
@@ -1208,19 +1230,19 @@ export default function CharacterBook({
       });
     });
 
-    if (!seedsByName.size) return;
-
     setWorldNpcs((prev) => {
-      const next = [...(prev || [])];
+      const nowIso = new Date().toISOString();
+      const next = (prev || []).map((npc, idx) => normalizeWorldNpc(npc, idx));
       let changed = false;
+
       seedsByName.forEach((seed, key) => {
-        const idx = next.findIndex((n) => ((n.name || '').trim().toLowerCase() === key));
+        const idx = next.findIndex((n) => npcNameKey(n.name) === key);
         if (idx < 0) {
           next.push(normalizeWorldNpc({
             ...seed,
             id: newId(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: nowIso,
+            updatedAt: nowIso,
           }, next.length));
           changed = true;
           return;
@@ -1228,17 +1250,14 @@ export default function CharacterBook({
         const cur = normalizeWorldNpc(next[idx], idx);
         let rowChanged = false;
 
-        const mergedCharLinks = [...(cur.characterLinks || [])];
-        (seed.characterLinks || []).forEach((l) => {
-          const li = mergedCharLinks.findIndex((x) => x.characterName === l.characterName);
-          if (li < 0) {
-            mergedCharLinks.push(l);
-            rowChanged = true;
-          } else if (!mergedCharLinks[li].relation && l.relation) {
-            mergedCharLinks[li] = { ...mergedCharLinks[li], relation: l.relation };
-            rowChanged = true;
-          }
-        });
+        const seedCharLinks = normalizeCharacterLinks(seed.characterLinks);
+        const curByCharacter = new Map(
+          normalizeCharacterLinks(cur.characterLinks).map((l) => [l.characterName, l.relation])
+        );
+        const syncedCharLinks = seedCharLinks.map((l) => ({
+          characterName: l.characterName,
+          relation: curByCharacter.get(l.characterName) || l.relation || 'Related NPC',
+        }));
 
         const patch = {};
         if (!cur.age && seed.age) { patch.age = seed.age; rowChanged = true; }
@@ -1247,16 +1266,44 @@ export default function CharacterBook({
         if (!cur.summary && seed.summary) { patch.summary = seed.summary; rowChanged = true; }
         if (!cur.bio && seed.bio) { patch.bio = seed.bio; rowChanged = true; }
         if (!cur.image && seed.image) { patch.image = seed.image; rowChanged = true; }
+        if (!areCharacterLinksEqual(cur.characterLinks, syncedCharLinks)) {
+          patch.characterLinks = syncedCharLinks;
+          rowChanged = true;
+        }
+
         if (rowChanged) {
           next[idx] = {
             ...cur,
             ...patch,
-            characterLinks: mergedCharLinks,
-            updatedAt: new Date().toISOString(),
+            updatedAt: nowIso,
           };
           changed = true;
         }
       });
+
+      // Prune stale imported NPCs: linked world NPC rows whose names are no longer in any character profile list.
+      const staleIds = new Set();
+      next.forEach((npc, idx) => {
+        const normalized = normalizeWorldNpc(npc, idx);
+        const hasProfileMatch = seedsByName.has(npcNameKey(normalized.name));
+        if (!hasProfileMatch && normalizeCharacterLinks(normalized.characterLinks).length > 0) {
+          staleIds.add(String(normalized.id));
+        }
+      });
+
+      if (staleIds.size > 0) {
+        changed = true;
+        return next
+          .filter((npc) => !staleIds.has(String(npc.id)))
+          .map((npc, idx) => {
+            const normalized = normalizeWorldNpc(npc, idx);
+            const links = Array.isArray(normalized.links) ? normalized.links : [];
+            const filteredLinks = links.filter((l) => !staleIds.has(String(l.targetId)));
+            if (filteredLinks.length === links.length) return normalized;
+            return { ...normalized, links: filteredLinks, updatedAt: nowIso };
+          });
+      }
+
       return changed ? next : prev;
     });
   };
@@ -1266,6 +1313,10 @@ export default function CharacterBook({
       importCharacterNpcsIntoWorld();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charView]);
+
+  useEffect(() => {
+    if (charView !== 'worldnpcs') setConnectionWebModalOpen(false);
   }, [charView]);
 
   useEffect(() => {
@@ -1313,133 +1364,158 @@ export default function CharacterBook({
   };
 
   const connectionWeb = useMemo(() => {
-    const worldList = worldNpcs || [];
-    const worldNodes = worldList.map((n, idx) => {
-      const x = worldList.length
-        ? 50 + 38 * Math.cos((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, worldList.length)))
-        : 50;
-      const y = worldList.length
-        ? 50 + 34 * Math.sin((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, worldList.length)))
-        : 50;
-      return { id: `world:${n.id}`, type: 'world', label: n.name || 'NPC', x, y };
-    });
-
+    const worldList = (worldNpcs || []).map((n, idx) => normalizeWorldNpc(n, idx));
     const charSet = new Set();
     worldList.forEach((n) => {
-      (n.characterLinks || []).forEach((l) => { if (l.characterName) charSet.add(l.characterName); });
+      (n.characterLinks || []).forEach((l) => {
+        const charName = (l.characterName || '').trim();
+        if (charName) charSet.add(charName);
+      });
     });
-    const charList = Array.from(charSet);
-    const charNodes = charList.map((name, idx) => {
-      const x = charList.length
-        ? 50 + 20 * Math.cos((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, charList.length)))
-        : 50;
-      const y = charList.length
-        ? 50 + 16 * Math.sin((-Math.PI / 2) + (2 * Math.PI * idx / Math.max(1, charList.length)))
-        : 50;
-      return { id: `char:${name}`, type: 'character', label: name, x, y };
+    const charList = Array.from(charSet).sort((a, b) => a.localeCompare(b));
+    if (!worldList.length && !charList.length) return { nodes: [], edges: [], nodeById: {} };
+
+    const WORLD_TOP = 30;
+    const WORLD_BOTTOM = 90;
+    const CHAR_Y = 15;
+    const MIN_X = 8;
+    const MAX_X = 92;
+
+    const hasUnlinked = worldList.some(
+      (n) => !(n.characterLinks || []).some((l) => (l.characterName || '').trim())
+    );
+
+    const columnKeys = [...charList];
+    if (hasUnlinked) columnKeys.push('__unlinked__');
+    const columnCount = Math.max(1, columnKeys.length);
+    const xAt = (idx) =>
+      (columnCount === 1 ? 50 : MIN_X + ((MAX_X - MIN_X) * idx) / (columnCount - 1));
+
+    const columnX = {};
+    columnKeys.forEach((key, idx) => {
+      columnX[key] = xAt(idx);
+    });
+
+    const charNodes = charList.map((name) => ({
+      id: `char:${name}`,
+      type: 'character',
+      label: name,
+      x: columnX[name] ?? 50,
+      y: CHAR_Y,
+    }));
+
+    const buckets = {};
+    columnKeys.forEach((key) => {
+      buckets[key] = [];
+    });
+    const charLoad = {};
+    charList.forEach((name) => {
+      charLoad[name] = 0;
+    });
+
+    const sortedWorld = [...worldList].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    sortedWorld.forEach((npc) => {
+      const linkedChars = (npc.characterLinks || [])
+        .map((l) => (l.characterName || '').trim())
+        .filter((name) => charSet.has(name));
+
+      let bucketKey = '__unlinked__';
+      if (linkedChars.length > 0) {
+        bucketKey = [...linkedChars].sort(
+          (a, b) => (charLoad[a] || 0) - (charLoad[b] || 0) || a.localeCompare(b)
+        )[0];
+        charLoad[bucketKey] = (charLoad[bucketKey] || 0) + 1;
+      }
+      if (!buckets[bucketKey]) buckets[bucketKey] = [];
+      buckets[bucketKey].push(npc);
+    });
+
+    const worldNodes = [];
+    Object.entries(buckets).forEach(([bucketKey, list]) => {
+      const count = list.length;
+      if (!count) return;
+      list.forEach((npc, idx) => {
+        const t = count === 1 ? 0.5 : idx / (count - 1);
+        const y = WORLD_TOP + t * (WORLD_BOTTOM - WORLD_TOP);
+        const wobble = (idx % 2 === 0 ? -1 : 1) * Math.min(2.4, Math.floor((idx + 1) / 2) * 0.8);
+        const x = Math.max(MIN_X, Math.min(MAX_X, (columnX[bucketKey] ?? 50) + wobble));
+        worldNodes.push({
+          id: `world:${npc.id}`,
+          type: 'world',
+          label: npc.name || 'NPC',
+          x,
+          y,
+        });
+      });
     });
 
     const nodes = [...worldNodes, ...charNodes];
     const nodeById = {};
-    nodes.forEach((n) => { nodeById[n.id] = n; });
-
-    // Keep lines from visually cutting through unrelated character nodes.
-    const charRectsById = {};
-    charNodes.forEach((node) => {
-      const len = (node.label || '').length;
-      const halfW = Math.min(7.6, Math.max(4.9, 2.8 + len * 0.24));
-      const halfH = 3.9;
-      charRectsById[node.id] = {
-        left: node.x - halfW,
-        right: node.x + halfW,
-        top: node.y - halfH,
-        bottom: node.y + halfH,
-      };
+    nodes.forEach((n) => {
+      nodeById[n.id] = n;
     });
 
-    const pointInRect = (p, r) =>
-      p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
-
-    const segmentHitsRect = (a, b, rect) => {
-      const steps = 36;
-      for (let i = 0; i <= steps; i += 1) {
-        const t = i / steps;
-        const p = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-        if (pointInRect(p, rect)) return true;
-      }
-      return false;
+    const hash = (s) => {
+      let h = 0;
+      for (let i = 0; i < s.length; i += 1) h = ((h * 31) + s.charCodeAt(i)) | 0;
+      return h;
     };
 
-    const routeEdge = (fromId, toId) => {
-      const from = nodeById[fromId];
-      const to = nodeById[toId];
-      if (!from || !to) return [];
-
-      const blockedRects = Object.entries(charRectsById)
-        .filter(([id]) => id !== fromId && id !== toId)
-        .map(([, rect]) => rect);
-
-      const segmentBlocked = (p1, p2) =>
-        blockedRects.some((rect) => segmentHitsRect(p1, p2, rect));
-
-      if (!segmentBlocked(from, to)) return [from, to];
-
+    const makePath = (from, to, type, seedKey) => {
       const midX = (from.x + to.x) / 2;
       const midY = (from.y + to.y) / 2;
-      const singleWaypointCandidates = [
-        { x: 6, y: midY }, { x: 94, y: midY },
-        { x: midX, y: 8 }, { x: midX, y: 92 },
-        { x: 6, y: from.y }, { x: 6, y: to.y },
-        { x: 94, y: from.y }, { x: 94, y: to.y },
-        { x: from.x, y: 8 }, { x: to.x, y: 8 },
-        { x: from.x, y: 92 }, { x: to.x, y: 92 },
-      ];
-
-      for (const wp of singleWaypointCandidates) {
-        if (!segmentBlocked(from, wp) && !segmentBlocked(wp, to)) {
-          return [from, wp, to];
-        }
-      }
-
-      for (const x of [4, 96]) {
-        const w1 = { x, y: from.y };
-        const w2 = { x, y: to.y };
-        if (!segmentBlocked(from, w1) && !segmentBlocked(w1, w2) && !segmentBlocked(w2, to)) {
-          return [from, w1, w2, to];
-        }
-      }
-
-      for (const y of [4, 96]) {
-        const w1 = { x: from.x, y };
-        const w2 = { x: to.x, y };
-        if (!segmentBlocked(from, w1) && !segmentBlocked(w1, w2) && !segmentBlocked(w2, to)) {
-          return [from, w1, w2, to];
-        }
-      }
-
-      return [from, to];
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len;
+      const ny = dx / len;
+      const sign = hash(seedKey) % 2 === 0 ? 1 : -1;
+      const bendBase = type === 'character'
+        ? Math.min(8, Math.max(2.6, len * 0.14))
+        : Math.min(12, Math.max(3.4, len * 0.18));
+      const bend = bendBase * sign;
+      const cx = midX + nx * bend;
+      const cy = type === 'character'
+        ? Math.min(midY - 4, from.y - 6 + ny * bend)
+        : midY + ny * bend;
+      return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
     };
 
     const edges = [];
-    const seen = new Set();
+    const seenNpcPairs = new Set();
 
     worldList.forEach((n) => {
       const from = `world:${n.id}`;
+      if (!nodeById[from]) return;
+
       (n.links || []).forEach((l) => {
         const to = `world:${l.targetId}`;
         if (!nodeById[to]) return;
-        const key = [from, to].sort().join('::');
-        if (seen.has(key)) return;
-        seen.add(key);
-        edges.push({ from, to, type: 'npc', note: l.note || '', route: routeEdge(from, to) });
+        const pairKey = [from, to].sort().join('::');
+        if (seenNpcPairs.has(pairKey)) return;
+        seenNpcPairs.add(pairKey);
+        edges.push({
+          from,
+          to,
+          type: 'npc',
+          note: l.note || '',
+          d: makePath(nodeById[from], nodeById[to], 'npc', pairKey),
+        });
       });
-      (n.characterLinks || []).forEach((l) => {
-        const to = `char:${l.characterName}`;
+
+      (n.characterLinks || []).forEach((l, idx) => {
+        const charName = (l.characterName || '').trim();
+        if (!charName) return;
+        const to = `char:${charName}`;
         if (!nodeById[to]) return;
-        const key = `${from}::${to}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        edges.push({ from, to, type: 'character', note: l.relation || '', route: routeEdge(from, to) });
+        const edgeKey = `${from}::${to}::${idx}`;
+        edges.push({
+          from,
+          to,
+          type: 'character',
+          note: l.relation || '',
+          d: makePath(nodeById[from], nodeById[to], 'character', edgeKey),
+        });
       });
     });
 
@@ -1762,6 +1838,15 @@ export default function CharacterBook({
                       onMouseEnter={tinyBtnHover}
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
+                      onClick={() => setConnectionWebModalOpen(true)}
+                    >
+                      Connection Web
+                    </button>
+                    <button
+                      style={{ ...tinyBtn, padding: '10px 14px', opacity: 0.95 }}
+                      onMouseEnter={tinyBtnHover}
+                      onMouseLeave={tinyBtnLeave}
+                      onMouseDown={navClick}
                       onClick={importCharacterNpcsIntoWorld}
                     >
                       Import Character NPCs
@@ -1770,72 +1855,6 @@ export default function CharacterBook({
                       + Add NPC
                     </button>
                   </div>
-                </div>
-
-                <div style={lightCard}>
-                  <div style={{ fontSize: 16, fontWeight: 950, color: THEME.creamText }}>Connection Web (Preview)</div>
-                  <div style={{ marginTop: 4, fontSize: 12, opacity: 0.75, color: THEME.creamSoft }}>
-                    Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
-                  </div>
-                  {connectionWeb.nodes.length === 0 ? (
-                    <div style={{ marginTop: 12, opacity: 0.78, lineHeight: 1.6, color: THEME.creamSoft }}>
-                      Add NPCs and links to build your relationship web.
-                    </div>
-                  ) : (
-                    <div style={{ marginTop: 12, position: 'relative', height: 360, borderRadius: 14, border: `1px solid ${THEME.lineSoft}`, background: 'linear-gradient(180deg, rgba(8,6,4,0.50), rgba(8,6,4,0.28))', overflow: 'hidden' }}>
-                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
-                        {connectionWeb.edges.map((edge, idx) => {
-                          const a = connectionWeb.nodeById[edge.from];
-                          const b = connectionWeb.nodeById[edge.to];
-                          if (!a || !b) return null;
-                          const route = Array.isArray(edge.route) && edge.route.length >= 2 ? edge.route : [a, b];
-                          const d = route.map((p, pointIdx) => `${pointIdx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                          return (
-                            <path
-                              key={`${edge.from}-${edge.to}-${idx}`}
-                              d={d}
-                              fill="none"
-                              stroke={edge.type === 'character' ? 'rgba(120,180,255,0.72)' : 'rgba(255,210,120,0.70)'}
-                              strokeWidth={edge.type === 'character' ? 0.22 : 0.28}
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          );
-                        })}
-                      </svg>
-                      {connectionWeb.nodes.map((node) => (
-                        <div
-                          key={node.id}
-                          title={node.label}
-                          style={{
-                            position: 'absolute',
-                            left: `${node.x}%`,
-                            top: `${node.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                            minWidth: 66,
-                            maxWidth: 92,
-                            padding: '4px 6px',
-                            borderRadius: 999,
-                            border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
-                            background: node.type === 'character'
-                              ? 'linear-gradient(180deg, rgba(26,44,72,0.88), rgba(14,26,44,0.90))'
-                              : 'linear-gradient(180deg, rgba(42,28,14,0.88), rgba(20,14,8,0.90))',
-                            boxShadow: '0 8px 18px rgba(0,0,0,0.42)',
-                            color: THEME.creamText,
-                            fontSize: 10.5,
-                            fontWeight: 900,
-                            letterSpacing: 0.2,
-                            textAlign: 'center',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                        >
-                          {node.label}
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 10 }}>
@@ -2364,6 +2383,136 @@ export default function CharacterBook({
             )}
           </div>
         </div>
+
+        {/* CONNECTION WEB MODAL */}
+        {connectionWebModalOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 31,
+              background: 'rgba(0,0,0,0.72)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+              backdropFilter: 'blur(4px)',
+            }}
+            onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectionWebModalOpen(false); }}
+          >
+            <div
+              style={{
+                width: 'min(1120px, 98vw)',
+                borderRadius: 22,
+                background: 'linear-gradient(180deg, rgba(28,20,12,0.97), rgba(14,10,6,0.98))',
+                boxShadow: '0 30px 90px rgba(0,0,0,0.75)',
+                border: `1px solid ${THEME.line}`,
+                color: THEME.creamText,
+                fontFamily: fontStack,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                maxHeight: 'min(860px, 92vh)',
+              }}
+            >
+              <div
+                style={{
+                  padding: '14px 18px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                  borderBottom: `1px solid ${THEME.lineSoft}`,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 17, fontWeight: 950 }}>Connection Web</div>
+                  <div style={{ fontSize: 11.5, opacity: 0.72, marginTop: 2 }}>
+                    Gold lines connect NPC-to-NPC links. Blue lines connect NPCs to linked player characters.
+                  </div>
+                </div>
+                <button
+                  style={{ ...backButton, padding: '8px 14px', fontSize: 12 }}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={btnDown}
+                  onClick={() => setConnectionWebModalOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div style={{ padding: 16, overflowY: 'auto' }}>
+                {connectionWeb.nodes.length === 0 ? (
+                  <div style={{ ...darkCard, lineHeight: 1.6, color: THEME.creamSoft }}>
+                    Add NPCs and links to build your relationship web.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      position: 'relative',
+                      height: 'min(72vh, 620px)',
+                      borderRadius: 14,
+                      border: `1px solid ${THEME.lineSoft}`,
+                      background: 'linear-gradient(180deg, rgba(8,6,4,0.56), rgba(8,6,4,0.30))',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+                      {connectionWeb.edges.map((edge, idx) => {
+                        if (!edge.d) return null;
+                        return (
+                          <path
+                            key={`${edge.from}-${edge.to}-${idx}`}
+                            d={edge.d}
+                            fill="none"
+                            stroke={edge.type === 'character' ? 'rgba(120,180,255,0.72)' : 'rgba(255,210,120,0.70)'}
+                            strokeWidth={edge.type === 'character' ? 0.24 : 0.30}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            opacity={edge.type === 'character' ? 0.86 : 0.74}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {connectionWeb.nodes.map((node) => (
+                      <div
+                        key={node.id}
+                        title={node.label}
+                        style={{
+                          position: 'absolute',
+                          left: `${node.x}%`,
+                          top: `${node.y}%`,
+                          transform: 'translate(-50%, -50%)',
+                          minWidth: 66,
+                          maxWidth: 118,
+                          padding: '5px 8px',
+                          borderRadius: 999,
+                          border: `1px solid ${node.type === 'character' ? 'rgba(120,180,255,0.36)' : THEME.lineSoft}`,
+                          background: node.type === 'character'
+                            ? 'linear-gradient(180deg, rgba(26,44,72,0.90), rgba(14,26,44,0.92))'
+                            : 'linear-gradient(180deg, rgba(42,28,14,0.90), rgba(20,14,8,0.92))',
+                          boxShadow: '0 10px 22px rgba(0,0,0,0.42)',
+                          color: THEME.creamText,
+                          fontSize: 11,
+                          fontWeight: 900,
+                          letterSpacing: 0.2,
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {node.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CHARACTER NPC MODAL */}
         {charNpcModalOpen && (
