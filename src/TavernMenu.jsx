@@ -1,5 +1,6 @@
 // ===== TAVERN MENU — ROOT CONTROLLER (RESTORED FX + FIXED LAYOUT + NAV-ONLY SFX) =====
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import styles from './TavernMenu.module.css';
 
 //Components Pages
 import AudioHUD from './components/AudioHUD';
@@ -62,6 +63,8 @@ export default function TavernMenu() {
   const [musicOn, setMusicOn] = useState(false);
   const [panelType, setPanelType] = useState('menu');
   const [bgVideoReady, setBgVideoReady] = useState(false);
+  const [bgVideoFailed, setBgVideoFailed] = useState(false);
+  const [menuEntered, setMenuEntered] = useState(false);
   const [nightMode, setNightMode] = useState(false);
 
   const [selectedChar, setSelectedChar] = useState(null);
@@ -185,6 +188,7 @@ export default function TavernMenu() {
 
   const activeBgVideo = nightMode ? tavernBgVideoNight : tavernBgVideo;
   const activeMusic = nightMode ? tavernMusicNight : tavernMusic;
+  const showBgFallback = bgVideoFailed || (!bgVideoReady && !menuEntered);
 
   /* ================= AUDIO ================= */
   useAudioLoop(musicRef, { volume: musicVol, loop: true });
@@ -209,6 +213,7 @@ export default function TavernMenu() {
   const toggleNightMode = () => {
     const nextNightMode = !nightMode;
     setBgVideoReady(false);
+    setBgVideoFailed(false);
     setNightMode(nextNightMode);
 
     if (nextNightMode) {
@@ -218,6 +223,7 @@ export default function TavernMenu() {
   };
 
   const autoPlayAudio = () => {
+    setMenuEntered(true);
     if (musicOn) return; // already playing
     if (!musicRef.current || !fireRef.current) return;
     musicRef.current.volume = musicVol;
@@ -360,7 +366,7 @@ export default function TavernMenu() {
 
   /* ================= RENDER ================= */
   return (
-    <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden', color: 'white', fontFamily: 'serif' }}>
+    <div className={styles.root}>
       {/* Background video (preferred) */}
       <video
         key={activeBgVideo}
@@ -369,93 +375,54 @@ export default function TavernMenu() {
         muted
         loop
         playsInline
-        onCanPlay={() => setBgVideoReady(true)}
-        onError={() => setBgVideoReady(false)}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          pointerEvents: 'none',
-          zIndex: 0,
-          opacity: bgVideoReady ? 1 : 0,
-          transition: 'opacity 260ms ease',
+        onCanPlay={() => {
+          setBgVideoReady(true);
+          setBgVideoFailed(false);
         }}
+        onError={() => {
+          setBgVideoReady(false);
+          setBgVideoFailed(true);
+        }}
+        className={styles.backgroundMedia}
+        style={{ opacity: bgVideoReady ? 1 : 0 }}
       />
 
       {/* Background image fallback (NEVER blocks clicks) */}
       <img
         src={background}
         alt=""
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          pointerEvents: 'none',
-          zIndex: 0,
-          opacity: bgVideoReady ? 0 : 1,
-          transition: 'opacity 260ms ease',
-        }}
+        className={styles.backgroundMedia}
+        style={{ opacity: showBgFallback ? 1 : 0 }}
       />
 
       {/* Vignette (NEVER blocks clicks) */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(circle at center, transparent 40%, rgba(0,0,0,0.78) 100%)',
-          zIndex: 1,
-          pointerEvents: 'none',
-        }}
-      />
+      <div className={styles.vignette} />
 
       {/* Dust motes (NEVER block clicks) */}
       {motes.map((m) => (
         <div
           key={m.id}
+          className={styles.mote}
           style={{
-            position: 'absolute',
             left: m.left,
             top: m.top,
             width: m.size,
             height: m.size,
-            borderRadius: 999,
-            background: 'rgba(255,210,140,1)',
             opacity: m.opacity,
-            zIndex: 2,
-            filter: 'blur(0.2px)',
-            animation: `moteFloat ${m.dur}s linear ${m.delay}s infinite`,
-            transform: `translateX(0px) translateY(0px)`,
-            pointerEvents: 'none',
+            animationDuration: `${m.dur}s`,
+            animationDelay: `${m.delay}s`,
           }}
         />
       ))}
 
       {/* Fast cinematic fade overlay (NEVER blocks clicks) */}
       <div
+        className={styles.fadeOverlay}
         style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(0,0,0,0.92)',
           opacity: isFading ? 1 : 0,
-          transition: `opacity ${FADE_TOTAL_MS}ms ease`,
-          zIndex: 50,
-          pointerEvents: 'none',
+          transitionDuration: `${FADE_TOTAL_MS}ms`,
         }}
       />
-
-      {/* CSS polish (motes animation) */}
-      <style>{`
-        @keyframes moteFloat {
-          0% { transform: translateY(0px) translateX(0px); opacity: 0; }
-          10% { opacity: 0.85; }
-          70% { opacity: 0.45; }
-          100% { transform: translateY(-190px) translateX(70px); opacity: 0; }
-        }
-      `}</style>
 
       {/* Audio */}
       <audio ref={musicRef} src={activeMusic} />
@@ -468,8 +435,8 @@ export default function TavernMenu() {
       <audio ref={menuOpenRef} src={menuOpenSfx} preload="auto" />
 
       {/* HUD (always above panels; only HUD captures clicks) */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 80, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: 0, right: 0, pointerEvents: 'auto' }}>
+      <div className={styles.hudLayer}>
+        <div className={styles.hudDock}>
           <AudioHUD
             musicOn={musicOn}
             toggleAudio={toggleAudio}
@@ -489,7 +456,7 @@ export default function TavernMenu() {
       </div>
 
       {/* Panels wrapper */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 5 }}>
+      <div className={styles.panelsLayer}>
         <MenuPanel
           panelType={panelType}
           koaTitle={koaTitle}
