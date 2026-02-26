@@ -151,6 +151,13 @@ export default function CampaignHub(props) {
   const [invEditingId, setInvEditingId] = useState(null);
   const [dangerOpen,   setDangerOpen]   = useState(false);
 
+  useEffect(() => {
+    if (!invModalOpen) return;
+    const onKeyDown = (e) => { if (e.key === 'Escape') setInvModalOpen(false); };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [invModalOpen, setInvModalOpen]);
+
   const invEmptyDraft = { name: '', qty: 1, category: 'Gear', rarity: 'Common', value: '', weight: '', notes: '', tags: '', assignedTo: '', equipped: false };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
 

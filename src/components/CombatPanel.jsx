@@ -576,6 +576,29 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
+  useEffect(() => {
+    const anyModalOpen = cropOpen || addModalOpen || editorOpen;
+    if (!anyModalOpen) return;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (cropOpen) {
+        setCropOpen(false);
+        return;
+      }
+      if (addModalOpen) {
+        setAddModalOpen(false);
+        return;
+      }
+      if (editorOpen) {
+        setEditorOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cropOpen, addModalOpen, editorOpen]);
+
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
   const [headerH, setHeaderH] = useState(108);

@@ -851,6 +851,38 @@ export default function CharacterBook({
     setEditingCharNpcId(null);
   };
 
+  useEffect(() => {
+    const anyModalOpen =
+      worldNpcCropOpen ||
+      charNpcModalOpen ||
+      worldNpcModalOpen ||
+      connectionWebModalOpen;
+    if (!anyModalOpen) return;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (worldNpcCropOpen) {
+        setWorldNpcCropOpen(false);
+        return;
+      }
+      if (charNpcModalOpen) {
+        setCharNpcModalOpen(false);
+        setEditingCharNpcId(null);
+        return;
+      }
+      if (worldNpcModalOpen) {
+        setWorldNpcModalOpen(false);
+        return;
+      }
+      if (connectionWebModalOpen) {
+        setConnectionWebModalOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, connectionWebModalOpen]);
+
   const openAddCharNpc = () => {
     if (!selectedChar) return;
     setEditingCharNpcId(null);

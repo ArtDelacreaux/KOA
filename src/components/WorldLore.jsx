@@ -247,6 +247,15 @@ function Lightbox({
     setDragging(false);
   }, [item]);
 
+  useEffect(() => {
+    if (!item) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [item, onClose]);
+
   if (!item) return null;
 
   const tab = item._tab || 'maps';
