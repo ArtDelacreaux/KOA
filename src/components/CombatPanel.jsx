@@ -242,6 +242,16 @@ function normalize(enc) {
 
 function sideRank(side) { if (side === 'PC') return 0; if (side === 'Ally') return 1; return 2; }
 
+function sortCombatants(list) {
+  return [...list].sort((a, b) => {
+    const di = toInt(b.init, 0) - toInt(a.init, 0);
+    if (di !== 0) return di;
+    const sr = sideRank(a.side) - sideRank(b.side);
+    if (sr !== 0) return sr;
+    return String(a.name).localeCompare(String(b.name));
+  });
+}
+
 function initials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '??';
@@ -498,14 +508,14 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
       {/* ENEMIES — upper half, facing toward us, spread horizontally */}
       {enemies.length > 0 && (
         <div style={{
-          position: 'absolute', left: 0, right: 0, top: '18%',
+          position: 'absolute', left: 0, right: 0, top: '19%',
           display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(8, 60 - enemies.length * 6),
-          flexWrap: 'wrap', padding: '0 40px', zIndex: 3,
+          gap: Math.max(6, 48 - enemies.length * 4),
+          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
         }}>
           {enemies.map((c, i) => {
-            const scale = 0.72 + (enemies.length <= 2 ? 0.22 : enemies.length <= 4 ? 0.12 : 0);
-            const tokenSize = Math.round(120 * scale);
+            const scale = 0.68 + (enemies.length <= 2 ? 0.18 : enemies.length <= 4 ? 0.08 : 0);
+            const tokenSize = Math.round(108 * scale);
             return (
               <BattlefieldToken
                 key={c.id} c={c}
@@ -533,14 +543,14 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
       {/* PCs — lower half, facing away (backs shown), larger (closer) */}
       {pcs.length > 0 && (
         <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: '10%',
+          position: 'absolute', left: 0, right: 0, bottom: '12%',
           display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(10, 64 - pcs.length * 6),
-          flexWrap: 'wrap', padding: '0 40px', zIndex: 3,
+          gap: Math.max(8, 52 - pcs.length * 5),
+          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
         }}>
           {pcs.map((c, i) => {
-            const scale = 0.85 + (pcs.length <= 2 ? 0.28 : pcs.length <= 4 ? 0.14 : 0);
-            const tokenSize = Math.round(150 * scale);
+            const scale = 0.80 + (pcs.length <= 2 ? 0.22 : pcs.length <= 4 ? 0.10 : 0);
+            const tokenSize = Math.round(132 * scale);
             return (
               <BattlefieldToken
                 key={c.id} c={c}
@@ -660,23 +670,20 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
 
-  const sortByInitiative = () => {
+  const addCombatant = (c) => {
     setEncounter(prev => {
       const next = normalize(prev);
-      next.combatants = [...next.combatants].sort((a, b) => {
-        const di = toInt(b.init,0) - toInt(a.init,0);
-        if (di !== 0) return di;
-        const sr = sideRank(a.side) - sideRank(b.side);
-        if (sr !== 0) return sr;
-        return String(a.name).localeCompare(String(b.name));
-      });
-      next.activeIndex = clamp(next.activeIndex, 0, Math.max(0, next.combatants.length - 1));
+      const activeId = next.combatants[next.activeIndex]?.id || null;
+      next.combatants = sortCombatants([...next.combatants, c]);
+      if (next.combatants.length === 0) next.activeIndex = 0;
+      else if (activeId) {
+        const idx = next.combatants.findIndex(x => x.id === activeId);
+        next.activeIndex = idx >= 0 ? idx : clamp(next.activeIndex, 0, next.combatants.length - 1);
+      } else {
+        next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
+      }
       return next;
     });
-  };
-
-  const addCombatant = (c) => {
-    setEncounter(prev => { const next = normalize(prev); next.combatants = [...next.combatants, c]; return next; });
     setSelectedId(c.id);
   };
 
@@ -755,18 +762,20 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     if (!selected) return;
     setEncounter(prev => {
       const next = normalize(prev);
+      const activeId = next.combatants[next.activeIndex]?.id || null;
       next.combatants = next.combatants.map(x => x.id === selected.id ? { ...x, ...patch } : x);
+      if (Object.prototype.hasOwnProperty.call(patch, 'init') || Object.prototype.hasOwnProperty.call(patch, 'side') || Object.prototype.hasOwnProperty.call(patch, 'name')) {
+        next.combatants = sortCombatants(next.combatants);
+        if (next.combatants.length === 0) next.activeIndex = 0;
+        else if (activeId) {
+          const idx = next.combatants.findIndex(x => x.id === activeId);
+          next.activeIndex = idx >= 0 ? idx : clamp(next.activeIndex, 0, next.combatants.length - 1);
+        } else {
+          next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
+        }
+      }
       return next;
     });
-  };
-
-  const bumpHP = (delta) => {
-    if (!selected) return;
-    const cur = selected.hp==='' ? 0 : toInt(selected.hp,0);
-    const max = selected.maxHP==='' ? null : toInt(selected.maxHP,0);
-    let nxt = cur + delta;
-    if (max != null) nxt = clamp(nxt, 0, max); else nxt = Math.max(0, nxt);
-    setSelectedField({ hp: nxt });
   };
 
   const resetEncounter = () => {
@@ -842,11 +851,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
-  const HUD_GAP = 12;
-  const WINDOW_BAR_H = 44;
-  const SIDEBAR_W = 250;
-  const COL_GAP = 12;
+  const HUD_GAP = 10;
+  const WINDOW_BAR_H = 40;
   const PAD    = 14;
+  const WINDOW_MAX_W = 1560;
+  const BATTLEFIELD_MAX_W = 1220;
+  const BATTLEFIELD_MAX_H = 640;
 
   // ── Shared micro-styles ────────────────────────────────────────────────────
   const inp = {
@@ -858,17 +868,30 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     color:'rgba(255,220,160,0.60)', fontSize:10, fontWeight:950,
     letterSpacing:'0.18em', textTransform:'uppercase', marginBottom:5, userSelect:'none',
   };
+  const compactInp = {
+    ...inp,
+    height:34,
+    padding:'6px 9px',
+    fontSize:12,
+  };
+  const compactStatField = { width:108, flex:'0 0 auto' };
+  const compactSideField = { width:146, flex:'0 0 auto' };
   const btn = (v='gold') => ({
-    height:38,
-    padding:'0 14px',
-    borderRadius:14,
-    border:'1px solid rgba(255,220,160,0.24)',
+    height:34,
+    padding:'0 12px',
+    borderRadius:12,
+    border:
+      v === 'danger'
+        ? '1px solid rgba(255,160,160,0.26)'
+        : v === 'ghost'
+        ? '1px solid rgba(255,220,160,0.20)'
+        : '1px solid rgba(255,220,160,0.26)',
     background:
       v === 'danger'
-        ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
+        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
         : v === 'ghost'
-        ? 'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.03))'
-        : 'linear-gradient(180deg,var(--koa-gold-a),var(--koa-gold-b))',
+        ? 'linear-gradient(180deg, rgba(82,60,42,0.62), rgba(30,22,16,0.54))'
+        : 'linear-gradient(180deg, rgba(74,52,36,0.88), rgba(34,24,16,0.84))',
     color:'var(--koa-cream)',
     fontWeight:950,
     cursor:'pointer',
@@ -877,16 +900,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     userSelect:'none',
     whiteSpace:'nowrap',
     fontFamily:fontStack,
-    fontSize:12,
-    letterSpacing:'0.12em',
+    fontSize:11,
+    letterSpacing:'0.10em',
     transition:'transform 150ms ease, filter 150ms ease, box-shadow 150ms ease',
     backdropFilter:'blur(8px)',
   });
   const sBtn = (v='gold') => ({
     ...btn(v),
-    height:30,
-    padding:'0 10px',
-    borderRadius:10,
+    height:28,
+    padding:'0 9px',
+    borderRadius:9,
     fontSize:11,
     letterSpacing:'0.10em',
   });
@@ -894,13 +917,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     width:20,
     height:20,
     borderRadius:6,
-    border:'1px solid rgba(255,220,160,0.16)',
+    border: v === 'danger' ? '1px solid rgba(255,160,160,0.26)' : '1px solid rgba(255,220,160,0.18)',
     padding:0,
     background:
       v === 'danger'
-        ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
-        : 'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))',
-    color:'rgba(255,220,160,0.76)',
+        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
+        : 'linear-gradient(180deg, rgba(80,58,40,0.72), rgba(30,22,16,0.60))',
+    color: v === 'danger' ? 'rgba(255,210,210,0.88)' : 'rgba(255,220,160,0.82)',
     cursor:'pointer',
     fontSize:10,
     display:'flex',
@@ -917,13 +940,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     fontFamily:fontStack,
     fontSize:11,
     fontWeight:950,
-    border:`1px solid ${activeType ? 'rgba(255,210,80,0.60)' : 'rgba(255,220,160,0.16)'}`,
+    border:`1px solid ${activeType ? 'rgba(255,220,150,0.44)' : 'rgba(255,220,160,0.20)'}`,
     background: activeType
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.34), rgba(92,55,12,0.30))'
-      : 'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
-    color: activeType ? 'rgba(255,220,140,0.95)' : 'rgba(255,245,220,0.74)',
+      ? 'linear-gradient(180deg, rgba(92,66,40,0.88), rgba(40,28,18,0.84))'
+      : 'linear-gradient(180deg, rgba(80,58,40,0.68), rgba(28,20,14,0.56))',
+    color: activeType ? 'rgba(255,235,205,0.96)' : 'rgba(255,245,220,0.78)',
     boxShadow: activeType ? '0 10px 22px rgba(0,0,0,0.42)' : '0 8px 18px rgba(0,0,0,0.30)',
     transition:'all 140ms ease',
+    backdropFilter:'blur(10px)',
   });
   const btnHover = (e) => {
     playHover();
@@ -1048,8 +1072,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         {/* ── COMBAT WINDOW (separate from header) ── */}
         <div style={{
           position:'absolute',
-          left:PAD,
-          right:PAD,
+          left:'50%',
+          width:`min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
+          transform:'translateX(-50%)',
           top:headerH + HUD_GAP,
           bottom:PAD,
           borderRadius:18,
@@ -1072,7 +1097,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             right:PAD,
             top:PAD,
             height:WINDOW_BAR_H,
-            borderRadius:12,
+            borderRadius:10,
             border:'1px solid rgba(255,220,160,0.10)',
             background:'linear-gradient(180deg, rgba(10,8,6,0.84), rgba(10,8,6,0.68))',
             backdropFilter:'blur(10px)',
@@ -1080,198 +1105,246 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
             zIndex:3,
             display:'grid',
-            gridTemplateColumns:`${SIDEBAR_W}px minmax(0,1fr)`,
+            gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',
             alignItems:'center',
-            columnGap:COL_GAP,
-            padding:'0',
+            gap:10,
+            padding:'0 8px',
           }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-start', paddingLeft:8 }}>
-              <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); sortByInitiative(); }}>Sort</button>
-            </div>
+            <div />
 
-            <div style={{
-              display:'grid',
-              gridTemplateColumns:'1fr auto 1fr',
-              alignItems:'center',
-              minWidth:0,
-              paddingRight:8,
-            }}>
-              <div />
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
                 <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
                 <div style={{
-                  height:38, padding:'0 16px', borderRadius:999, border:'1px solid rgba(255,220,160,0.18)',
+                  height:34, padding:'0 14px', borderRadius:999, border:'1px solid rgba(255,220,160,0.18)',
                   background:'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))', color:'var(--koa-cream)',
                   display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
                   boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
                 }}>
                   <span style={{ color:'rgba(255,220,160,0.72)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.16em', fontWeight:900 }}>Round</span>
-                  <span style={{ fontSize:19, fontWeight:950 }}>{encounter.round}</span>
+                  <span style={{ fontSize:17, fontWeight:950 }}>{encounter.round}</span>
                 </div>
                 <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
               </div>
 
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8, minWidth:0 }}>
-                <label style={{
-                  color:'rgba(255,220,160,0.58)',
-                  fontSize:10,
-                  textTransform:'uppercase',
-                  letterSpacing:'0.16em',
-                  userSelect:'none',
-                  whiteSpace:'nowrap',
-                  fontFamily:fontStack,
-                  fontWeight:900,
-                }}>
-                  Scene
-                </label>
-                <select
-                  value={battleBg || ''}
-                  onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
-                  onMouseEnter={playHover}
-                  style={{
-                    height:34,
-                    padding:'0 10px',
-                    borderRadius:10,
-                    border:'1px solid rgba(255,220,160,0.22)',
-                    background:'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
-                    color:'var(--koa-cream)',
-                    fontSize:11,
-                    fontWeight:900,
-                    letterSpacing:'0.08em',
-                    cursor:'pointer',
-                    outline:'none',
-                    maxWidth:170,
-                    fontFamily:fontStack,
-                  }}
-                >
-                  {BATTLE_BACKGROUNDS.map((b, i) => (
-                    <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-        {/* ── MAIN LAYOUT — battlefield fills all space below header ── */}
-        <div style={{
-          position:'absolute', left:PAD, right:PAD,
-          top: PAD + WINDOW_BAR_H + 8,
-          bottom: PAD,
-          display:'grid', gridTemplateColumns:`${SIDEBAR_W}px 1fr`, gap:COL_GAP, zIndex:2, minHeight:0,
-        }}>
-
-          {/* ── LEFT: Initiative list ── */}
-          <div style={{ ...glass, overflow:'hidden', display:'flex', flexDirection:'column' }}>
-            {/* Header — stack title + buttons so nothing gets clipped */}
-            <div style={{
-              padding:'8px 8px', flexShrink:0,
-              borderBottom:'1px solid rgba(255,220,160,0.08)',
-              display:'flex', flexDirection:'column', gap:6,
-            }}>
-              <div style={{
-                color:'rgba(255,245,220,0.78)',
-                fontWeight:950,
-                fontSize:11,
-                letterSpacing:'0.10em',
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8, minWidth:0 }}>
+              <label style={{
+                color:'rgba(255,220,160,0.58)',
+                fontSize:10,
                 textTransform:'uppercase',
+                letterSpacing:'0.16em',
                 userSelect:'none',
                 whiteSpace:'nowrap',
+                fontFamily:fontStack,
+                fontWeight:900,
               }}>
-                Initiative
-              </div>
-
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
-              </div>
-            </div>
-
-            {/* Rows */}
-            <div style={{ flex:1, overflowY:'auto', padding:'5px 6px', display:'flex', flexDirection:'column', gap:3 }}>
-              {combatants.length === 0 ? (
-                <div style={{ color:'rgba(255,245,220,0.40)', fontWeight:900, fontSize:12, lineHeight:1.9, padding:'10px 6px' }}>
-                  Click <b style={{ color:'rgba(255,220,160,0.72)' }}>+ Add</b> to begin.
-                </div>
-              ) : combatants.map(c => {
-                const isActive   = c.id === activeCombatantId;
-                const isSelected = c.id === selectedId;
-                const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
-                const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
-                const pct = max > 0 ? (hp / max) * 100 : 100;
-
-                return (
-                  <div key={c.id}
-                    onClick={() => openEditorFor(c.id)}
-                    onMouseEnter={playHover}
-                    style={{
-                      borderRadius:9,
-                      border:`1px solid ${isActive ? 'rgba(255,210,130,0.38)' : isSelected ? 'rgba(255,210,130,0.16)' : 'rgba(255,255,255,0.05)'}`,
-                      background: isActive ? 'rgba(176,101,0,0.12)' : 'rgba(255,255,255,0.022)',
-                      padding:'6px 7px', cursor:'pointer', opacity: c.dead ? 0.45 : 1,
-                      transition:'background 150ms',
-                    }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      {/* side color dot */}
-                      <div style={{ width:7, height:7, borderRadius:'50%', flexShrink:0,
-                        background: sideAccent(c.side), boxShadow:`0 0 6px ${sideAccent(c.side)}` }}/>
-                      {/* init badge */}
-                      <div style={{ width:22, textAlign:'center', fontWeight:950, fontSize:11,
-                        color: isActive ? 'rgba(255,220,100,0.95)' : 'rgba(255,245,220,0.65)',
-                        flexShrink:0 }}>{toInt(c.init,0)}</div>
-                      {/* name */}
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontWeight:950, fontSize:11, color:'var(--koa-cream)',
-                          whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                          textDecoration: c.dead ? 'line-through' : 'none' }}>{c.name}</div>
-                        {c.role && <div style={{ fontSize:9, color:'rgba(255,220,160,0.45)', fontWeight:900 }}>{c.role}</div>}
-                      </div>
-                      {/* hp readout */}
-                      <div style={{ fontSize:10, fontWeight:950, color: pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)',
-                        flexShrink:0 }}>{c.hp===''?'—':c.hp}</div>
-                      {/* action icons */}
-                      <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                        <button title={c.dead?'Revive':'Mark dead'}
-                          onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                          onMouseEnter={playHover}
-                          style={iconMiniBtn(c.dead ? 'danger' : 'ghost')}>☠</button>
-                        <button title="Remove"
-                          onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                          onMouseEnter={playHover}
-                          style={iconMiniBtn('danger')}>✕</button>
-                      </div>
-                    </div>
-
-                    {/* HP bar */}
-                    <div style={{ height:2, borderRadius:999, background:'rgba(255,255,255,0.07)', marginTop:5, overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${clamp(pct,0,100)}%`, background:hpGradient(pct), borderRadius:999 }}/>
-                    </div>
-
-                    {/* Active turn indicator */}
-                    {isActive && (
-                      <div style={{ marginTop:4, fontSize:9, fontWeight:950, color:'rgba(255,220,100,0.80)', letterSpacing:'0.12em' }}>
-                        ▶ ACTIVE TURN
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                Scene
+              </label>
+              <select
+                value={battleBg || ''}
+                onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
+                onMouseEnter={playHover}
+                style={{
+                  height:31,
+                  padding:'0 10px',
+                  borderRadius:10,
+                  border:'1px solid rgba(255,220,160,0.22)',
+                  background:'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
+                  color:'var(--koa-cream)',
+                  fontSize:11,
+                  fontWeight:900,
+                  letterSpacing:'0.08em',
+                  cursor:'pointer',
+                  outline:'none',
+                  maxWidth:170,
+                  fontFamily:fontStack,
+                }}
+              >
+                {BATTLE_BACKGROUNDS.map((b, i) => (
+                  <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
+                    {b.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* ── CENTER: Visual Battlefield ── */}
-          <div style={{ ...glass, overflow:'hidden', position:'relative' }}>
-            <BattlefieldScene
-              combatants={combatants}
-              activeCombatantId={activeCombatantId}
-              selectedId={selectedId}
-              openEditorFor={openEditorFor}
-              playHover={playHover}
-              playNav={playNav}
-              battleBg={battleBg}
-            />
+        {/* ── MAIN LAYOUT — initiative bar above battlefield ── */}
+        <div style={{
+          position:'absolute',
+          left:PAD,
+          right:PAD,
+          top: PAD + WINDOW_BAR_H + 8,
+          bottom: PAD,
+          zIndex:2,
+          minHeight:0,
+        }}>
+          <div style={{
+            ...glass,
+            overflow:'hidden',
+            position:'relative',
+            height:'100%',
+            display:'flex',
+            flexDirection:'column',
+          }}>
+            {/* ── INITIATIVE STRIP ── */}
+            <div style={{
+              padding:'7px 8px',
+              borderBottom:'1px solid rgba(255,220,160,0.08)',
+              background:'linear-gradient(180deg,rgba(10,8,6,0.54),rgba(10,8,6,0.30))',
+              display:'flex',
+              flexDirection:'column',
+              gap:4,
+              minWidth:0,
+              flexShrink:0,
+            }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', minWidth:0 }}>
+                <div />
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
+                  <div style={{
+                    color:'rgba(255,245,220,0.78)',
+                    fontWeight:950,
+                    fontSize:11,
+                    letterSpacing:'0.10em',
+                    textTransform:'uppercase',
+                    userSelect:'none',
+                    whiteSpace:'nowrap',
+                  }}>
+                    Initiative
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
+                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+                    <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                  </div>
+                </div>
+                <div />
+              </div>
+
+              <div style={{ flex:1, minWidth:0, overflowX:'auto', overflowY:'hidden', paddingBottom:2 }}>
+                {combatants.length === 0 ? (
+                  <div style={{
+                    minHeight:26,
+                    display:'flex',
+                    alignItems:'center',
+                    justifyContent:'center',
+                    color:'rgba(255,245,220,0.40)',
+                    fontWeight:900,
+                    fontSize:12,
+                    lineHeight:1.35,
+                    padding:'0 4px',
+                    whiteSpace:'nowrap',
+                  }}>
+                    Click <b style={{ color:'rgba(255,220,160,0.72)', margin:'0 4px' }}>+ Add</b> to begin.
+                  </div>
+                ) : (
+                  <div style={{ display:'flex', gap:6, width:'max-content', minWidth:'100%', justifyContent:'center' }}>
+                    {combatants.map(c => {
+                      const isActive   = c.id === activeCombatantId;
+                      const isSelected = c.id === selectedId;
+                      const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
+                      const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
+                      const pct = max > 0 ? (hp / max) * 100 : 100;
+
+                      return (
+                        <div key={c.id}
+                          onClick={() => openEditorFor(c.id)}
+                          onMouseEnter={playHover}
+                          style={{
+                            borderRadius:10,
+                            border:`1px solid ${isActive ? 'rgba(255,210,130,0.38)' : isSelected ? 'rgba(255,210,130,0.16)' : 'rgba(255,255,255,0.05)'}`,
+                            background: isActive ? 'rgba(176,101,0,0.12)' : 'rgba(255,255,255,0.022)',
+                            padding:'5px 7px',
+                            cursor:'pointer',
+                            opacity: c.dead ? 0.45 : 1,
+                            transition:'background 150ms',
+                            minWidth:186,
+                            maxWidth:232,
+                            flex:'0 0 auto',
+                          }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                            <div style={{
+                              width:7,
+                              height:7,
+                              borderRadius:'50%',
+                              flexShrink:0,
+                              background: sideAccent(c.side),
+                              boxShadow:`0 0 6px ${sideAccent(c.side)}`,
+                            }}/>
+                            <div style={{
+                              width:22,
+                              textAlign:'center',
+                              fontWeight:950,
+                              fontSize:11,
+                              color: isActive ? 'rgba(255,220,100,0.95)' : 'rgba(255,245,220,0.65)',
+                              flexShrink:0,
+                            }}>
+                              {toInt(c.init,0)}
+                            </div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{
+                                fontWeight:950,
+                                fontSize:11,
+                                color:'var(--koa-cream)',
+                                whiteSpace:'nowrap',
+                                overflow:'hidden',
+                                textOverflow:'ellipsis',
+                                textDecoration: c.dead ? 'line-through' : 'none',
+                              }}>
+                                {c.name}
+                              </div>
+                              {c.role && <div style={{ fontSize:9, color:'rgba(255,220,160,0.45)', fontWeight:900 }}>{c.role}</div>}
+                            </div>
+                            <div style={{
+                              fontSize:10,
+                              fontWeight:950,
+                              color: pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)',
+                              flexShrink:0,
+                            }}>
+                              {c.hp===''?'—':c.hp}
+                            </div>
+                            <div style={{ display:'flex', gap:3, flexShrink:0 }}>
+                              <button title={c.dead ? 'Revive' : 'Mark dead'}
+                                onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
+                                onMouseEnter={playHover}
+                                style={iconMiniBtn(c.dead ? 'danger' : 'ghost')}>☠</button>
+                              <button title="Remove"
+                                onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
+                                onMouseEnter={playHover}
+                                style={iconMiniBtn('danger')}>✕</button>
+                            </div>
+                          </div>
+
+                          <div style={{ height:2, borderRadius:999, background:'rgba(255,255,255,0.07)', marginTop:5, overflow:'hidden' }}>
+                            <div style={{ height:'100%', width:`${clamp(pct,0,100)}%`, background:hpGradient(pct), borderRadius:999 }}/>
+                          </div>
+
+                          {isActive && (
+                            <div style={{ marginTop:4, fontSize:9, fontWeight:950, color:'rgba(255,220,100,0.80)', letterSpacing:'0.12em' }}>
+                              ▶ ACTIVE TURN
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── BATTLEFIELD ── */}
+            <div style={{ flex:1, minHeight:0, padding:'5px 12px 14px', display:'flex', justifyContent:'center', alignItems:'stretch' }}>
+              <div style={{ width:`min(100%, ${BATTLEFIELD_MAX_W}px)`, height:'100%', maxHeight:BATTLEFIELD_MAX_H }}>
+                <BattlefieldScene
+                  combatants={combatants}
+                  activeCombatantId={activeCombatantId}
+                  selectedId={selectedId}
+                  openEditorFor={openEditorFor}
+                  playHover={playHover}
+                  playNav={playNav}
+                  battleBg={battleBg}
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1366,62 +1439,26 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         {editorOpen && selected && (
           <div style={modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
             <div style={{
-              width:'min(960px,96vw)', maxHeight:'90vh', borderRadius:18, overflow:'hidden',
+              width:'min(780px,92vw)', maxHeight:'82vh', borderRadius:16, overflow:'hidden',
               border:'1px solid rgba(255,220,160,0.15)',
               background:'linear-gradient(180deg,rgba(8,6,4,0.97),rgba(4,3,2,0.88))',
               backdropFilter:'blur(14px)', boxShadow:'0 26px 70px rgba(0,0,0,0.76)',
-              display:'grid', gridTemplateRows:'52px 1fr',
+              display:'grid', gridTemplateRows:'46px 1fr',
             }}>
-              <div style={{ padding:'0 14px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
+              <div style={{ padding:'0 12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
                 <div style={{ color:'var(--koa-cream)', fontWeight:950, userSelect:'none' }}>
                   Editing: <span style={{ color:'rgba(255,220,160,0.88)' }}>{selected.name}</span>
                 </div>
-                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-                  {[-10,-5,-1,+1,+5].map(d => (
-                    <button key={d} style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); bumpHP(d); }}>
-                      {d>0?`+${d}`:d}
-                    </button>
-                  ))}
-                  <div style={{ width:1, height:20, background:'rgba(255,220,160,0.15)', margin:'0 2px' }}/>
+                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                   <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                 </div>
               </div>
 
-              <div style={{ padding:14, overflowY:'auto' }}>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                  <div><div style={lbl}>Name</div><input style={inp} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
-                  <div><div style={lbl}>Role / Class</div><input style={inp} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
-                  <div><div style={lbl}>Side</div>
-                    <select style={{ ...inp, cursor:'pointer' }} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
-                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
-                    </select>
-                  </div>
-                  <div><div style={lbl}>Initiative</div><input style={inp} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
-                  <div><div style={lbl}>HP</div><input style={inp} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div><div style={lbl}>Max HP</div><input style={inp} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div><div style={lbl}>Temp HP</div><input style={inp} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
-                  <div><div style={lbl}>AC</div><input style={inp} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                </div>
-
-                <div style={divider}/>
-
+              <div style={{ padding:12, overflowY:'auto' }}>
                 {/* Appearance section */}
                 <div style={{ marginBottom:10 }}>
                   <div style={{ color:'rgba(255,245,220,0.80)', fontWeight:950, fontSize:12, marginBottom:10, letterSpacing:0.3 }}>Appearance</div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    {selected.side === 'Enemy' && (
-                      <div>
-                        <div style={lbl}>Enemy Type</div>
-                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                          {ENEMY_TYPES.map(et => (
-                            <button key={et.key}
-                              onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
-                              onMouseEnter={playHover}
-                              style={enemyTypeBtn(selected.enemyType===et.key)}>{et.label}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                     <div>
                       <div style={lbl}>Custom Image</div>
                       <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
@@ -1455,7 +1492,39 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         )}
                       </div>
                     </div>
+                    {selected.side === 'Enemy' && (
+                      <div>
+                        <div style={lbl}>Enemy Type</div>
+                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                          {ENEMY_TYPES.map(et => (
+                            <button key={et.key}
+                              onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
+                              onMouseEnter={playHover}
+                              style={enemyTypeBtn(selected.enemyType===et.key)}>{et.label}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
+                </div>
+
+                <div style={divider}/>
+
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+                  <div><div style={lbl}>Name</div><input style={inp} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
+                  <div><div style={lbl}>Role / Class</div><input style={inp} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'end' }}>
+                  <div style={compactSideField}><div style={lbl}>Side</div>
+                    <select style={{ ...compactInp, cursor:'pointer' }} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
+                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
+                    </select>
+                  </div>
+                  <div style={compactStatField}><div style={lbl}>Initiative</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
+                  <div style={compactStatField}><div style={lbl}>HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div style={compactStatField}><div style={lbl}>Max HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div style={compactStatField}><div style={lbl}>Temp HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
+                  <div style={compactStatField}><div style={lbl}>AC</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
                 </div>
 
                 <div style={divider}/>
