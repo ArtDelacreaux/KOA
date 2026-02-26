@@ -10,10 +10,10 @@ import React, { useEffect, useRef, useState } from 'react';
 */
 
 const TABS = [
-  { id: 'maps',      label: 'Maps',      icon: '🗺️' },
-  { id: 'scenes',    label: 'Scenes',    icon: '🎨' },
+  { id: 'maps', label: 'Maps', icon: '🗺️' },
+  { id: 'scenes', label: 'Scenes', icon: '🎨' },
   { id: 'locations', label: 'Locations', icon: '🏰' },
-  { id: 'factions',  label: 'Factions',  icon: '⚜️' },
+  { id: 'factions', label: 'Factions', icon: '⚜️' },
 ];
 
 /*
@@ -26,27 +26,127 @@ const TABS = [
 */
 const GALLERY = {
   maps: [
-    { id: 1, title: 'The Continent of Atria',  src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
-    { id: 2, title: 'The Shattered Canyon',    src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
+    { id: 1, title: 'The Continent of Atria', src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
+    { id: 2, title: 'The Shattered Canyon', src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
   ],
   scenes: [
-    { id: 1, title: 'The Well',                 src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
+    { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
     { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
-    { id: 3, title: "The Oracle's Vision",      src: '', description: 'A dream sequence revealing the ancient prophecy.' },
+    { id: 3, title: "The Oracle's Vision", src: '', description: 'A dream sequence revealing the ancient prophecy.' },
   ],
   locations: [
-    { id: 1, title: 'The City of Qonza',      src: 'lore/Qonza.webp', description: 'Crescent moon city with a cruel justice system.' },
-    { id: 2, title: 'The City of Williwack',  src: 'lore/Williwack.jpg', description: 'A desert kingdom that borders the World Spear.' },
-    { id: 3, title: 'The City of Avalon',     src: 'lore/avalonsky.jpg', description: 'Overview of the Center Kingdom' },
-	{ id: 4, title: 'The City of Metlos',     src: 'lore/Metlos.jpg', description: 'Overview of Metlos' },
-	{ id: 5, title: 'The Village of Orum',    src: 'lore/orum.png', description: 'Overview of Orum' },
-	{ id: 6, title: 'The City of Buston',     src: 'lore/Buston.jpg', description: 'Overview of Buston' },
-	{ id: 7, title: 'The Village of SkulPol', src: 'lore/skolpol.jpg', description: 'Overview of Buston' },
+    {
+      id: 1,
+      title: 'The City of Qonza',
+      src: 'lore/Qonza.webp',
+      description: 'Crescent moon city with a cruel justice system.',
+      summary: 'Qonza thrives on strict order, wealth, and carefully guarded status. Most power flows through courts, contracts, and those who can afford both.',
+      region: 'Southern Trade Crescent',
+      governance: 'Magistrate houses and legal guild councils',
+      economy: 'Contract law, caravan tolls, and luxury trade',
+      tensions: 'Class unrest, selective justice, and border corruption',
+    },
+    {
+      id: 2,
+      title: 'The City of Williwack',
+      src: 'lore/Williwack.jpg',
+      description: 'A desert kingdom that borders the World Spear.',
+      summary: 'Williwack stands where scorched routes meet mountain shadow. Survival forged a proud city-state known for discipline and resource control.',
+      region: 'Western Desert Verge',
+      governance: 'Crown-appointed stewards with military oversight',
+      economy: 'Water rights, glasswork, and spear-route caravans',
+      tensions: 'Border skirmishes and drought-year rationing',
+    },
+    {
+      id: 3,
+      title: 'The City of Avalon',
+      src: 'lore/avalonsky.jpg',
+      description: 'Overview of the Center Kingdom.',
+      summary: 'Avalon is a political and religious center where noble influence and temple authority constantly negotiate for control.',
+      region: 'Central Kingdom',
+      governance: 'Crown administration with temple arbitration',
+      economy: 'State levies, artisan districts, and temple patronage',
+      tensions: 'Court intrigue, church pressure, and urban crime',
+    },
+    {
+      id: 4,
+      title: 'The City of Metlos',
+      src: 'lore/Metlos.jpg',
+      description: 'Overview of Metlos.',
+      summary: 'Metlos is a fortified industrial city known for foundries, military supply chains, and a ruthless approach to efficiency.',
+      region: 'Ironward Basin',
+      governance: 'Militia council with merchant bloc influence',
+      economy: 'Steelworks, siege craft, and contract labor',
+      tensions: 'Labor strikes and black-market weapons',
+    },
+    {
+      id: 5,
+      title: 'The Village of Orum',
+      src: 'lore/orum.png',
+      description: 'Overview of Orum.',
+      summary: 'Orum is a small but stubborn settlement that survives by community pacts, hidden trails, and local herbal trade.',
+      region: 'Greenhollow Reach',
+      governance: 'Elder circle and rotating wardens',
+      economy: 'Herbs, timber, and river ferries',
+      tensions: 'Bandit pressure and crop blight seasons',
+    },
+    {
+      id: 6,
+      title: 'The City of Buston',
+      src: 'lore/Buston.jpg',
+      description: 'Overview of Buston.',
+      summary: 'Buston sits on key roads and acts as a noisy commercial hinge between noble capitals and frontier outposts.',
+      region: 'Northroad Junction',
+      governance: 'Chartered city council',
+      economy: 'Transit tariffs, inns, and warehousing',
+      tensions: 'Guild turf wars and smuggling rings',
+    },
+    {
+      id: 7,
+      title: 'The Village of SkulPol',
+      src: 'lore/skolpol.jpg',
+      description: 'Overview of SkulPol.',
+      summary: 'SkulPol is remote, weathered, and deeply superstitious, with locals who trust memory more than maps.',
+      region: 'Fogline Hills',
+      governance: 'Clan heads and shrine keepers',
+      economy: 'Hunting, salvage, and seasonal trade',
+      tensions: 'Disappearing travelers and old-feud violence',
+    },
   ],
   factions: [
-    { id: 1, title: 'The Velvet Rose',           src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
-    { id: 2, title: 'The Red Fang',              src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
-	{ id: 3, title: 'Ryken Church Followers',    src: 'lore/rykenf.webp', description: 'Detailed map of the Shattered Canyon.' },
+    {
+      id: 1,
+      title: 'The Velvet Rose',
+      src: 'lore/world-map.jpg',
+      description: 'Influence network built through charm, debt, and social leverage.',
+      summary: 'The Velvet Rose moves quietly through salons, courts, and private ledgers. They avoid open war and prefer leverage no one can prove.',
+      influence: 'Courts, noble estates, and merchant finance',
+      doctrine: 'Control what people owe, and they become predictable',
+      factionKeys: ['velvet rose',],
+      memberHints: ['Tarzos Spicer'],
+    },
+    {
+      id: 2,
+      title: 'The Red Fang',
+      src: 'lore/canyon.jpg',
+      description: 'Militant front-line brotherhood tied to blood-oaths and conquest.',
+      summary: 'The Red Fang values strength, retaliation, and public fear. They recruit from battle survivors and enforce loyalty through ritual debt.',
+      influence: 'Border forts, mercenary cells, and raider routes',
+      doctrine: 'Mercy is a weakness your enemy exploits',
+      factionKeys: ['red fang'],
+      memberHints: ['Cerci VonDonovon'],
+    },
+    {
+      id: 3,
+      title: 'Church of Ryken',
+      src: 'lore/rykenf.webp',
+      description: 'Devotional branches loyal to Ryken doctrine and shadow pacts.',
+      summary: 'Ryken followers split between public worship and hidden circles. Their theology attracts both desperate believers and ruthless opportunists.',
+      influence: 'Shrines, hidden temples, and oath-brokers',
+      doctrine: 'Faith and consequence are inseparable',
+      factionKeys: ['ryken church', 'church of ryken', 'ryken'],
+      memberHints: ['Ryken', 'William Spicer'],
+    },
   ],
 };
 
@@ -57,25 +157,28 @@ const GALLERY = {
   Then set: const VIDEO_SRC = introVideo;
 */
 const VIDEO_SRC = '';
+const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
+const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
+const LS_CHAR_NPCS = 'koa:char:npcs:v1';
 
 // ─── Theme (matches MenuPanel THEME) ──────────────────────────────────────────
 const THEME = {
-  goldA:     'rgba(176,101,0,0.90)',
+  goldA: 'rgba(176,101,0,0.90)',
   creamText: 'rgba(255,245,220,0.96)',
   creamSoft: 'rgba(255,245,220,0.72)',
-  glassA:    'rgba(255,245,220,0.065)',
-  glassB:    'rgba(255,245,220,0.022)',
-  line:      'rgba(255,220,160,0.18)',
-  lineSoft:  'rgba(255,220,160,0.10)',
+  glassA: 'rgba(255,245,220,0.065)',
+  glassB: 'rgba(255,245,220,0.022)',
+  line: 'rgba(255,220,160,0.18)',
+  lineSoft: 'rgba(255,220,160,0.10)',
 };
 const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 function CornerOrns() {
   const corners = [
-    { top: 6, left: 6,  borderTop: '1px solid rgba(255,220,160,0.45)', borderLeft:  '1px solid rgba(255,220,160,0.45)' },
+    { top: 6, left: 6, borderTop: '1px solid rgba(255,220,160,0.45)', borderLeft: '1px solid rgba(255,220,160,0.45)' },
     { top: 6, right: 6, borderTop: '1px solid rgba(255,220,160,0.45)', borderRight: '1px solid rgba(255,220,160,0.45)' },
-    { bottom: 6, left: 6,  borderBottom: '1px solid rgba(255,220,160,0.45)', borderLeft:  '1px solid rgba(255,220,160,0.45)' },
+    { bottom: 6, left: 6, borderBottom: '1px solid rgba(255,220,160,0.45)', borderLeft: '1px solid rgba(255,220,160,0.45)' },
     { bottom: 6, right: 6, borderBottom: '1px solid rgba(255,220,160,0.45)', borderRight: '1px solid rgba(255,220,160,0.45)' },
   ];
   return corners.map((s, i) => (
@@ -199,13 +302,18 @@ function ImageCard({ item, onClick }) {
   );
 }
 
-function Lightbox({ item, onClose }) {
+function Lightbox({
+  item,
+  onClose,
+  onOpenWorldNpcs = () => { },
+  onOpenMember = () => { },
+  getFactionMembers = () => [],
+}) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, panX: 0, panY: 0 });
 
-  // Reset zoom/pan when opening a new item
   useEffect(() => {
     if (!item) return;
     setZoom(1);
@@ -215,13 +323,17 @@ function Lightbox({ item, onClose }) {
 
   if (!item) return null;
 
+  const tab = item._tab || 'maps';
+  const isLocation = tab === 'locations';
+  const isFaction = tab === 'factions';
+  const factionMembers = isFaction ? getFactionMembers(item) : [];
+
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const setZoomClamped = (val) => setZoom(clamp(val, 1, 5));
 
   const onWheel = (e) => {
     if (!item?.src) return;
     e.preventDefault();
-
     const delta = e.deltaY > 0 ? -0.12 : 0.12;
     setZoomClamped(+(zoom + delta).toFixed(2));
   };
@@ -229,30 +341,267 @@ function Lightbox({ item, onClose }) {
   const startDrag = (e) => {
     if (!item?.src) return;
     setDragging(true);
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-    };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
   };
-
   const moveDrag = (e) => {
     if (!dragging) return;
     const dx = e.clientX - dragRef.current.startX;
     const dy = e.clientY - dragRef.current.startY;
     setPan({ x: dragRef.current.panX + dx, y: dragRef.current.panY + dy });
   };
-
   const endDrag = () => setDragging(false);
-
-  const resetView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
   const zoomIn = () => setZoomClamped(+(zoom + 0.25).toFixed(2));
   const zoomOut = () => setZoomClamped(+(zoom - 0.25).toFixed(2));
+
+  if (isLocation || isFaction) {
+    return (
+      <div
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.88)',
+          zIndex: 200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 22,
+          backdropFilter: 'blur(4px)',
+          WebkitBackdropFilter: 'blur(4px)',
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: 'linear-gradient(180deg, rgba(22,16,8,0.98), rgba(12,9,4,0.99))',
+            border: `1px solid rgba(255,220,160,0.4)`,
+            borderRadius: 22,
+            maxWidth: 1080,
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'hidden',
+            boxShadow: '0 0 80px rgba(0,0,0,0.8), 0 0 40px rgba(176,101,0,0.12)',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              padding: '14px 20px',
+              borderBottom: `1px solid ${THEME.lineSoft}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(255,245,220,0.04)',
+              gap: 12,
+            }}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontFamily: fontStack, color: THEME.creamText, fontSize: 15, fontWeight: 900, letterSpacing: '0.1em' }}>
+                {item.title}
+              </span>
+              <span style={{ color: 'rgba(255,220,160,0.56)', fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase' }}>
+                {isFaction ? 'Faction Dossier' : 'Settlement Summary'}
+              </span>
+            </div>
+
+            <button
+              onClick={onClose}
+              style={{
+                background: 'rgba(255,245,220,0.06)',
+                border: `1px solid ${THEME.line}`,
+                color: 'rgba(255,220,160,0.8)',
+                cursor: 'pointer',
+                borderRadius: 10,
+                width: 32,
+                height: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                fontFamily: fontStack,
+              }}
+              title="Close"
+            >
+              ✕
+            </button>
+          </div>
+
+          <div
+            className="wl-scrollbar"
+            style={{
+              overflowY: 'auto',
+              padding: 16,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                borderRadius: 16,
+                overflow: 'hidden',
+                border: `1px solid ${THEME.lineSoft}`,
+                background: 'rgba(0,0,0,0.25)',
+                minHeight: 260,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {item.src ? (
+                <img
+                  src={item.src}
+                  alt={item.title}
+                  style={{ width: '100%', height: '100%', maxHeight: 420, objectFit: 'cover' }}
+                />
+              ) : (
+                <div style={{ textAlign: 'center', opacity: 0.28 }}>
+                  <div style={{ fontSize: '3rem' }}>🖼️</div>
+                  <div style={{ color: 'rgba(255,220,160,0.7)', fontSize: '0.7rem', letterSpacing: '0.15em', marginTop: 10, fontFamily: fontStack }}>
+                    IMAGE NOT YET ASSIGNED
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                borderRadius: 16,
+                border: `1px solid ${THEME.lineSoft}`,
+                background: 'linear-gradient(180deg, rgba(34,24,14,0.74), rgba(16,12,8,0.82))',
+                padding: 14,
+                boxShadow: '0 18px 44px rgba(0,0,0,0.42)',
+              }}
+            >
+              <div style={{ color: 'rgba(255,245,220,0.92)', fontSize: 12.5, lineHeight: 1.72, fontWeight: 850 }}>
+                {(item.summary || item.description || '').trim() || 'No summary has been added for this entry yet.'}
+              </div>
+
+              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.18), transparent)', margin: '12px 0' }} />
+
+              {!isFaction ? (
+                <div style={{ display: 'grid', gap: 7, color: 'rgba(255,245,220,0.84)', fontSize: 12.5, fontWeight: 850, lineHeight: 1.6 }}>
+                  <div><strong style={{ color: THEME.creamText }}>Region:</strong> {(item.region || 'Unknown').trim()}</div>
+                  <div><strong style={{ color: THEME.creamText }}>Governance:</strong> {(item.governance || 'Unknown').trim()}</div>
+                  <div><strong style={{ color: THEME.creamText }}>Economy:</strong> {(item.economy || 'Unknown').trim()}</div>
+                  <div><strong style={{ color: THEME.creamText }}>Current Tensions:</strong> {(item.tensions || 'Unknown').trim()}</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 7, color: 'rgba(255,245,220,0.84)', fontSize: 12.5, fontWeight: 850, lineHeight: 1.6 }}>
+                  <div><strong style={{ color: THEME.creamText }}>Influence:</strong> {(item.influence || 'Unknown').trim()}</div>
+                  <div><strong style={{ color: THEME.creamText }}>Doctrine:</strong> {(item.doctrine || 'Unknown').trim()}</div>
+                </div>
+              )}
+            </div>
+
+            {isFaction && (
+              <div
+                style={{
+                  gridColumn: '1 / -1',
+                  borderRadius: 16,
+                  border: `1px solid ${THEME.lineSoft}`,
+                  background: 'linear-gradient(180deg, rgba(30,20,10,0.78), rgba(14,10,8,0.84))',
+                  padding: 14,
+                }}
+              >
+                <div style={{ fontFamily: fontStack, fontWeight: 900, letterSpacing: '0.08em', color: THEME.creamText, fontSize: 13, marginBottom: 10 }}>
+                  Known Members
+                </div>
+
+                {factionMembers.length === 0 ? (
+                  <div style={{ color: 'rgba(255,245,220,0.72)', fontSize: 12.5, lineHeight: 1.7 }}>
+                    No linked World NPC entries yet. Add or tag members in the World NPC Codex, then they will show up here.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {factionMembers.map((member, idx) => (
+                      <div
+                        key={`${member.id || member.name || 'member'}-${idx}`}
+                        style={{
+                          borderRadius: 12,
+                          border: `1px solid ${THEME.lineSoft}`,
+                          background: 'rgba(0,0,0,0.24)',
+                          padding: '9px 10px',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) auto',
+                          gap: 10,
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ color: THEME.creamText, fontWeight: 900, fontSize: 13 }}>{member.name || 'Unnamed NPC'}</div>
+                          <div style={{ color: 'rgba(255,245,220,0.72)', fontSize: 11.5, marginTop: 2, lineHeight: 1.55 }}>
+                            {member.occupation ? `${member.occupation} • ` : ''}{member.location || 'Location unknown'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => onOpenMember(member)}
+                          style={{
+                            borderRadius: 999,
+                            border: `1px solid ${THEME.line}`,
+                            padding: '7px 10px',
+                            background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+                            color: THEME.creamText,
+                            fontFamily: fontStack,
+                            fontSize: 11,
+                            fontWeight: 900,
+                            letterSpacing: '0.08em',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Open Profile
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => onOpenWorldNpcs({ faction: '' })}
+                    style={{
+                      borderRadius: 999,
+                      border: `1px solid ${THEME.line}`,
+                      padding: '8px 12px',
+                      background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+                      color: THEME.creamText,
+                      fontFamily: fontStack,
+                      fontSize: 11.5,
+                      fontWeight: 900,
+                      letterSpacing: '0.08em',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Open Full World NPC Codex
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              padding: '12px 20px',
+              borderTop: `1px solid ${THEME.lineSoft}`,
+              color: 'rgba(255,245,220,0.68)',
+              fontSize: 12.5,
+              fontStyle: 'italic',
+              lineHeight: 1.6,
+              fontWeight: 850,
+            }}
+          >
+            {item.description}
+          </div>
+
+          <CornerOrns />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -283,7 +632,6 @@ function Lightbox({ item, onClose }) {
           position: 'relative',
         }}
       >
-        {/* Header */}
         <div style={{
           padding: '14px 20px',
           borderBottom: `1px solid ${THEME.lineSoft}`,
@@ -296,7 +644,6 @@ function Lightbox({ item, onClose }) {
             {item.title}
           </span>
 
-          {/* Zoom controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
             <button
               onClick={zoomOut}
@@ -385,7 +732,6 @@ function Lightbox({ item, onClose }) {
           </div>
         </div>
 
-        {/* Image */}
         <div
           onWheel={onWheel}
           style={{
@@ -427,7 +773,6 @@ function Lightbox({ item, onClose }) {
             </div>
           )}
 
-          {/* Small hint */}
           {item.src && (
             <div style={{
               position: 'absolute',
@@ -448,7 +793,6 @@ function Lightbox({ item, onClose }) {
           )}
         </div>
 
-        {/* Description */}
         <div style={{
           padding: '14px 20px',
           borderTop: `1px solid ${THEME.lineSoft}`,
@@ -468,7 +812,15 @@ function Lightbox({ item, onClose }) {
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-export default function WorldLore({ panelType, cinematicNav, playNav = () => {} }) {
+export default function WorldLore({
+  panelType,
+  cinematicNav,
+  playNav = () => { },
+  setCharView,
+  setSelectedChar,
+  setSelectedNpc,
+  characters = [],
+}) {
   const [activeTab, setActiveTab] = useState('maps');
   const [lightboxItem, setLightboxItem] = useState(null);
 
@@ -488,16 +840,304 @@ export default function WorldLore({ panelType, cinematicNav, playNav = () => {} 
     overflowY: 'auto',
   };
 
+  useEffect(() => {
+    if (!isActive) setLightboxItem(null);
+  }, [isActive]);
+
   const goBack = () => {
     playNav();
     cinematicNav('menu');
   };
 
-  const tabDescriptions = {
-    maps:      'Cartographic records of explored and rumored territories.',
-    scenes:    'Captured moments from the chronicle of our journey.',
-    locations: 'Places of interest, wonder, and danger throughout the realm.',
+  const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
+
+  const normalizeWorldNpc = (npc, idx = 0) => ({
+    id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
+    name: (npc?.name || '').trim(),
+    age: (npc?.age || '').trim(),
+    faction: (npc?.faction || '').trim(),
+    occupation: (npc?.occupation || '').trim(),
+    location: (npc?.location || '').trim(),
+    summary: (npc?.summary || npc?.bio || '').trim(),
+    bio: (npc?.bio || '').trim(),
+    image: npc?.image || '',
+    characterLinks: Array.isArray(npc?.characterLinks)
+      ? npc.characterLinks
+        .map((l, linkIndex) => ({
+          characterName: (l?.characterName || '').trim(),
+          relation: (l?.relation || '').trim(),
+          linkIndex,
+        }))
+        .filter((l) => l.characterName)
+      : [],
+  });
+
+  const normalizeRelatedNpc = (npc, charName, idx = 0) => ({
+    id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
+    name: (npc?.name || '').trim(),
+    relation: (npc?.relation || '').trim(),
+    age: (npc?.age || '').trim(),
+    faction: (npc?.faction || '').trim(),
+    occupation: (npc?.occupation || '').trim(),
+    summary: (npc?.summary || npc?.bio || '').trim(),
+    bio: (npc?.bio || '').trim(),
+    image: npc?.image || '',
+    source: npc?.source || 'character',
+    worldNpcId: npc?.worldNpcId || null,
+  });
+
+  const readWorldNpcs = () => {
+    try {
+      const raw = localStorage.getItem(LS_WORLD_NPCS);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   };
+
+  const readCharacterNpcStore = () => {
+    try {
+      const raw = localStorage.getItem(LS_CHAR_NPCS);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const getFactionMembers = (factionItem) => {
+    const worldNpcs = readWorldNpcs();
+    const aliases = new Set(
+      [factionItem?.title, ...(Array.isArray(factionItem?.factionKeys) ? factionItem.factionKeys : [])]
+        .map(normalizeText)
+        .filter(Boolean)
+    );
+    const hintNames = (Array.isArray(factionItem?.memberHints) ? factionItem.memberHints : [])
+      .map((name) => (name || '').trim())
+      .filter(Boolean);
+    const hintSet = new Set(hintNames.map(normalizeText));
+    const out = [];
+    const seen = new Set();
+
+    (worldNpcs || []).forEach((rawNpc, idx) => {
+      const npc = normalizeWorldNpc(rawNpc, idx);
+      const name = npc.name;
+      const id = String(npc.id || `idx:${idx}`);
+      const faction = npc.faction;
+      const factionHit = aliases.size > 0 && aliases.has(normalizeText(faction));
+      const hintHit = hintSet.has(normalizeText(name));
+      if (!factionHit && !hintHit) return;
+      if (seen.has(id)) return;
+      seen.add(id);
+      out.push({
+        id,
+        worldNpcId: npc.id,
+        name: name || 'Unnamed NPC',
+        faction,
+        location: npc.location,
+        occupation: npc.occupation,
+        age: npc.age,
+        summary: npc.summary,
+        bio: npc.bio,
+        image: npc.image,
+        characterLinks: npc.characterLinks,
+      });
+    });
+
+    hintNames.forEach((hint) => {
+      const key = normalizeText(hint);
+      const exists = out.some((m) => normalizeText(m.name) === key);
+      if (!exists) {
+        out.push({
+          id: `hint:${key}`,
+          worldNpcId: null,
+          name: hint,
+          faction: '',
+          location: '',
+          occupation: '',
+          age: '',
+          summary: '',
+          bio: '',
+          image: '',
+          characterLinks: [],
+        });
+      }
+    });
+
+    return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  };
+
+  const openWorldNpcCodex = ({ search = '', faction = '' } = {}) => {
+    setLightboxItem(null);
+    try {
+      localStorage.setItem(
+        LS_WORLD_NPC_DEEPLINK,
+        JSON.stringify({
+          search: (search || '').trim(),
+          faction: (faction || '').trim(),
+          ts: Date.now(),
+        })
+      );
+    } catch { }
+
+    if (typeof setSelectedChar === 'function') setSelectedChar(null);
+    if (typeof setSelectedNpc === 'function') setSelectedNpc(null);
+    if (typeof setCharView === 'function') setCharView('worldnpcs');
+    playNav();
+    cinematicNav('characters');
+  };
+
+  const findCharacterByName = (name) => {
+    const key = normalizeText(name);
+    if (!key) return null;
+    return (Array.isArray(characters) ? characters : []).find((char) => normalizeText(char?.name) === key) || null;
+  };
+
+  const openCharacterProfile = (character) => {
+    if (!character) return;
+    setLightboxItem(null);
+    if (typeof setSelectedChar === 'function') setSelectedChar(character);
+    if (typeof setSelectedNpc === 'function') setSelectedNpc(null);
+    if (typeof setCharView === 'function') setCharView('detail');
+    playNav();
+    cinematicNav('characters');
+  };
+
+  const openNpcProfile = (character, npc) => {
+    if (!character || !npc) return;
+    setLightboxItem(null);
+    if (typeof setSelectedChar === 'function') setSelectedChar(character);
+    if (typeof setSelectedNpc === 'function') setSelectedNpc(npc);
+    if (typeof setCharView === 'function') setCharView('npc');
+    playNav();
+    cinematicNav('characters');
+  };
+
+  const findCharacterNpcByName = (npcName) => {
+    const key = normalizeText(npcName);
+    if (!key) return null;
+
+    const store = readCharacterNpcStore();
+    const roster = Array.isArray(characters) ? characters : [];
+
+    for (const char of roster) {
+      const saved = Array.isArray(store?.[char?.name]) ? store[char.name] : [];
+      const base = Array.isArray(char?.npcs) ? char.npcs : [];
+
+      const seenNames = new Set();
+      const merged = [...saved, ...base].filter((npc) => {
+        const npcKey = normalizeText(npc?.name);
+        if (!npcKey || seenNames.has(npcKey)) return false;
+        seenNames.add(npcKey);
+        return true;
+      });
+
+      const idx = merged.findIndex((npc) => normalizeText(npc?.name) === key);
+      if (idx >= 0) {
+        return {
+          character: char,
+          npc: normalizeRelatedNpc(merged[idx], char?.name || 'Character', idx),
+        };
+      }
+    }
+
+    return null;
+  };
+
+  const openFactionMemberProfile = (member) => {
+    const memberName = (member?.name || '').trim();
+    if (!memberName) {
+      openWorldNpcCodex({ faction: member?.faction || '' });
+      return;
+    }
+
+    const directCharacter = findCharacterByName(memberName);
+    if (directCharacter) {
+      openCharacterProfile(directCharacter);
+      return;
+    }
+
+    const memberLinks = Array.isArray(member?.characterLinks) ? member.characterLinks : [];
+    for (const link of memberLinks) {
+      const linkedCharacter = findCharacterByName(link?.characterName);
+      if (!linkedCharacter) continue;
+
+      openNpcProfile(linkedCharacter, {
+        id: `worldlink::${member.worldNpcId || member.id || memberName}::${linkedCharacter.name}::${Number.isInteger(link?.linkIndex) ? link.linkIndex : 0}`,
+        name: memberName,
+        relation: (link?.relation || '').trim() || 'Related NPC',
+        age: member?.age || '',
+        faction: member?.faction || '',
+        occupation: member?.occupation || '',
+        summary: member?.summary || member?.bio || '',
+        bio: member?.bio || '',
+        image: member?.image || '',
+        source: 'world',
+        worldNpcId: member?.worldNpcId || member?.id || null,
+      });
+      return;
+    }
+
+    const characterNpc = findCharacterNpcByName(memberName);
+    if (characterNpc) {
+      openNpcProfile(characterNpc.character, characterNpc.npc);
+      return;
+    }
+
+    openWorldNpcCodex({ search: memberName, faction: member?.faction || '' });
+  };
+
+  const tabDescriptions = {
+    maps: 'Cartographic records of explored and rumored territories.',
+    scenes: 'Captured moments from the chronicle of our journey.',
+    locations: 'Places of interest, wonder, and danger throughout the realm.',
+    factions: 'Power blocs, sects, and alliances that shape the realm.',
+  };
+
+  const tabBarWrap = {
+    display: 'flex',
+    gap: 8,
+    marginBottom: 22,
+    padding: 8,
+    borderRadius: 22,
+    border: `1px solid ${THEME.line}`,
+    background: 'linear-gradient(180deg, rgba(24,16,10,0.88), rgba(10,8,6,0.86))',
+    backdropFilter: 'blur(12px)',
+    WebkitBackdropFilter: 'blur(12px)',
+    boxShadow: '0 18px 44px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,245,220,0.06)',
+  };
+
+  const loreTabButton = (active) => ({
+    flex: 1,
+    minWidth: 0,
+    padding: '11px 16px',
+    borderRadius: 999,
+    border: active
+      ? '1px solid rgba(255,220,160,0.45)'
+      : '1px solid rgba(255,220,160,0.20)',
+    background: active
+      ? 'linear-gradient(180deg, rgba(176,101,0,0.34), rgba(92,55,12,0.30))'
+      : 'linear-gradient(180deg, rgba(58,40,24,0.86), rgba(24,16,10,0.90))',
+    color: active ? THEME.creamText : 'rgba(255,245,220,0.88)',
+    cursor: 'pointer',
+    fontFamily: fontStack,
+    fontSize: 12,
+    fontWeight: 900,
+    letterSpacing: '0.16em',
+    textTransform: 'uppercase',
+    transition: 'all 160ms ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    boxShadow: active
+      ? '0 14px 34px rgba(0,0,0,0.52), 0 0 18px rgba(176,101,0,0.24)'
+      : '0 10px 24px rgba(0,0,0,0.34)',
+    userSelect: 'none',
+    textShadow: '0 1px 10px rgba(0,0,0,0.78)',
+    whiteSpace: 'nowrap',
+  });
 
   return (
     <div style={panelStyle}>
@@ -675,62 +1315,32 @@ export default function WorldLore({ panelType, cinematicNav, playNav = () => {} 
             <SectionDivider label="Archives" />
 
             {/* Tab Bar */}
-            <div style={{
-              display: 'flex',
-              gap: 6,
-              marginBottom: 22,
-              background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-              border: `1px solid ${THEME.lineSoft}`,
-              borderRadius: 18,
-              padding: 6,
-              backdropFilter: 'blur(10px)',
-              boxShadow: '0 14px 40px rgba(0,0,0,0.4)',
-            }}>
+            <div style={tabBarWrap}>
               {TABS.map(tab => {
                 const active = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    style={{
-                      flex: 1,
-                      padding: '11px 16px',
-                      background: active
-                        ? 'linear-gradient(180deg, rgba(176,101,0,0.30), rgba(176,101,0,0.14))'
-                        : 'transparent',
-                      border: active
-                        ? '1px solid rgba(255,220,160,0.45)'
-                        : '1px solid transparent',
-                      borderRadius: 14,
-                      color: active ? THEME.creamText : 'rgba(255,245,220,0.45)',
-                      cursor: 'pointer',
-                      fontFamily: fontStack,
-                      fontSize: 12,
-                      fontWeight: 900,
-                      letterSpacing: '0.18em',
-                      textTransform: 'uppercase',
-                      transition: 'all 180ms ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      boxShadow: active ? '0 10px 28px rgba(0,0,0,0.3), 0 0 20px rgba(176,101,0,0.12)' : 'none',
-                      userSelect: 'none',
-                    }}
+                    style={loreTabButton(active)}
                     onMouseEnter={e => {
                       if (!active) {
-                        e.currentTarget.style.color = 'rgba(255,245,220,0.72)';
-                        e.currentTarget.style.borderColor = THEME.lineSoft;
+                        e.currentTarget.style.color = THEME.creamText;
+                        e.currentTarget.style.borderColor = 'rgba(255,220,160,0.36)';
+                        e.currentTarget.style.background = 'linear-gradient(180deg, rgba(78,52,28,0.92), rgba(30,20,12,0.92))';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
                       }
                     }}
                     onMouseLeave={e => {
                       if (!active) {
-                        e.currentTarget.style.color = 'rgba(255,245,220,0.45)';
-                        e.currentTarget.style.borderColor = 'transparent';
+                        e.currentTarget.style.color = 'rgba(255,245,220,0.88)';
+                        e.currentTarget.style.borderColor = 'rgba(255,220,160,0.20)';
+                        e.currentTarget.style.background = 'linear-gradient(180deg, rgba(58,40,24,0.86), rgba(24,16,10,0.90))';
+                        e.currentTarget.style.transform = 'translateY(0)';
                       }
                     }}
                   >
-                    <span style={{ fontSize: '1rem' }}>{tab.icon}</span>
+                    <span style={{ fontSize: '1rem', opacity: active ? 1 : 0.9 }}>{tab.icon}</span>
                     <span>{tab.label}</span>
                   </button>
                 );
@@ -744,7 +1354,11 @@ export default function WorldLore({ panelType, cinematicNav, playNav = () => {} 
               gap: 16,
             }}>
               {GALLERY[activeTab].map(item => (
-                <ImageCard key={item.id} item={item} onClick={setLightboxItem} />
+                <ImageCard
+                  key={item.id}
+                  item={item}
+                  onClick={(picked) => setLightboxItem({ ...picked, _tab: activeTab })}
+                />
               ))}
             </div>
 
@@ -767,7 +1381,13 @@ export default function WorldLore({ panelType, cinematicNav, playNav = () => {} 
       </div>
 
       {/* Lightbox */}
-      <Lightbox item={lightboxItem} onClose={() => setLightboxItem(null)} />
+      <Lightbox
+        item={lightboxItem}
+        onClose={() => setLightboxItem(null)}
+        onOpenWorldNpcs={openWorldNpcCodex}
+        onOpenMember={openFactionMemberProfile}
+        getFactionMembers={getFactionMembers}
+      />
     </div>
   );
 }

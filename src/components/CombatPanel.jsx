@@ -1,5 +1,5 @@
 // ===== COMBAT PANEL — with Battle Background Selector =====
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
@@ -318,7 +318,6 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
           boxShadow: c.side === 'Enemy'
             ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
             : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)',
-          borderRadius: 999,
           animation: 'pulse 1.6s ease-in-out infinite',
           zIndex: 1,
         }} />
@@ -605,6 +604,44 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
 
+  // Header measurement (prevents overlap with content below)
+  const headerRef = useRef(null);
+  const [headerH, setHeaderH] = useState(108);
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+
+    let rafId = 0;
+    const measure = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height || 0);
+      if (!h) return;
+      setHeaderH((prev) => (prev === h ? prev : h));
+    };
+    const scheduleMeasure = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+
+    measure();
+    window.addEventListener('resize', scheduleMeasure);
+
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(scheduleMeasure);
+      ro.observe(el);
+    }
+
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(scheduleMeasure).catch(() => {});
+    }
+
+    return () => {
+      window.removeEventListener('resize', scheduleMeasure);
+      if (ro) ro.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+    };
+  }, []);
+
   // ensure pick stays valid if roster changes
   useEffect(() => {
     if (!adventurers.length) return;
@@ -805,7 +842,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
-  const HUD_H  = 60;
+  const HUD_GAP = 12;
+  const WINDOW_BAR_H = 44;
+  const SIDEBAR_W = 250;
+  const COL_GAP = 12;
   const PAD    = 14;
 
   // ── Shared micro-styles ────────────────────────────────────────────────────
@@ -819,22 +859,83 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     letterSpacing:'0.18em', textTransform:'uppercase', marginBottom:5, userSelect:'none',
   };
   const btn = (v='gold') => ({
-    height:40, padding:'0 14px', borderRadius:12, border:'1px solid rgba(255,220,160,0.20)',
-    background: v==='danger'
-      ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
-      : 'linear-gradient(180deg,var(--koa-gold-a),var(--koa-gold-b))',
-    color:'var(--koa-cream)', fontWeight:950, cursor:'pointer', boxShadow:'0 6px 18px rgba(0,0,0,0.40)',
-    textShadow:'0 2px 6px rgba(0,0,0,0.55)', userSelect:'none', whiteSpace:'nowrap',
-    fontFamily:fontStack, fontSize:13, letterSpacing:0.3,
+    height:38,
+    padding:'0 14px',
+    borderRadius:14,
+    border:'1px solid rgba(255,220,160,0.24)',
+    background:
+      v === 'danger'
+        ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
+        : v === 'ghost'
+        ? 'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.03))'
+        : 'linear-gradient(180deg,var(--koa-gold-a),var(--koa-gold-b))',
+    color:'var(--koa-cream)',
+    fontWeight:950,
+    cursor:'pointer',
+    boxShadow:'0 14px 34px rgba(0,0,0,0.38)',
+    textShadow:'0 1px 8px rgba(0,0,0,0.75)',
+    userSelect:'none',
+    whiteSpace:'nowrap',
+    fontFamily:fontStack,
+    fontSize:12,
+    letterSpacing:'0.12em',
+    transition:'transform 150ms ease, filter 150ms ease, box-shadow 150ms ease',
+    backdropFilter:'blur(8px)',
   });
   const sBtn = (v='gold') => ({
-    height:28, padding:'0 9px', borderRadius:8, border:'1px solid rgba(255,220,160,0.14)',
-    background: v==='danger'
-      ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
-      : 'linear-gradient(180deg,rgba(160,90,0,0.82),rgba(110,50,0,0.90))',
-    color:'var(--koa-cream)', fontWeight:950, fontSize:11, cursor:'pointer',
-    userSelect:'none', whiteSpace:'nowrap', fontFamily:fontStack,
+    ...btn(v),
+    height:30,
+    padding:'0 10px',
+    borderRadius:10,
+    fontSize:11,
+    letterSpacing:'0.10em',
   });
+  const iconMiniBtn = (v='ghost') => ({
+    width:20,
+    height:20,
+    borderRadius:6,
+    border:'1px solid rgba(255,220,160,0.16)',
+    padding:0,
+    background:
+      v === 'danger'
+        ? 'linear-gradient(180deg,var(--koa-danger-a),var(--koa-danger-b))'
+        : 'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))',
+    color:'rgba(255,220,160,0.76)',
+    cursor:'pointer',
+    fontSize:10,
+    display:'flex',
+    alignItems:'center',
+    justifyContent:'center',
+    boxShadow:'0 8px 18px rgba(0,0,0,0.38)',
+    textShadow:'0 1px 6px rgba(0,0,0,0.65)',
+    transition:'transform 140ms ease, filter 140ms ease',
+  });
+  const enemyTypeBtn = (activeType) => ({
+    padding:'3px 9px',
+    borderRadius:8,
+    cursor:'pointer',
+    fontFamily:fontStack,
+    fontSize:11,
+    fontWeight:950,
+    border:`1px solid ${activeType ? 'rgba(255,210,80,0.60)' : 'rgba(255,220,160,0.16)'}`,
+    background: activeType
+      ? 'linear-gradient(180deg, rgba(176,101,0,0.34), rgba(92,55,12,0.30))'
+      : 'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
+    color: activeType ? 'rgba(255,220,140,0.95)' : 'rgba(255,245,220,0.74)',
+    boxShadow: activeType ? '0 10px 22px rgba(0,0,0,0.42)' : '0 8px 18px rgba(0,0,0,0.30)',
+    transition:'all 140ms ease',
+  });
+  const btnHover = (e) => {
+    playHover();
+    e.currentTarget.style.transform = 'translateY(-1px)';
+    e.currentTarget.style.filter = 'brightness(1.08)';
+    e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)';
+  };
+  const btnLeave = (e) => {
+    e.currentTarget.style.transform = 'translateY(0px)';
+    e.currentTarget.style.filter = 'none';
+    e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)';
+  };
   const glass = {
     borderRadius:16, border:'1px solid rgba(255,220,160,0.11)',
     background:'linear-gradient(180deg,rgba(8,6,4,0.74),rgba(4,3,2,0.56))',
@@ -851,87 +952,214 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <ShellLayout active={active} style={{ fontFamily:fontStack }}>
+    <ShellLayout
+      active={active}
+      style={{ alignItems:'stretch', justifyContent:'stretch', fontFamily:fontStack }}
+    >
       <div style={{
-        width:'min(1680px,99vw)', height:'min(1040px,96vh)', borderRadius:18,
-        overflow:'hidden', position:'relative', border:'1px solid var(--koa-line-strong)',
-        boxShadow:'0 26px 70px rgba(0,0,0,0.64)', background:'var(--koa-shell-bg)', fontFamily:fontStack,
+        position:'relative',
+        width:'100%',
+        height:'100%',
+        overflow:'hidden',
+        fontFamily:fontStack,
       }}>
-        {/* Vignette overlay */}
-        <div style={{
-          position:'absolute', inset:0, pointerEvents:'none',
-          background:'radial-gradient(1000px 580px at 32% 20%,rgba(255,245,220,0.05),transparent 60%),linear-gradient(180deg,rgba(0,0,0,0.45),rgba(0,0,0,0.78))',
-        }}/>
 
         {/* ── HEADER ── */}
-        <div style={{
-          position:'absolute', left:PAD, right:PAD, top:PAD, height:HUD_H,
-          display:'grid', gridTemplateColumns:'440px 1fr 260px', alignItems:'center', gap:10,
-          padding:'0 14px', borderRadius:16, border:'1px solid rgba(255,220,160,0.09)',
-          background:'linear-gradient(180deg,rgba(18,14,10,0.85),rgba(10,8,6,0.65))',
-          backdropFilter:'blur(12px)', boxShadow:'0 12px 26px rgba(0,0,0,0.42)', zIndex:8,
+        <div ref={headerRef} style={{
+          position:'absolute',
+          left:0,
+          right:0,
+          top:0,
+          padding:'26px 36px 14px',
+          background:'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))',
+          backdropFilter:'blur(14px)',
+          WebkitBackdropFilter:'blur(14px)',
+          borderBottom:'1px solid rgba(255,220,160,0.10)',
+          boxShadow:'0 14px 30px rgba(0,0,0,0.35)',
+          zIndex:8,
         }}>
-          {/* LEFT: Title */}
-          <div style={{ userSelect:'none' }}>
-            <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:16, letterSpacing:0.4 }}>Combat Tracker</div>
-            <div style={{ color:'rgba(255,220,160,0.52)', fontWeight:900, fontSize:10, letterSpacing:'0.20em', textTransform:'uppercase', marginTop:2 }}>
-              Initiative • HP • Status
-            </div>
-          </div>
-
-          {/* CENTER: Round controls */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); sortByInitiative(); }}>Sort</button>
-            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
-            <div style={{
-              height:40, padding:'0 16px', borderRadius:999, border:'1px solid rgba(255,220,160,0.12)',
-              background:'rgba(0,0,0,0.28)', color:'var(--koa-cream)',
-              display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
-            }}>
-              <span style={{ color:'rgba(255,220,160,0.65)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.18em' }}>Round</span>
-              <span style={{ fontSize:20, fontWeight:950 }}>{encounter.round}</span>
-            </div>
-            <button style={btn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
-            <button style={btn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); cinematicNav('menu'); }}>Back</button>
-          </div>
-
-          {/* RIGHT: Battle Background Selector */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8 }}>
-            <label style={{
-              color:'rgba(255,220,160,0.55)', fontSize:10, textTransform:'uppercase',
-              letterSpacing:'0.16em', userSelect:'none', whiteSpace:'nowrap', fontFamily:fontStack,
-            }}>
-              Scene
-            </label>
-            <select
-              value={battleBg || ''}
-              onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
-              onMouseEnter={playHover}
+          <div style={{
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'space-between',
+            gap:10,
+            flexWrap:'wrap',
+            position:'relative',
+            zIndex:1,
+          }}>
+            <button
+              onClick={() => { playNav(); cinematicNav('menu'); }}
+              onMouseEnter={(e) => {
+                playHover();
+                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
+                e.currentTarget.style.color = 'var(--koa-cream)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.24)';
+                e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
               style={{
-                height:34, padding:'0 10px', borderRadius:8,
-                border:'1px solid rgba(255,220,160,0.18)',
-                background:'rgba(0,0,0,0.50)',
-                color:'var(--koa-cream)',
-                fontSize:11, fontWeight:700, letterSpacing:'0.04em',
-                cursor:'pointer', outline:'none', maxWidth:160,
-                fontFamily:fontStack,
+                ...btn('ghost'),
+                height:36,
+                padding:'9px 18px',
+                borderRadius:14,
+                color:'rgba(255,220,160,0.8)',
+                fontSize:12,
+                letterSpacing:'0.14em',
+                boxShadow:'0 10px 28px rgba(0,0,0,0.3)',
               }}
             >
-              {BATTLE_BACKGROUNDS.map((b, i) => (
-                <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
-                  {b.label}
-                </option>
-              ))}
-            </select>
+              ← RETURN
+            </button>
+
+            <div style={{ textAlign:'center', flex:1, minWidth:240, userSelect:'none' }}>
+              <div style={{
+                fontSize:10,
+                letterSpacing:'0.38em',
+                color:'rgba(255,220,160,0.45)',
+                marginBottom:8,
+                marginTop:-6,
+                fontFamily:fontStack,
+                textTransform:'uppercase',
+                fontWeight:900,
+              }}>
+                ✦ &nbsp; BATTLEFIELD COMMAND &nbsp; ✦
+              </div>
+              <div style={{
+                margin:0,
+                fontFamily:fontStack,
+                fontSize:'clamp(1.35rem, 2.6vw, 2.05rem)',
+                fontWeight:950,
+                color:'var(--koa-cream)',
+                letterSpacing:'0.18em',
+                textShadow:'0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
+                lineHeight:1.05,
+              }}>
+                COMBAT TRACKER
+              </div>
+            </div>
+
+            <div style={{ width:120 }} />
           </div>
         </div>
+
+        {/* ── COMBAT WINDOW (separate from header) ── */}
+        <div style={{
+          position:'absolute',
+          left:PAD,
+          right:PAD,
+          top:headerH + HUD_GAP,
+          bottom:PAD,
+          borderRadius:18,
+          overflow:'hidden',
+          border:'1px solid var(--koa-line-strong)',
+          boxShadow:'0 26px 70px rgba(0,0,0,0.64)',
+          background:'var(--koa-shell-bg)',
+          zIndex:4,
+        }}>
+          {/* Vignette overlay */}
+          <div style={{
+            position:'absolute', inset:0, pointerEvents:'none',
+            background:'radial-gradient(1000px 580px at 32% 20%,rgba(255,245,220,0.05),transparent 60%),linear-gradient(180deg,rgba(0,0,0,0.45),rgba(0,0,0,0.78))',
+          }}/>
+
+          {/* ── WINDOW CONTROLS (moved out of top header) ── */}
+          <div style={{
+            position:'absolute',
+            left:PAD,
+            right:PAD,
+            top:PAD,
+            height:WINDOW_BAR_H,
+            borderRadius:12,
+            border:'1px solid rgba(255,220,160,0.10)',
+            background:'linear-gradient(180deg, rgba(10,8,6,0.84), rgba(10,8,6,0.68))',
+            backdropFilter:'blur(10px)',
+            WebkitBackdropFilter:'blur(10px)',
+            boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
+            zIndex:3,
+            display:'grid',
+            gridTemplateColumns:`${SIDEBAR_W}px minmax(0,1fr)`,
+            alignItems:'center',
+            columnGap:COL_GAP,
+            padding:'0',
+          }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-start', paddingLeft:8 }}>
+              <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); sortByInitiative(); }}>Sort</button>
+            </div>
+
+            <div style={{
+              display:'grid',
+              gridTemplateColumns:'1fr auto 1fr',
+              alignItems:'center',
+              minWidth:0,
+              paddingRight:8,
+            }}>
+              <div />
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
+                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
+                <div style={{
+                  height:38, padding:'0 16px', borderRadius:999, border:'1px solid rgba(255,220,160,0.18)',
+                  background:'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))', color:'var(--koa-cream)',
+                  display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
+                  boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
+                }}>
+                  <span style={{ color:'rgba(255,220,160,0.72)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.16em', fontWeight:900 }}>Round</span>
+                  <span style={{ fontSize:19, fontWeight:950 }}>{encounter.round}</span>
+                </div>
+                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
+              </div>
+
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8, minWidth:0 }}>
+                <label style={{
+                  color:'rgba(255,220,160,0.58)',
+                  fontSize:10,
+                  textTransform:'uppercase',
+                  letterSpacing:'0.16em',
+                  userSelect:'none',
+                  whiteSpace:'nowrap',
+                  fontFamily:fontStack,
+                  fontWeight:900,
+                }}>
+                  Scene
+                </label>
+                <select
+                  value={battleBg || ''}
+                  onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
+                  onMouseEnter={playHover}
+                  style={{
+                    height:34,
+                    padding:'0 10px',
+                    borderRadius:10,
+                    border:'1px solid rgba(255,220,160,0.22)',
+                    background:'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
+                    color:'var(--koa-cream)',
+                    fontSize:11,
+                    fontWeight:900,
+                    letterSpacing:'0.08em',
+                    cursor:'pointer',
+                    outline:'none',
+                    maxWidth:170,
+                    fontFamily:fontStack,
+                  }}
+                >
+                  {BATTLE_BACKGROUNDS.map((b, i) => (
+                    <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
+                      {b.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
         {/* ── MAIN LAYOUT — battlefield fills all space below header ── */}
         <div style={{
           position:'absolute', left:PAD, right:PAD,
-          top: PAD + HUD_H + 10,
+          top: PAD + WINDOW_BAR_H + 8,
           bottom: PAD,
-          display:'grid', gridTemplateColumns:'250px 1fr', gap:12, zIndex:4, minHeight:0,
+          display:'grid', gridTemplateColumns:`${SIDEBAR_W}px 1fr`, gap:COL_GAP, zIndex:2, minHeight:0,
         }}>
 
           {/* ── LEFT: Initiative list ── */}
@@ -955,9 +1183,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
               </div>
 
               <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                <button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                <button style={sBtn('gold')}   onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+                <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
               </div>
             </div>
 
@@ -1007,16 +1235,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       <div style={{ display:'flex', gap:3, flexShrink:0 }}>
                         <button title={c.dead?'Revive':'Mark dead'}
                           onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                          style={{ width:20, height:20, borderRadius:5, border:'none', padding:0,
-                            background: c.dead ? 'rgba(160,40,40,0.50)' : 'rgba(255,255,255,0.07)',
-                            color:'rgba(255,220,160,0.62)', cursor:'pointer', fontSize:10,
-                            display:'flex', alignItems:'center', justifyContent:'center' }}>☠</button>
+                          onMouseEnter={playHover}
+                          style={iconMiniBtn(c.dead ? 'danger' : 'ghost')}>☠</button>
                         <button title="Remove"
                           onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                          style={{ width:20, height:20, borderRadius:5, border:'none', padding:0,
-                            background:'rgba(255,255,255,0.07)', color:'rgba(255,220,160,0.62)',
-                            cursor:'pointer', fontSize:10,
-                            display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                          onMouseEnter={playHover}
+                          style={iconMiniBtn('danger')}>✕</button>
                       </div>
                     </div>
 
@@ -1063,7 +1287,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             }}>
               <div style={{ padding:'0 16px', height:52, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
                 <div style={{ color:'var(--koa-cream)', fontWeight:950, letterSpacing:0.4, userSelect:'none' }}>Add Combatants</div>
-                <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
+                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
               </div>
 
               <div style={{ padding:20, overflowY:'auto', display:'grid', gridTemplateColumns:'1fr 1fr', gap:26 }}>
@@ -1088,7 +1312,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
                     </div>
                   ) : null; })()}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={playHover} onClick={() => { playNav(); addAdventurer(); }}>+ Add Adventurer</button>
+                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addAdventurer(); }}>+ Add Adventurer</button>
                 </div>
 
                 {/* Add Custom */}
@@ -1125,17 +1349,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         {ENEMY_TYPES.map(et => (
                           <button key={et.key}
                             onClick={() => setDraft(d => ({ ...d, enemyType:et.key }))}
-                            style={{
-                              padding:'3px 9px', borderRadius:7, cursor:'pointer', fontFamily:fontStack, fontSize:11, fontWeight:950,
-                              border:`1px solid ${draft.enemyType===et.key ? 'rgba(255,210,80,0.60)' : 'rgba(255,255,255,0.10)'}`,
-                              background: draft.enemyType===et.key ? 'rgba(176,101,0,0.30)' : 'rgba(255,255,255,0.05)',
-                              color: draft.enemyType===et.key ? 'rgba(255,220,140,0.95)' : 'rgba(255,245,220,0.65)',
-                            }}>{et.label}</button>
+                            onMouseEnter={playHover}
+                            style={enemyTypeBtn(draft.enemyType===et.key)}>{et.label}</button>
                         ))}
                       </div>
                     </div>
                   )}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={playHover} onClick={() => { playNav(); addFromDraft(); }}>+ Add Custom</button>
+                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addFromDraft(); }}>+ Add Custom</button>
                 </div>
               </div>
             </div>
@@ -1158,12 +1378,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 </div>
                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   {[-10,-5,-1,+1,+5].map(d => (
-                    <button key={d} style={sBtn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); bumpHP(d); }}>
+                    <button key={d} style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); bumpHP(d); }}>
                       {d>0?`+${d}`:d}
                     </button>
                   ))}
                   <div style={{ width:1, height:20, background:'rgba(255,220,160,0.15)', margin:'0 2px' }}/>
-                  <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                 </div>
               </div>
 
@@ -1196,12 +1416,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           {ENEMY_TYPES.map(et => (
                             <button key={et.key}
                               onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
-                              style={{
-                                padding:'3px 9px', borderRadius:7, cursor:'pointer', fontFamily:fontStack, fontSize:11, fontWeight:950,
-                                border:`1px solid ${selected.enemyType===et.key ? 'rgba(255,210,80,0.60)' : 'rgba(255,255,255,0.10)'}`,
-                                background: selected.enemyType===et.key ? 'rgba(176,101,0,0.30)' : 'rgba(255,255,255,0.05)',
-                                color: selected.enemyType===et.key ? 'rgba(255,220,140,0.95)' : 'rgba(255,245,220,0.60)',
-                              }}>{et.label}</button>
+                              onMouseEnter={playHover}
+                              style={enemyTypeBtn(selected.enemyType===et.key)}>{et.label}</button>
                           ))}
                         </div>
                       </div>
@@ -1231,9 +1447,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         </label>
                         {selected.customImage && (
                           <button onClick={() => setSelectedField({ customImage:'' })}
-                            style={{ padding:'5px 10px', borderRadius:8, border:'none',
-                              background:'rgba(180,40,40,0.40)', color:'rgba(255,200,200,0.90)',
-                              cursor:'pointer', fontSize:11, fontFamily:fontStack }}>
+                            onMouseEnter={btnHover}
+                            onMouseLeave={btnLeave}
+                            style={{ ...sBtn('danger'), height:26, padding:'0 10px', borderRadius:8, fontSize:11, letterSpacing:'0.08em' }}>
                             Remove
                           </button>
                         )}
@@ -1258,10 +1474,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
                 <div style={divider}/>
                 <div style={{ display:'flex', gap:10 }}>
-                  <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
+                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); removeCombatant(selected.id); }}>
                     Remove
                   </button>
-                  <button style={sBtn('gold')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
+                  <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); toggleDead(selected.id); }}>
                     {selected.dead ? 'Revive' : 'Mark dead'}
                   </button>
                 </div>
@@ -1284,7 +1500,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
               {/* Header */}
               <div style={{ padding:'0 16px', height:50, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
                 <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:14, letterSpacing:0.3 }}>Crop Token Image</div>
-                <button style={sBtn('danger')} onMouseEnter={playHover} onClick={() => setCropOpen(false)}>✕ Cancel</button>
+                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => setCropOpen(false)}>✕ Cancel</button>
               </div>
 
               {/* Body */}
@@ -1349,7 +1565,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </div>
 
                   <button style={{ ...btn('gold'), width:'100%' }}
-                    onMouseEnter={playHover}
+                    onMouseEnter={btnHover}
+                    onMouseLeave={btnLeave}
                     onClick={() => { playNav(); applyCrop(); }}>
                     ✓ Apply Crop
                   </button>
@@ -1358,7 +1575,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             </div>
           </div>
         )}
-
+        </div>
       </div>
     </ShellLayout>
   );

@@ -485,6 +485,7 @@ export default function CharacterBook({
 
   /* ---------- World NPC Codex ---------- */
   const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
+  const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
   const normalizeWorldNpc = (npc, idx = 0) => ({
     id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
     name: npc?.name || '',
@@ -1257,6 +1258,29 @@ export default function CharacterBook({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charView]);
+
+  useEffect(() => {
+    if (charView !== 'worldnpcs') return;
+    let payload = null;
+    try {
+      const raw = localStorage.getItem(LS_WORLD_NPC_DEEPLINK);
+      if (!raw) return;
+      payload = JSON.parse(raw);
+      localStorage.removeItem(LS_WORLD_NPC_DEEPLINK);
+    } catch {
+      return;
+    }
+
+    const incomingFaction = (payload?.faction || '').trim();
+    const incomingSearch = (payload?.search || '').trim();
+    const safeFaction = incomingFaction && factions.includes(incomingFaction) ? incomingFaction : 'All';
+
+    setNpcFilterLocation('All');
+    setNpcFilterFaction(safeFaction);
+    setNpcSearch(incomingSearch);
+    setWorldNpcListMode('paged');
+    setWorldNpcPage(1);
+  }, [charView, factions]);
 
   const worldNpcById = useMemo(() => {
     const out = {};

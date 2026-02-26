@@ -540,6 +540,10 @@ export default function TavernMenu() {
           panelType={panelType}
           cinematicNav={cinematicNav}
           playNav={playNavClick}
+          setCharView={setCharView}
+          setSelectedChar={setSelectedChar}
+          setSelectedNpc={setSelectedNpc}
+          characters={characters}
         />
       </div>
     </div>

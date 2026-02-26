@@ -3,12 +3,18 @@ import ShellLayout from './ShellLayout';
 
 // ─── Theme (matches WorldLore / CharacterBook) ────────────────────────────────
 const THEME = {
+  goldA: 'rgba(176,101,0,0.90)',
+  goldB: 'rgba(122,55,0,0.92)',
+  dangerA: 'rgba(122,30,30,0.92)',
+  dangerB: 'rgba(90,18,18,0.92)',
   creamText: 'rgba(255,245,220,0.96)',
-  creamSoft: 'rgba(255,245,220,0.82)',
+  creamSoft: 'rgba(255,245,220,0.72)',
   glassA:    'rgba(255,245,220,0.065)',
   glassB:    'rgba(255,245,220,0.022)',
   line:      'rgba(255,220,160,0.18)',
   lineSoft:  'rgba(255,220,160,0.10)',
+  inkBgA: 'rgba(28,18,10,0.22)',
+  inkBgB: 'rgba(10,8,6,0.34)',
   textShadow: '0 1px 6px rgba(0,0,0,0.85), 0 2px 16px rgba(0,0,0,0.65)',
   textShadowSoft: '0 1px 4px rgba(0,0,0,0.75)',
 };
@@ -54,39 +60,42 @@ export default function CampaignHub(props) {
 
   const softCard = {
     padding: 14,
-    borderRadius: 16,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
+    borderRadius: 18,
+    background: 'linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))',
     color: THEME.creamText,
     fontFamily: fontStack,
     boxShadow: '0 18px 46px rgba(0,0,0,0.42)',
-    border: `1px solid ${THEME.line}`,
-    backdropFilter: 'blur(10px)',
+    border: `1px solid ${THEME.lineSoft}`,
+    backdropFilter: 'blur(8px)',
     textShadow: THEME.textShadow,
   };
 
   const tabButtonStyle = (active) => ({
-    padding: '7px 12px',
+    padding: '10px 18px',
     borderRadius: 999,
-    border: active ? `1px solid ${THEME.line}` : '1px solid rgba(255,255,255,0.10)',
-    background: active ? 'rgba(176,101,0,0.26)' : 'rgba(255,255,255,0.06)',
-    color: active ? THEME.creamText : THEME.creamSoft,
+    border: active ? `1px solid rgba(255,220,160,0.42)` : `1px solid rgba(255,220,160,0.22)`,
+    background: active
+      ? 'linear-gradient(180deg, rgba(60,40,20,0.95), rgba(24,16,8,0.96))'
+      : 'linear-gradient(180deg, rgba(52,35,20,0.90), rgba(22,15,8,0.92))',
+    color: active ? THEME.creamText : 'rgba(255,245,220,0.88)',
     cursor: 'pointer',
     fontWeight: 950,
     fontSize: 12,
-    letterSpacing: '0.14em',
+    letterSpacing: '0.12em',
     fontFamily: fontStack,
-    boxShadow: active ? '0 10px 18px rgba(0,0,0,0.10)' : 'none',
+    boxShadow: active ? '0 12px 30px rgba(0,0,0,0.50)' : '0 10px 24px rgba(0,0,0,0.38)',
     userSelect: 'none',
     whiteSpace: 'nowrap',
     transition: 'all 150ms ease',
-    textShadow: THEME.textShadow,
+    textShadow: '0 1px 8px rgba(0,0,0,0.75)',
+    backdropFilter: 'blur(8px)',
   });
 
   const smallBtn = (variant = 'gold') => {
     const base = {
       padding: '8px 10px',
-      borderRadius: 12,
-      border: `1px solid ${THEME.line}`,
+      borderRadius: 14,
+      border: `1px solid ${THEME.lineSoft}`,
       cursor: 'pointer',
       fontWeight: 900,
       fontSize: 12,
@@ -98,21 +107,23 @@ export default function CampaignHub(props) {
       background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
       color: THEME.creamText,
       textShadow: THEME.textShadow,
+      boxShadow: '0 14px 34px rgba(0,0,0,0.38)',
+      backdropFilter: 'blur(12px)',
     };
-    if (variant === 'gold') return { ...base, background: 'linear-gradient(180deg, rgba(176,101,0,0.90), rgba(122,55,0,0.92))', color: THEME.creamText, border: `1px solid ${THEME.line}`, textShadow: '0 2px 8px rgba(0,0,0,0.55)', boxShadow: '0 12px 26px rgba(0,0,0,0.25)' };
-    if (variant === 'danger') return { ...base, background: 'linear-gradient(180deg, rgba(122,30,30,0.92), rgba(90,18,18,0.92))', color: THEME.creamText, border: '1px solid rgba(255,160,160,0.26)', textShadow: '0 2px 8px rgba(0,0,0,0.55)', boxShadow: '0 12px 26px rgba(0,0,0,0.22)' };
-    if (variant === 'ghost') return { ...base, background: 'rgba(255,245,220,0.06)', color: THEME.creamText, border: `1px solid ${THEME.line}`, boxShadow: 'none', textShadow: THEME.textShadow };
+    if (variant === 'gold') return { ...base, background: `linear-gradient(180deg, ${THEME.goldA}, ${THEME.goldB})`, color: THEME.creamText, border: `1px solid ${THEME.line}`, textShadow: '0 2px 8px rgba(0,0,0,0.55)' };
+    if (variant === 'danger') return { ...base, background: `linear-gradient(180deg, ${THEME.dangerA}, ${THEME.dangerB})`, color: THEME.creamText, border: '1px solid rgba(255,160,160,0.26)', textShadow: '0 2px 8px rgba(0,0,0,0.55)' };
+    if (variant === 'ghost') return { ...base, background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`, color: THEME.creamText, border: `1px solid ${THEME.line}` };
     return base;
   };
 
-  const smallBtnHover = (e) => { playHover(); e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.06)'; e.currentTarget.style.boxShadow = '0 16px 34px rgba(0,0,0,0.26)'; };
-  const smallBtnLeave = (e) => { e.currentTarget.style.transform = 'translateY(0px)'; e.currentTarget.style.filter = 'none'; };
+  const smallBtnHover = (e) => { playHover(); e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.10)'; e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)'; };
+  const smallBtnLeave = (e) => { e.currentTarget.style.transform = 'translateY(0px)'; e.currentTarget.style.filter = 'none'; e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)'; };
 
   const pill = (type) => {
     const map = {
-      Main:   { bg: 'rgba(96,165,250,0.18)',  bd: 'rgba(96,165,250,0.35)',  fg: 'rgba(186,230,255,0.95)' },
-      Side:   { bg: 'rgba(251,191,36,0.16)',   bd: 'rgba(251,191,36,0.35)',  fg: 'rgba(253,230,138,0.96)' },
-      Personal: { bg: 'rgba(248,113,113,0.16)',   bd: 'rgba(248,113,113,0.35)',  fg: 'rgba(254,202,202,0.95)' },
+      Main:   { bg: 'rgba(105,150,220,0.14)',  bd: 'rgba(105,150,220,0.28)',  fg: 'rgba(210,228,255,0.94)' },
+      Side:   { bg: 'rgba(176,101,0,0.16)',    bd: 'rgba(255,220,160,0.30)',  fg: 'rgba(255,234,194,0.95)' },
+      Personal: { bg: 'rgba(140,70,70,0.16)',  bd: 'rgba(220,145,145,0.30)',  fg: 'rgba(255,215,215,0.94)' },
     };
     const c = map[type] || map.Side;
     return { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, border: `1px solid ${c.bd}`, background: c.bg, color: c.fg, fontWeight: 900, fontSize: 12, letterSpacing: 0.2, userSelect: 'none', boxShadow: type === 'Personal' ? '0 0 18px rgba(122,30,30,0.18)' : 'none' };
@@ -203,8 +214,8 @@ export default function CampaignHub(props) {
     return map[r] || map.common;
   };
 
-  const invInput     = { width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: 12, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 13, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack };
-  const invTinyInput = { width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 10, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 12, fontWeight: 900, background: 'rgba(0,0,0,0.28)', color: THEME.creamText, fontFamily: fontStack };
+  const invInput     = { width: '100%', boxSizing: 'border-box', padding: '8px 9px', borderRadius: 12, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 13, background: 'rgba(0,0,0,0.22)', color: THEME.creamText, fontFamily: fontStack };
+  const invTinyInput = { width: '100%', boxSizing: 'border-box', padding: '6px 8px', borderRadius: 10, border: `1px solid ${THEME.lineSoft}`, outline: 'none', fontSize: 12, fontWeight: 900, background: 'rgba(0,0,0,0.22)', color: THEME.creamText, fontFamily: fontStack };
   const invLabel     = { fontSize: 11, fontWeight: 900, color: THEME.creamSoft, marginBottom: 4, textShadow: THEME.textShadowSoft };
   const invTinyLabel = { fontSize: 10, fontWeight: 950, color: THEME.creamSoft, marginBottom: 4, letterSpacing: 0.2, textShadow: THEME.textShadowSoft };
 
@@ -319,10 +330,11 @@ export default function CampaignHub(props) {
           padding: '44px 36px 0',
           display: 'flex',
           flexDirection: 'column',
-          background: 'linear-gradient(180deg, rgba(8,5,2,0.96) 80%, transparent)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'linear-gradient(180deg, rgba(10,8,6,0.78), rgba(10,8,6,0.30))',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
           borderBottom: `1px solid ${THEME.lineSoft}`,
+          boxShadow: '0 14px 30px rgba(0,0,0,0.35)',
         }}>
 
           {/* Top row: back | title | spacer */}
@@ -332,22 +344,16 @@ export default function CampaignHub(props) {
             <button
               onClick={() => { playNav(); cinematicNav('menu'); }}
               style={{
-                background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
+                ...smallBtn('ghost'),
                 padding: '9px 18px',
-                borderRadius: 14,
                 cursor: 'pointer',
                 fontSize: 12,
                 letterSpacing: '0.14em',
                 fontFamily: fontStack,
                 fontWeight: 900,
-                backdropFilter: 'blur(10px)',
-                transition: 'all 150ms ease',
-                boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)'; e.currentTarget.style.color = THEME.creamText; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = THEME.line; e.currentTarget.style.color = 'rgba(255,220,160,0.8)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+              onMouseEnter={smallBtnHover}
+              onMouseLeave={smallBtnLeave}
             >
               ← RETURN
             </button>
@@ -392,23 +398,17 @@ export default function CampaignHub(props) {
             {(campaignTab === 'quests' || campaignTab === 'inventory') && (
               <button
                 type="button"
-                onMouseEnter={(e) => { playHover(); e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0px)'; e.currentTarget.style.filter = 'none'; }}
+                onMouseEnter={smallBtnHover}
+                onMouseLeave={smallBtnLeave}
                 onClick={campaignTab === 'quests' ? openAddQuest : invOpenAdd}
                 style={{
+                  ...smallBtn('gold'),
                   padding: '8px 22px',
                   borderRadius: 999,
                   fontSize: 12,
                   letterSpacing: '0.16em',
                   fontWeight: 900,
                   fontFamily: fontStack,
-                  cursor: 'pointer',
-                  border: `1px solid ${THEME.line}`,
-                  background: 'linear-gradient(180deg, rgba(176,101,0,0.90), rgba(122,55,0,0.92))',
-                  color: THEME.creamText,
-                  boxShadow: '0 12px 26px rgba(0,0,0,0.35)',
-                  transition: 'all 150ms ease',
-                  textShadow: '0 2px 8px rgba(0,0,0,0.55)',
                 }}
               >
                 {campaignTab === 'quests' ? '+ Add Quest' : '+ Add Item'}
@@ -425,23 +425,10 @@ export default function CampaignHub(props) {
               <button
                 key={key}
                 type="button"
-                onMouseEnter={(e) => { playHover(); e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.filter = 'brightness(1.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0px)'; e.currentTarget.style.filter = 'none'; }}
+                onMouseEnter={smallBtnHover}
+                onMouseLeave={smallBtnLeave}
                 onClick={() => setCampaignTab(key)}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: 999,
-                  fontSize: 12,
-                  letterSpacing: '0.16em',
-                  fontWeight: 900,
-                  fontFamily: fontStack,
-                  cursor: 'pointer',
-                  border: campaignTab === key ? `1px solid ${THEME.line}` : '1px solid rgba(255,220,160,0.12)',
-                  background: campaignTab === key ? 'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))' : 'linear-gradient(180deg, rgba(8,5,2,0.68), rgba(8,5,2,0.52))',
-                  color: campaignTab === key ? THEME.creamText : THEME.creamSoft,
-                  boxShadow: campaignTab === key ? '0 12px 30px rgba(0,0,0,0.50)' : '0 6px 18px rgba(0,0,0,0.30)',
-                  transition: 'all 150ms ease',
-                }}
+                style={tabButtonStyle(campaignTab === key)}
               >
                 {label}
               </button>
@@ -466,7 +453,7 @@ export default function CampaignHub(props) {
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   {/* Watch Party */}
-                  <div style={{ padding: 14, borderRadius: 16, background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`, border: `1px solid ${THEME.line}`, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', backdropFilter: 'blur(10px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
+                  <div style={{ padding: 14, borderRadius: 16, background: 'linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))', border: `1px solid ${THEME.lineSoft}`, boxShadow: '0 18px 46px rgba(0,0,0,0.42)', backdropFilter: 'blur(8px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <div style={{ fontSize: 22 }}>🎬</div>
                       <div>
@@ -480,7 +467,7 @@ export default function CampaignHub(props) {
                   </div>
 
                   {/* Owlbear */}
-                  <div style={{ padding: 14, borderRadius: 16, background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`, border: `1px solid ${THEME.line}`, boxShadow: '0 10px 24px rgba(0,0,0,0.32)', backdropFilter: 'blur(10px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
+                  <div style={{ padding: 14, borderRadius: 16, background: 'linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))', border: `1px solid ${THEME.lineSoft}`, boxShadow: '0 18px 46px rgba(0,0,0,0.42)', backdropFilter: 'blur(8px)', color: THEME.creamText }} onMouseEnter={() => playHover()}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <div style={{ fontSize: 22 }}>🗺️</div>
                       <div>
@@ -741,7 +728,7 @@ export default function CampaignHub(props) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {invFilteredItems.map((it) => (
-                    <div key={it.id} style={{ ...softCard, background: `${rarityBadge(it.rarity)}, linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})` }} onMouseEnter={() => playHover()}>
+                    <div key={it.id} style={{ ...softCard, background: `${rarityBadge(it.rarity)}, linear-gradient(180deg, rgba(30,20,10,0.80), rgba(18,12,6,0.88))` }} onMouseEnter={() => playHover()}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 220 }}>
                           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
