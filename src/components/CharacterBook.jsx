@@ -11,6 +11,7 @@ import vonghulTheme from '../assets/music/VonGhul.mp3';
 import castorTheme from '../assets/music/Castor.mp3';
 import cerciTheme from '../assets/music/Cerci.mp3';
 import jasperTheme from '../assets/music/Jasper.mp3';
+import dmTheme from '../assets/music/Dm.mp3';
 
 // Map character name → imported audio module
 const CHAR_MUSIC_MAP = {
@@ -22,6 +23,7 @@ const CHAR_MUSIC_MAP = {
   'Castor': castorTheme,
   'Cerci VonDonovon': cerciTheme,
   'Jasper Delancey': jasperTheme,
+  'DM': dmTheme,
 };
 
 export default function CharacterBook({
