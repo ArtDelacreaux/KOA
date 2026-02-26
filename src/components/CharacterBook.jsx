@@ -801,12 +801,13 @@ export default function CharacterBook({
       synopsis: 'I will bring down a god.',
       age: '22', height: "5'11\"", class: 'Fiend Warlock',
       lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
-      goals: 'Protect those he loves and uncover the truth behind his cursed power.',
+      goals: 'Break the Pact that binds Ryken to him and Arlis.',
       npcs: [
         { name: 'Darius Blanc', relation: 'Father', bio: 'A strict man who despised magic. His death during the Oakhaven raid left a scar on William that never healed.' },
-        { name: 'Eleanore VanFalen', relation: 'Mother', bio: 'William was told she died in childbirth. The truth is… complicated, and the trail always feels intentionally blurred.' },
-        { name: 'Tarzos Spicer', relation: 'Savior / Guardian', bio: 'The one who saved William during the raid, at a devastating cost. Left behind a tarot card: The Fool.' },
-        { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. Not a creator of William's split—just the shadow waiting to collect." },
+        { name: 'Eleanore VanFalen', relation: 'Mother', bio: 'William was told she died in childbirth. Ryken had promised to uncover his past, but has yet to do so.' },
+        { name: 'Tarzos Spicer', relation: 'Savior / Mentor', bio: 'The one man who saved William during the raid, thought to be dead. Now he has reappeared in Williams life as one of the main members of the Velvet Rose.' },
+        { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. The god of misery, his followers believe that misery is a truth that should be spread." },
+        { name: 'Liranda', relation: 'The Hag', bio: "At first glance, she was a sweet old lady looking to help. That all changed when she tricked him and split his mind, forever altering his and Castors future." },
       ],
     },
     {
@@ -818,7 +819,6 @@ export default function CharacterBook({
       goals: 'Reveal the truth of her heart—and survive the journey.',
       npcs: [
         { name: 'House Ghoth', relation: 'Family', bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.' },
-        { name: 'Jasper Delancey', relation: 'Childhood Friend (Cover Story)', bio: 'Their parents think they\'re courting. In reality: a mutually useful disguise with complicated edges.' },
       ],
     },
     {
@@ -827,19 +827,19 @@ export default function CharacterBook({
       synopsis: 'A mysterious mage with that lives in a cave.',
       age: "Early 20's", height: "6'1\"",
       class: 'Sorcerer',
-      lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
-      goals: 'Pursue truths lost to time.',
-      npcs: [{ name: 'The Archivist', relation: 'Informant', bio: 'A keeper of forbidden catalogs who sells information like it\'s contraband. Because it is.' }],
+      lore: 'Little is known of Thryvaris beyond his mysterious paintbrush.',
+      goals: 'Live in peace in the mountains',
+      npcs: [{ name: 'Mezzarack', relation: 'Professor', bio: 'The man who has lost his family to time. Had a hand in kicking a certain sorcerer out of the academy.' }],
     },
     {
       name: 'Fen', image: '/characters/Fen.png',
-      synopsis: 'A relentless warrior of iron will.',
+      synopsis: 'A 1 armed goliath, that also wields a flail attached. ',
       age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
-      lore: 'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
-      goals: 'Protect the party at any cost.',
+      lore: 'Exiled from her tribe, Fen walks a lonely path back to redemption.',
+      goals: 'Become the new chief of the Uk\'Vahlee',
       npcs: [
-        { name: 'Warchief Brann', relation: 'Former Leader', bio: 'The one who taught Fen to fight first and ask questions later. Whether he\'d be proud or furious… depends on the day.' },
-        { name: 'Sister Kaela', relation: 'Old Rival', bio: 'A rival who never let Fen win clean. Somehow, that\'s exactly why Fen respects her.' },
+        { name: 'Warchief Jovan', relation: 'Leaders of the Uk\'Vahlee', bio: 'Little is known about the Warchief. But the rumors are true that he belives in taking blood no matter the cost.' },
+        { name: 'Warchieftess Threna', relation: 'Leaders of the Uk\'Vahlee', bio: 'Banished Fen after her bout with her brother for not obeying tradition.' },
       ],
     },
     {
@@ -848,7 +848,12 @@ export default function CharacterBook({
       age: "Late 20's", height: "6'2\"", class: 'Artificer',
       lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
       goals: 'Unknown',
-      npcs: [{ name: 'The Valkesh', relation: 'Clan', bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' }],
+      npcs: [
+        { name: 'The Valkesh', relation: 'Clan',   bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' },
+        { name: 'Velo',        relation: 'Friend', bio: 'Little is known about the mysterious goblin hailed from Skolak. Von\'Ghul seemed upset at the news of his passing.' },
+        { name: 'Steely',        relation: 'Servant', bio: 'The automaton that was handbuilt from the genius himself. Steely has been a loyal protector and sidekick.' }
+
+      ],
     },
     {
       name: 'Castor', image: '/characters/Castor.png',
@@ -863,13 +868,13 @@ export default function CharacterBook({
     {
       name: 'Cerci VonDonovon',
       image: '/characters/Cerci.png',
-      synopsis: 'A dhampir walking between night and dawn.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Dhampir Spellblade',
-      lore: 'Having spent decades in isolation and survival, Cerci hides centuries of pain beneath quiet strength. Her bond with William is one of the few anchors keeping her tied to hope.',
-      goals: 'Find belonging beyond the shadows of her past.',
+      synopsis: 'Once a nimble and agile circus performer, now hero.',
+      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
+      lore: 'Having spent decades in isolation and survival, Cerci hides decades of pain beneath quiet shadows. Her bond with the party is seemingly the only thing keeping her from returning to a life of solitude and cruelty.',
+      goals: 'To end her family bloodline and find solace for the Salvatores.',
       npcs: [
-        { name: 'Bingo', relation: 'Circus Companion', bio: "A familiar face from Cerci's circus years—part comfort, part reminder that her \"past lives\" weren't just survival." },
-        { name: 'The Night Court (Rumor)', relation: 'Unseen Watchers', bio: 'Whispers say someone has been keeping tabs on Cerci for a very long time… and not out of kindness.' },
+        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—past comfort, part reminder that her debt will hang over head until fulfilled." },
+        { name: 'Von\'Donovons', relation: 'Family', bio: 'An extremely powerful family that resides in the the Forest. Much is to be said of their influence anywhere, but everyone knows that will just get you killed.' },
       ],
     },
     {
@@ -881,7 +886,9 @@ export default function CharacterBook({
       class: 'Cleric',
       lore: 'Joined the Envoy of Avalon entourage much later.',
       goals: 'Unknown',
-      npcs: [],
+      npcs: [
+
+      ],
     },
     {
       name: 'DM',
