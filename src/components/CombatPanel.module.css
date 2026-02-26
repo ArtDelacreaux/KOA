@@ -806,6 +806,11 @@
   z-index: 20;
 }
 
+.modalBackCrop {
+  z-index: 30;
+  backdrop-filter: blur(4px);
+}
+
 .modalCard {
   border-radius: 18px;
   overflow: hidden;
@@ -853,6 +858,10 @@
   border-bottom: 1px solid rgba(255, 220, 160, 0.09);
 }
 
+.modalHeaderCrop {
+  height: 50px;
+}
+
 .editorHeader {
   padding: 0 12px;
   display: flex;
@@ -867,6 +876,11 @@
   font-weight: 950;
   letter-spacing: 0.4px;
   user-select: none;
+}
+
+.modalTitleCrop {
+  font-size: 14px;
+  letter-spacing: 0.3px;
 }
 
 .editorTitle {

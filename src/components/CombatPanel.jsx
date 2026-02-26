@@ -1236,12 +1236,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── IMAGE CROP MODAL ── */}
         {cropOpen && (
-          <div className={styles.modalBack} style={{ zIndex: 30, backdropFilter: 'blur(4px)' }}
+          <div className={`${styles.modalBack} ${styles.modalBackCrop}`}
             onMouseDown={e => { if (e.target===e.currentTarget) setCropOpen(false); }}>
             <div className={styles.cropModal}>
               {/* Header */}
-              <div className={styles.modalHeader} style={{ height: 50 }}>
-                <div className={styles.modalTitle} style={{ fontSize: 14, letterSpacing: 0.3 }}>Crop Token Image</div>
+              <div className={`${styles.modalHeader} ${styles.modalHeaderCrop}`}>
+                <div className={`${styles.modalTitle} ${styles.modalTitleCrop}`}>Crop Token Image</div>
                 <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => setCropOpen(false)}>✕ Cancel</button>
               </div>
 

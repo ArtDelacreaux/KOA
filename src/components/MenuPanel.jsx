@@ -80,124 +80,10 @@ export default function MenuPanel({
 
   const theaterPreviewRef = useRef(null);
 
-  /* ---------- theme (match your existing tavern build) ---------- */
-  const THEME = {
-    goldA: 'rgba(176,101,0,0.90)',
-    goldB: 'rgba(122,55,0,0.92)',
-    dangerA: 'rgba(122,30,30,0.92)',
-    dangerB: 'rgba(90,18,18,0.92)',
-
-    creamText: 'rgba(255,245,220,0.96)',
-    creamSoft: 'rgba(255,245,220,0.72)',
-
-    glassA: 'rgba(255,245,220,0.065)',
-    glassB: 'rgba(255,245,220,0.022)',
-
-    line: 'rgba(255,220,160,0.18)',
-    lineSoft: 'rgba(255,220,160,0.10)',
-
-    inkBgA: 'rgba(28,18,10,0.22)',
-    inkBgB: 'rgba(10,8,6,0.34)',
-
-    emberGlow: 'rgba(255,140,60,0.14)',
-  };
-
-  /* ---------- layout ---------- */
-  const panelStyle = (active) => ({
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: active ? 1 : 0,
-    transform: active ? 'translateY(0px)' : 'translateY(10px)',
-    transition: 'opacity 220ms ease, transform 220ms ease',
-    pointerEvents: active ? 'auto' : 'none',
-    zIndex: active ? 6 : 4,
-  });
-
-  const cmdRow = (active) => ({
-    position: 'relative',
-    borderRadius: 18,
-    border: active ? '1px solid rgba(255,235,205,0.55)' : `1px solid ${THEME.lineSoft}`,
-    background: active
-      ? 'linear-gradient(90deg, rgba(132,78,20,0.36), rgba(255,245,220,0.08))'
-      : 'linear-gradient(90deg, rgba(28,20,14,0.44), rgba(255,245,220,0.05))',
-    boxShadow: active
-      ? '0 18px 46px rgba(0,0,0,0.42), 0 0 36px rgba(255,200,120,0.22)'
-      : '0 16px 40px rgba(0,0,0,0.46)',
-    cursor: 'pointer',
-    padding: '14px 14px 14px 18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease, border 140ms ease',
-    userSelect: 'none',
-  });
-
-  const selectBar = (active) => ({
-    position: 'absolute',
-    left: 12,
-    top: 12,
-    bottom: 12,
-    width: 6,
-    borderRadius: 999,
-    background: active
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.95), rgba(255,140,60,0.70))'
-      : 'rgba(255,245,220,0.10)',
-    boxShadow: active ? '0 0 18px rgba(255,140,60,0.22)' : 'none',
-  });
-
-  const cmdIconWrap = (active) => ({
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    display: 'grid',
-    placeItems: 'center',
-    background: active
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.38), rgba(255,245,220,0.06))'
-      : 'linear-gradient(180deg, rgba(255,245,220,0.12), rgba(255,245,220,0.04))',
-    border: `1px solid ${THEME.lineSoft}`,
-  });
-
-  const cmdTitle = (active, titleColor) => ({
-    fontSize: 14.5,
-    fontWeight: 950,
-    letterSpacing: 0.6,
-    color: active ? THEME.creamText : (titleColor ?? 'rgba(255,245,220,0.90)'),
-    textShadow: active
-      ? '0 2px 12px rgba(0,0,0,0.80)'
-      : '0 2px 10px rgba(0,0,0,0.78), 0 0 1px rgba(0,0,0,0.60)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  });
-
-  const cmdSub = (active) => ({
-    marginTop: 2,
-    fontSize: 12.5,
-    fontWeight: 900,
-    letterSpacing: 0.3,
-    color: active ? 'rgba(255,245,220,0.90)' : 'rgba(255,245,220,0.82)',
-    textShadow: '0 1px 8px rgba(0,0,0,0.70)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  });
-
-  const cmdChevron = (active) => ({
-    fontWeight: 950,
-    letterSpacing: 0.4,
-    color: active ? 'rgba(255,220,160,0.92)' : 'rgba(255,245,220,0.55)',
-    opacity: active ? 1 : 0.82,
-    fontSize: 18,
-  });
-
   // Minimal inline SVG icons to avoid extra assets.
   const Icon = ({ name, active }) => {
     const s = 18;
-    const stroke = active ? THEME.creamText : 'rgba(255,245,220,0.82)';
+    const stroke = active ? 'var(--koa-cream)' : 'var(--koa-cream-82)';
     const common = {
       width: s,
       height: s,
@@ -376,8 +262,7 @@ export default function MenuPanel({
   return (
     <>
       <div
-        className={styles.menuPanel}
-        style={panelStyle(panelType === 'menu')}
+        className={`${styles.menuPanel} ${panelType === 'menu' ? styles.menuPanelActive : styles.menuPanelInactive}`}
         onMouseDown={(e) => {
           // stop accidental drag ghost images
           if (e.target?.tagName === 'IMG') e.preventDefault();
@@ -439,8 +324,7 @@ export default function MenuPanel({
                     return (
                       <div
                         key={it.key}
-                        className={styles.jrpgShimmer}
-                        style={cmdRow(active)}
+                        className={`${styles.jrpgShimmer} ${styles.cmdRow} ${active ? styles.cmdRowActive : styles.cmdRowInactive}`}
                         onMouseEnter={() => {
                           if (it.key !== activeKey) playHover();
                           setActiveKey(it.key);
@@ -451,7 +335,7 @@ export default function MenuPanel({
                         tabIndex={0}
                         aria-label={it.label}
                       >
-                        <div style={selectBar(active)} />
+                        <div className={`${styles.selectBar} ${active ? styles.selectBarActive : styles.selectBarInactive}`} />
 
                         {active && (
                           <div className={styles.cursorWrap}>
@@ -463,16 +347,16 @@ export default function MenuPanel({
                         )}
 
                         <div className={styles.cmdLeft}>
-                          <div style={cmdIconWrap(active)}>
+                          <div className={`${styles.cmdIconWrap} ${active ? styles.cmdIconWrapActive : styles.cmdIconWrapInactive}`}>
                             <Icon name={it.key} active={active} />
                           </div>
                           <div className={styles.cmdTextWrap}>
-                            <div className={styles.cmdTitle} style={cmdTitle(active, it.titleColor)}>{it.label}</div>
-                            <div className={styles.cmdSub} style={cmdSub(active)}>{it.sub}</div>
+                            <div className={`${styles.cmdTitle} ${active ? styles.cmdTitleActive : styles.cmdTitleInactive}`}>{it.label}</div>
+                            <div className={`${styles.cmdSub} ${active ? styles.cmdSubActive : styles.cmdSubInactive}`}>{it.sub}</div>
                           </div>
                         </div>
 
-                        <div className={styles.cmdChevron} style={cmdChevron(active)}>›</div>
+                        <div className={`${styles.cmdChevron} ${active ? styles.cmdChevronActive : styles.cmdChevronInactive}`}>›</div>
                       </div>
                     );
                   })}
