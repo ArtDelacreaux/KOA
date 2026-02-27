@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import recapVideo from '../assets/recap.mp4';
 import combatVideo from '../assets/CombatVideo.mp4';
-import theaterPreviewVideo from '../assets/theater-preview.mp4';
+import theaterPreviewVideo from '../assets/Theater.mp4';
+import characterBookPreviewVideo from '../assets/CharacterBook.mp4';
+import worldLoreVideo from '../assets/worldlore.mp4';
 import styles from './MenuPanel.module.css';
 
 /*
@@ -412,17 +414,18 @@ export default function MenuPanel({
 
                   {/* Character book helpers */}
                   {activeKey === 'characters' && (
-                    <div className={styles.sectionGrid}>
-                      {menuBackdrop && (
-                        <div
-                          aria-hidden
-                          className={styles.characterBackdrop}
-                          style={{ backgroundImage: `url(${menuBackdrop})` }}
-                        >
-                        </div>
-                      )}
-
-
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
+                        <video
+                          src={characterBookPreviewVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className={styles.videoFill}
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -443,27 +446,18 @@ export default function MenuPanel({
                     </div>
                   )}
 
-                  {/* Lore panel CTA */}
+                  {/* Lore preview */}
                   {activeKey === 'lore' && (
-                    <div className={styles.sectionGrid}>
-                      <div className={styles.cardMini}>
-                        <div className={styles.label}>World Lore Archive</div>
-                        <div className={styles.loreBody}>
-                          Access the full compendium — introduction video, maps, campaign scenes, and notable locations.
-                        </div>
-                        <div className={styles.loreActions}>
-                          <button className={`${styles.actionBtn} koa-glass-btn koa-interactive-lift`} onMouseEnter={playHover} onClick={goLore}>
-                            Open World Lore
-                          </button>
-                        </div>
-                      </div>
-                      <div className={styles.cardMini}>
-                        <div className={styles.label}>Lore Scratchpad</div>
-                        <textarea
-                          value={notes.lore}
-                          onChange={(e) => setNotes((n) => ({ ...n, lore: e.target.value }))}
-                          placeholder="Factions, locations, mysteries…"
-                          className={styles.loreTextarea}
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
+                        <video
+                          src={worldLoreVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className={styles.videoFill}
                         />
                       </div>
                     </div>
