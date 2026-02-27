@@ -528,15 +528,90 @@
 }
 
 .currencySub {
-  font-size: 11px;
-  opacity: 0.78;
-  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 245, 220, 0.92);
+  margin-top: 4px;
+  line-height: 1.35;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.8);
+}
+
+.currencyToken {
+  font-weight: 900;
+}
+
+.currencySep {
+  color: rgba(255, 245, 220, 0.75);
+}
+
+.currencyTokenPP {
+  color: #dbe4ef;
+}
+
+.currencyTokenGP {
+  color: #f7cb57;
+}
+
+.currencyTokenSP {
+  color: #d0d7de;
+}
+
+.currencyTokenCP {
+  color: #cf8850;
+}
+
+.currencySubValue {
+  font-weight: 950;
+  color: inherit;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
 }
 
 .currencyGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.currencyCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.currencyHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.currencyCodeLabel {
+  font-size: 10px;
+  font-weight: 950;
+  color: rgba(255, 245, 220, 0.72);
+  letter-spacing: 0.2px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.75);
+}
+
+.currencyAmount {
+  font-size: 16px;
+  font-weight: 950;
+  color: rgba(255, 245, 220, 0.96);
+  line-height: 1;
+}
+
+.currencyAdjustRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.currencyStepBtn {
+  padding: 6px 8px;
+  min-width: 30px;
+  border-radius: 10px;
+  line-height: 1;
 }
 
 .currencyDanger {

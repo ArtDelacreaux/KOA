@@ -225,6 +225,7 @@ export default function CampaignHub(props) {
   const [invCat,   setInvCat]   = useState('All');
   const [invRar,   setInvRar]   = useState('All');
   const [invSort,  setInvSort]  = useState('name');
+  const [currencyDelta, setCurrencyDelta] = useState({ pp: '', gp: '', sp: '', cp: '' });
 
   const [invModalOpen, setInvModalOpen] = useState(false);
   const [invEditingId, setInvEditingId] = useState(null);
@@ -272,7 +273,18 @@ export default function CampaignHub(props) {
   const invDeleteItem     = (id) => { if (!confirm('Delete this item?')) return; setBag((prev) => ({ ...prev, items: (prev.items || []).filter((it) => it.id !== id) })); };
   const invBumpQty        = (id, delta) => { setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, qty: clampInt((it.qty || 1) + delta, 1, 9999) } : it) })); };
   const invToggleEquipped = (id) => { setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, equipped: !it.equipped } : it) })); };
-  const invSetCurrency    = (key, val) => { const n = parseInt(val, 10); setBag((prev) => ({ ...prev, currency: { ...prev.currency, [key]: isNaN(n) ? 0 : Math.max(0, n) } })); };
+  const applyCurrencyDelta = (key, direction) => {
+    const delta = parseInt(currencyDelta[key], 10);
+    if (!Number.isFinite(delta) || delta <= 0) return;
+    setBag((prev) => ({
+      ...prev,
+      currency: {
+        ...prev.currency,
+        [key]: Math.max(0, (prev.currency?.[key] ?? 0) + (direction * delta)),
+      },
+    }));
+    setCurrencyDelta((prev) => ({ ...prev, [key]: '' }));
+  };
 
   const invFilteredItems = useMemo(() => {
     let items = [...(bag.items || [])];
@@ -405,12 +417,9 @@ export default function CampaignHub(props) {
 
               <div className={styles.stackCol}>
                 <div className={styles.softCard}>
-                  <div className={styles.iconRow}>
-                    <div className={styles.toolIcon}>TMR</div>
-                    <div>
-                      <div className={styles.blockTitle}>Session Timer</div>
-                      <div className={styles.blockSub}>Track how long you've been playing.</div>
-                    </div>
+                  <div>
+                    <div className={styles.blockTitle}>Session Timer</div>
+                    <div className={styles.blockSub}>Track how long you've been playing.</div>
                   </div>
                   <div className={styles.timerValue}>{fmtElapsed(launcherState.elapsedMs)}</div>
                   <div className={styles.timerActions}>
@@ -432,12 +441,9 @@ export default function CampaignHub(props) {
                 </div>
 
                 <div className={styles.softCard}>
-                  <div className={styles.iconRow}>
-                    <div className={styles.toolIcon}>NOTES</div>
-                    <div>
-                      <div className={styles.blockTitle}>Session Notes</div>
-                      <div className={styles.blockSub}>Saved locally. Great for improvised names.</div>
-                    </div>
+                  <div>
+                    <div className={styles.blockTitle}>Session Notes</div>
+                    <div className={styles.blockSub}>Saved locally.</div>
                   </div>
                   <textarea
                     value={launcherState.notes || ''}
@@ -448,12 +454,9 @@ export default function CampaignHub(props) {
                   />
                 </div>
                 <div className={styles.softCard}>
-                  <div className={styles.iconRow}>
-                    <div className={styles.toolIcon}>DB</div>
-                    <div>
-                      <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                      <div className={styles.blockSub}>Download a backup now so future Supabase migration is one-click.</div>
-                    </div>
+                  <div>
+                    <div className={styles.blockTitle}>Cloud Prep Backup</div>
+                    <div className={styles.blockSub}>Download a backup now so future Supabase migration is one-click.</div>
                   </div>
                   <div className={styles.toolActions}>
                     <button
@@ -481,7 +484,7 @@ export default function CampaignHub(props) {
                     onChange={onBackupPicked}
                   />
                   <div className={styles.backupHint}>
-                    Each friend should download their own backup from their own device/browser profile.
+                    Each person should download their own backup from their own device/browser profile.
                   </div>
                   {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
                 </div>
@@ -625,15 +628,64 @@ export default function CampaignHub(props) {
                   <div className={styles.cardHeaderRow}>
                     <div>
                       <div className={styles.currencyTitle}>Currency</div>
-                      <div className={styles.currencySub}>PP / GP / SP / CP</div>
+                      <div className={styles.currencySub}>
+                        <span className={`${styles.currencyToken} ${styles.currencyTokenPP}`}>
+                          <span className={styles.currencySubValue}>{bag.currency?.pp ?? 0}</span> PP
+                        </span>
+                        <span className={styles.currencySep}> / </span>
+                        <span className={`${styles.currencyToken} ${styles.currencyTokenGP}`}>
+                          <span className={styles.currencySubValue}>{bag.currency?.gp ?? 0}</span> GP
+                        </span>
+                        <span className={styles.currencySep}> / </span>
+                        <span className={`${styles.currencyToken} ${styles.currencyTokenSP}`}>
+                          <span className={styles.currencySubValue}>{bag.currency?.sp ?? 0}</span> SP
+                        </span>
+                        <span className={styles.currencySep}> / </span>
+                        <span className={`${styles.currencyToken} ${styles.currencyTokenCP}`}>
+                          <span className={styles.currencySubValue}>{bag.currency?.cp ?? 0}</span> CP
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className={`${styles.sectionDivider} ${styles.sectionDividerTight}`} />
                   <div className={styles.currencyGrid}>
                     {['pp', 'gp', 'sp', 'cp'].map((k) => (
-                      <div key={k}>
-                        <div className={styles.tinyLabel}>{k.toUpperCase()}</div>
-                        <input value={bag.currency?.[k] ?? 0} onChange={(e) => invSetCurrency(k, e.target.value)} className={styles.tinyInput} />
+                      <div key={k} className={styles.currencyCell}>
+                        <div className={styles.currencyHead}>
+                          <div className={styles.currencyCodeLabel}>{k.toUpperCase()}</div>
+                        </div>
+                        <div className={styles.currencyAdjustRow}>
+                          <button
+                            type="button"
+                            className={`${styles.smallBtn} ${styles.btnGhost} ${styles.currencyStepBtn}`}
+                            onMouseEnter={smallBtnHover}
+                            onClick={() => applyCurrencyDelta(k, -1)}
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min={1}
+                            value={currencyDelta[k]}
+                            onChange={(e) => setCurrencyDelta((prev) => ({ ...prev, [k]: e.target.value }))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                applyCurrencyDelta(k, 1);
+                              }
+                            }}
+                            placeholder="Amt"
+                            className={styles.tinyInput}
+                          />
+                          <button
+                            type="button"
+                            className={`${styles.smallBtn} ${styles.btnGold} ${styles.currencyStepBtn}`}
+                            onMouseEnter={smallBtnHover}
+                            onClick={() => applyCurrencyDelta(k, 1)}
+                          >
+                            +
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
