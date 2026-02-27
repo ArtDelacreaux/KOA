@@ -4,7 +4,7 @@ import styles from './WorldLore.module.css';
 /*
   WorldLore — Knights of Atria
   Overworld knowledge center with:
-  - Intro video player
+  - Interactive world map with location pins
   - Tabbed image gallery (Maps, Scenes, Locations)
   - Lightbox on card click
   - Matches existing KOA tavern palette and panel system
@@ -117,22 +117,22 @@ const GALLERY = {
     {
       id: 1,
       title: 'The Velvet Rose',
-      src: 'lore/world-map.jpg',
-      description: 'Influence network built through charm, debt, and social leverage.',
-      summary: 'The Velvet Rose moves quietly through salons, courts, and private ledgers. They avoid open war and prefer leverage no one can prove.',
-      influence: 'Courts, noble estates, and merchant finance',
-      doctrine: 'Control what people owe, and they become predictable',
+      src: 'lore/rose.jpg',
+      description: 'Little is known about this group. They have core members, and other mercs for hire.',
+      summary: 'The Velvet Rose moves quietly through their influence throught the continent. They deal in genocide, and assassination to acheive their goals.',
+      influence: 'Courts, noble estates, and other kingdoms',
+      doctrine: 'Destroy the kingdom of Avalon, and balance will be restored.',
       factionKeys: ['velvet rose',],
       memberHints: ['Tarzos Spicer'],
     },
     {
       id: 2,
       title: 'The Red Fang',
-      src: 'lore/canyon.jpg',
-      description: 'Militant front-line brotherhood tied to blood-oaths and conquest.',
-      summary: 'The Red Fang values strength, retaliation, and public fear. They recruit from battle survivors and enforce loyalty through ritual debt.',
-      influence: 'Border forts, mercenary cells, and raider routes',
-      doctrine: 'Mercy is a weakness your enemy exploits',
+      src: 'lore/redfang.jpg',
+      description: 'A mercenary group the Envoy\'s encountered. They deal in human trafficking, and are close with the Von\'Donovons.',
+      summary: 'The Red Fang members have been a force in the world spear. Even recruiting the likes of the tribes to do their bidding',
+      influence: 'Hunting, Trafficking, underworld',
+      doctrine: 'Unknown',
       factionKeys: ['red fang'],
       memberHints: ['Cerci VonDonovon'],
     },
@@ -142,21 +142,25 @@ const GALLERY = {
       src: 'lore/rykenf.webp',
       description: 'Devotional branches loyal to Ryken doctrine and shadow pacts.',
       summary: 'Ryken followers split between public worship and hidden circles. Their theology attracts both desperate believers and ruthless opportunists.',
-      influence: 'Shrines, hidden temples, and oath-brokers',
-      doctrine: 'Faith and consequence are inseparable',
+      influence: 'Underworld, crime, churches',
+      doctrine: 'Misery is just the beginning of worship.',
       factionKeys: ['ryken church', 'church of ryken', 'ryken'],
       memberHints: ['Ryken', 'William Spicer'],
     },
   ],
 };
 
-/*
-  ── HOW TO SET YOUR INTRO VIDEO ──
-  Import your video at the top:
-    import introVideo from '../assets/lore/world-intro.mp4';
-  Then set: const VIDEO_SRC = introVideo;
-*/
-const VIDEO_SRC = '';
+const ATRIA_MAP_SRC = 'lore/world-map.jpg';
+const ATRIA_MAP_ASPECT = '4 / 3'; // world-map.jpg is 2048x1536
+const INITIAL_ATRIA_POINTS = [
+  { locationId: 1, x: 43.2, y: 21.0 }, // Qonza
+  { locationId: 2, x: 97.0, y: 32.0 }, // Williwack
+  { locationId: 3, x: 51.6, y: 49.3 }, // Avalon
+  { locationId: 4, x: 16.21,y: 72.59 }, // Metlos
+  { locationId: 5, x: 35.2, y: 55.8 }, // Orum
+  { locationId: 6, x: 87.7, y: 22.0 }, // Buston
+  { locationId: 7, x: 27.4, y: 45.8  }, // SkulPol
+];
 const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
 const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
 const LS_CHAR_NPCS = 'koa:char:npcs:v1';
@@ -179,6 +183,417 @@ function SectionDivider({ label }) {
       <div className={`koa-divider-line ${styles.sectionDividerLine}`} />
       <span className={styles.sectionDividerLabel}>◈ &nbsp;{label}&nbsp; ◈</span>
       <div className={`koa-divider-line ${styles.sectionDividerLine}`} />
+    </div>
+  );
+}
+
+function InteractiveAtriaMap({
+  locations = [],
+  onOpenLocation = () => { },
+}) {
+  const stageRef = useRef(null);
+  const dragRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    panX: 0,
+    panY: 0,
+    moved: false,
+  });
+
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
+
+  const [points, setPoints] = useState(() => {
+    const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
+    return (locations || []).map((location, index) => {
+      const seeded = seededById.get(location.id);
+      if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
+      const fallbackColumn = index % 3;
+      const fallbackRow = Math.floor(index / 3);
+      return {
+        locationId: location.id,
+        x: 34 + fallbackColumn * 16,
+        y: 34 + fallbackRow * 12,
+      };
+    });
+  });
+  const [selectedPointId, setSelectedPointId] = useState(() => (locations[0] ? locations[0].id : null));
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const clampPercent = (value) => clamp(value, 0, 100);
+  const roundCoord = (value) => Math.round(clampPercent(value) * 100) / 100;
+
+  const getLocationById = (locationId) =>
+    (locations || []).find((location) => location.id === locationId) || null;
+
+  const clampPanToStage = (nextPan, nextZoom = zoom) => {
+    const stageEl = stageRef.current;
+    if (!stageEl) return { x: 0, y: 0 };
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
+
+    const scaledWidth = rect.width * nextZoom;
+    const scaledHeight = rect.height * nextZoom;
+    const minX = Math.min(0, rect.width - scaledWidth);
+    const minY = Math.min(0, rect.height - scaledHeight);
+
+    return {
+      x: clamp(nextPan.x, minX, 0),
+      y: clamp(nextPan.y, minY, 0),
+    };
+  };
+
+  const setPointCoords = (locationId, x, y) => {
+    setPoints((prev) =>
+      (prev || []).map((point) =>
+        point.locationId === locationId
+          ? { ...point, x: roundCoord(x), y: roundCoord(y) }
+          : point
+      )
+    );
+  };
+
+  const toMapPercentFromClient = (clientX, clientY) => {
+    const stageEl = stageRef.current;
+    if (!stageEl) return null;
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    const baseX = (clientX - rect.left - pan.x) / zoom;
+    const baseY = (clientY - rect.top - pan.y) / zoom;
+
+    return {
+      x: roundCoord((baseX / rect.width) * 100),
+      y: roundCoord((baseY / rect.height) * 100),
+    };
+  };
+
+  const selectedPoint = (points || []).find((point) => point.locationId === selectedPointId) || null;
+  const selectedLocation = selectedPoint ? getLocationById(selectedPoint.locationId) : null;
+
+  const exportPoints = (points || []).map((point) => ({
+    locationId: point.locationId,
+    title: getLocationById(point.locationId)?.title || `Location ${point.locationId}`,
+    x: Number(point.x.toFixed(2)),
+    y: Number(point.y.toFixed(2)),
+  }));
+
+  useEffect(() => {
+    setPoints((prev) => {
+      const prevById = new Map((prev || []).map((point) => [point.locationId, point]));
+      const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
+
+      return (locations || []).map((location, index) => {
+        const existing = prevById.get(location.id);
+        if (existing) return existing;
+
+        const seeded = seededById.get(location.id);
+        if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
+
+        const fallbackColumn = index % 3;
+        const fallbackRow = Math.floor(index / 3);
+        return {
+          locationId: location.id,
+          x: 34 + fallbackColumn * 16,
+          y: 34 + fallbackRow * 12,
+        };
+      });
+    });
+  }, [locations]);
+
+  useEffect(() => {
+    if ((points || []).some((point) => point.locationId === selectedPointId)) return;
+    setSelectedPointId(points[0]?.locationId || null);
+  }, [points, selectedPointId]);
+
+  useEffect(() => {
+    if (!copyStatus) return;
+    const timer = setTimeout(() => setCopyStatus(''), 1500);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setPan((prev) => clampPanToStage(prev, zoom));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [zoom]);
+
+  useEffect(() => {
+    if (!editMode || !selectedPointId) return;
+    const onKeyDown = (event) => {
+      const targetTag = (event.target?.tagName || '').toUpperCase();
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
+      const step = event.shiftKey ? 0.02 : 0.1;
+      let nextX = 0;
+      let nextY = 0;
+      if (event.key === 'ArrowUp') nextY = -step;
+      if (event.key === 'ArrowDown') nextY = step;
+      if (event.key === 'ArrowLeft') nextX = -step;
+      if (event.key === 'ArrowRight') nextX = step;
+      if (!nextX && !nextY) return;
+
+      event.preventDefault();
+      setPoints((prev) =>
+        (prev || []).map((point) =>
+          point.locationId === selectedPointId
+            ? {
+              ...point,
+              x: roundCoord(point.x + nextX),
+              y: roundCoord(point.y + nextY),
+            }
+            : point
+        )
+      );
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editMode, selectedPointId]);
+
+  const applyZoom = (nextZoom) => {
+    const normalizedZoom = clamp(Number(nextZoom) || 1, 1, 4);
+    setZoom(normalizedZoom);
+    setPan((prev) => clampPanToStage(prev, normalizedZoom));
+  };
+
+  const onWheelZoom = (event) => {
+    // Keep regular page scrolling unless user intentionally zooms with Ctrl/Cmd + wheel.
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const delta = event.deltaY > 0 ? -0.16 : 0.16;
+    const nextZoom = clamp(Number((zoom + delta).toFixed(2)), 1, 4);
+    if (nextZoom === zoom) return;
+
+    const anchorX = event.clientX - rect.left;
+    const anchorY = event.clientY - rect.top;
+    const zoomRatio = nextZoom / zoom;
+    const nextPan = {
+      x: anchorX - (anchorX - pan.x) * zoomRatio,
+      y: anchorY - (anchorY - pan.y) * zoomRatio,
+    };
+
+    setZoom(nextZoom);
+    setPan(clampPanToStage(nextPan, nextZoom));
+  };
+
+  const onStagePointerDown = (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+
+    stageEl.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+      moved: false,
+    };
+    setDragging(true);
+  };
+
+  const onStagePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      dragRef.current.moved = true;
+    }
+
+    setPan(clampPanToStage({ x: drag.panX + dx, y: drag.panY + dy }, zoom));
+  };
+
+  const onStagePointerEnd = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    stageRef.current?.releasePointerCapture?.(event.pointerId);
+    dragRef.current.active = false;
+    dragRef.current.pointerId = null;
+    setDragging(false);
+  };
+
+  const onStageClick = (event) => {
+    if (!editMode || !selectedPointId) return;
+    if (dragRef.current.moved) {
+      dragRef.current.moved = false;
+      return;
+    }
+
+    const next = toMapPercentFromClient(event.clientX, event.clientY);
+    if (!next) return;
+    setPointCoords(selectedPointId, next.x, next.y);
+  };
+
+  const onMarkerClick = (event, point) => {
+    event.stopPropagation();
+    setSelectedPointId(point.locationId);
+    if (editMode) return;
+    onOpenLocation(point.locationId);
+  };
+
+  const copyPointJson = async () => {
+    const payload = JSON.stringify(exportPoints, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopyStatus('Copied');
+    } catch {
+      setCopyStatus('Copy failed');
+    }
+  };
+
+  return (
+    <div className={styles.atriaMapWrap}>
+      <div className={styles.atriaMapToolbar}>
+        <div className={styles.atriaMapZoomControls}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
+            onClick={() => applyZoom(zoom - 0.2)}
+            disabled={zoom <= 1}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <input
+            type="range"
+            min={1}
+            max={4}
+            step={0.05}
+            value={zoom}
+            onChange={(event) => applyZoom(event.target.value)}
+            className={styles.atriaZoomRange}
+            title="Zoom"
+          />
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
+            onClick={() => applyZoom(zoom + 0.2)}
+            disabled={zoom >= 4}
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
+
+        <div className={styles.atriaMapEditControls}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtnWide}`}
+            onClick={() => setEditMode((prev) => !prev)}
+            title="Toggle map pin edit mode"
+          >
+            {editMode ? 'Done Editing' : 'Edit Pins'}
+          </button>
+
+          {editMode && (
+            <>
+              <label className={styles.atriaPinSelectLabel}>
+                Pin
+                <select
+                  value={selectedPointId || ''}
+                  onChange={(event) => setSelectedPointId(Number(event.target.value))}
+                  className={styles.atriaPinSelect}
+                >
+                  {(locations || []).map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtnWide}`}
+                onClick={copyPointJson}
+                title="Copy location coordinates as JSON"
+              >
+                Copy JSON
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={stageRef}
+        onWheel={onWheelZoom}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerEnd}
+        onPointerCancel={onStagePointerEnd}
+        onClick={onStageClick}
+        className={styles.atriaMapStage}
+        style={{
+          cursor: dragging ? 'grabbing' : (editMode ? 'crosshair' : (zoom > 1 ? 'grab' : 'grab')),
+          '--atria-map-aspect': ATRIA_MAP_ASPECT,
+        }}
+      >
+        <div
+          className={styles.atriaMapLayer}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          }}
+        >
+          <img
+            src={ATRIA_MAP_SRC}
+            alt="The Continent of Atria"
+            draggable={false}
+            className={styles.atriaMapImage}
+          />
+
+          {(points || []).map((point) => {
+            const location = getLocationById(point.locationId);
+            const label = location?.title || `Location ${point.locationId}`;
+            const isSelected = point.locationId === selectedPointId;
+            return (
+              <button
+                key={point.locationId}
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => onMarkerClick(event, point)}
+                className={`${styles.atriaMarker} ${isSelected ? styles.atriaMarkerSelected : ''}`}
+                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                title={editMode ? `Select ${label}` : `Open ${label}`}
+                aria-label={editMode ? `Select ${label} pin` : `Open ${label}`}
+              >
+                <span className={styles.atriaMarkerDot} />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className={styles.atriaMapHint}>
+          {editMode
+            ? 'Edit mode: select a pin, click map to place it, use arrow keys to nudge (Shift for fine movement).'
+            : 'Use + / − or slider to zoom. Hold Ctrl/Cmd + wheel for mouse-wheel zoom. Drag to pan, click a pin to open its location card.'}
+        </div>
+      </div>
+
+      <div className={styles.atriaMapFooter}>
+        <div className={styles.atriaMapFooterPrimary}>
+          {selectedLocation ? selectedLocation.title : 'No location selected'}
+        </div>
+        <div className={styles.atriaMapFooterSecondary}>
+          {selectedPoint ? `X ${selectedPoint.x.toFixed(2)}% • Y ${selectedPoint.y.toFixed(2)}%` : 'No coordinates'}
+        </div>
+        {copyStatus && (
+          <div className={styles.atriaMapCopyStatus}>{copyStatus}</div>
+        )}
+      </div>
+
+      <CornerOrns />
     </div>
   );
 }
@@ -787,6 +1202,12 @@ export default function WorldLore({
     factions: 'Power blocs, sects, and alliances that shape the realm.',
   };
 
+  const openLocationFromMap = (locationId) => {
+    const picked = GALLERY.locations.find((location) => location.id === locationId);
+    if (!picked) return;
+    setLightboxItem({ ...picked, _tab: 'locations' });
+  };
+
   return (
     <div className={`${styles.panel} ${isActive ? styles.panelActive : styles.panelInactive}`}>
       <div className={`koa-scrollbar-thin ${styles.worldLoreScrollWrap}`}>
@@ -810,23 +1231,11 @@ export default function WorldLore({
 
         <div className={styles.worldLoreContent}>
           <section>
-            <SectionDivider label="Introduction" />
-            <div className={styles.introCenterWrap}>
-              <div className={styles.introFrame}>
-                <CornerOrns />
-                {VIDEO_SRC ? (
-                  <video controls className={styles.introVideo} src={VIDEO_SRC} />
-                ) : (
-                  <div className={styles.introPlaceholder}>
-                    <div className={styles.introPlayBadge}>▶</div>
-                    <div className={styles.introPlaceholderTitle}>Introduction Video</div>
-                    <div className={styles.introPlaceholderNote}>
-                      Set <code className={styles.introCode}>VIDEO_SRC</code> at the top of WorldLore.jsx
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <SectionDivider label="World Map" />
+            <InteractiveAtriaMap
+              locations={GALLERY.locations}
+              onOpenLocation={openLocationFromMap}
+            />
           </section>
 
           <section>

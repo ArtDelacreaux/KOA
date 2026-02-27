@@ -187,6 +187,234 @@
   font-size: 10px;
 }
 
+.atriaMapWrap {
+  position: relative;
+  width: min(100%, 700px);
+  margin: 0 auto;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  border-radius: 18px;
+  background: rgba(6, 4, 2, 0.9);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.7), inset 0 0 60px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 961px) {
+  .atriaMapWrap {
+    width: min(100%, 760px);
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .atriaMapStage {
+    aspect-ratio: auto;
+    height: clamp(360px, 56vh, 520px);
+  }
+}
+
+.atriaMapToolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.atriaMapZoomControls,
+.atriaMapEditControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.atriaToolBtn,
+.atriaToolBtnWide {
+  height: 32px;
+  border-radius: 10px;
+  font-family: var(--koa-font-display);
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(255, 245, 220, 0.95);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atriaToolBtn {
+  min-width: 32px;
+  padding: 0 10px;
+}
+
+.atriaToolBtnWide {
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.atriaToolBtn:disabled,
+.atriaToolBtnWide:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
+.atriaZoomRange {
+  width: 150px;
+  accent-color: rgba(176, 101, 0, 0.85);
+}
+
+.atriaPinSelectLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 220, 160, 0.7);
+  font-family: var(--koa-font-display);
+  font-weight: 900;
+}
+
+.atriaPinSelect {
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(0, 0, 0, 0.36);
+  color: rgba(255, 245, 220, 0.95);
+  font-size: 11px;
+  font-family: var(--koa-font-display);
+  padding: 0 10px;
+  min-width: 188px;
+}
+
+.atriaMapStage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: var(--atria-map-aspect, 4 / 3);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  background: #0a0805;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+.atriaMapLayer {
+  position: absolute;
+  inset: 0;
+  transform-origin: top left;
+  will-change: transform;
+}
+
+.atriaMapImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+.atriaMarker {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -100%);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.72);
+  background: radial-gradient(circle at 32% 30%, rgba(255, 252, 242, 0.98) 0%, rgba(255, 200, 110, 0.95) 42%, rgba(176, 101, 0, 0.95) 100%);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.55), 0 0 14px rgba(255, 190, 96, 0.42);
+  cursor: pointer;
+  transition: transform 130ms ease, filter 130ms ease, box-shadow 130ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.atriaMarker::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(176, 101, 0, 0.92);
+  border-right: 1px solid rgba(255, 220, 160, 0.6);
+  border-bottom: 1px solid rgba(255, 220, 160, 0.6);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+.atriaMarker:hover {
+  transform: translate(-50%, -102%) scale(1.05);
+  filter: brightness(1.08);
+}
+
+.atriaMarkerSelected {
+  box-shadow: 0 0 0 2px rgba(255, 245, 220, 0.5), 0 0 20px rgba(255, 205, 120, 0.55);
+}
+
+.atriaMarkerDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(40, 24, 8, 0.72);
+}
+
+.atriaMapHint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: min(92%, 680px);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(0, 0, 0, 0.42);
+  color: rgba(255, 220, 160, 0.78);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  line-height: 1.45;
+  padding: 7px 10px;
+  pointer-events: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+
+.atriaMapFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-height: 28px;
+  padding: 2px 2px 0;
+}
+
+.atriaMapFooterPrimary {
+  color: rgba(255, 245, 220, 0.93);
+  font-family: var(--koa-font-display);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 900;
+}
+
+.atriaMapFooterSecondary {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-weight: 850;
+}
+
+.atriaMapCopyStatus {
+  margin-left: auto;
+  color: rgba(255, 220, 160, 0.8);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--koa-font-display);
+  font-weight: 900;
+}
+
 .loreTabBar {
   display: flex;
   gap: 8px;
@@ -758,6 +986,34 @@
   .loreTabBtn {
     flex: 1 1 calc(50% - 8px);
   }
+
+  .atriaMapWrap {
+    padding: 10px;
+  }
+
+  .atriaMapToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .atriaMapZoomControls,
+  .atriaMapEditControls {
+    width: 100%;
+  }
+
+  .atriaZoomRange {
+    width: min(220px, 100%);
+    flex: 1 1 160px;
+  }
+
+  .atriaPinSelect {
+    min-width: 150px;
+    flex: 1 1 170px;
+  }
+
+  .atriaMapCopyStatus {
+    margin-left: 0;
+  }
 }
 
 @media (max-width: 640px) {
@@ -792,5 +1048,18 @@
 
   .lightboxInfoGrid {
     grid-template-columns: 1fr;
+  }
+
+  .atriaMapHint {
+    font-size: 10px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+
+  .atriaMapFooter {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
