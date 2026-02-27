@@ -220,7 +220,7 @@
 }
 
 .initStrip {
-  width: min(100%, 760px);
+  width: min(100%, 860px);
   padding: 0;
   border: none;
   border-radius: 0;
@@ -357,7 +357,7 @@
 .initCardsRow {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 19px;
   width: 100%;
   justify-content: center;
 }
@@ -376,6 +376,7 @@
 }
 
 .initCard {
+  box-sizing: border-box;
   border-radius: 10px;
   border: 1px solid rgba(255, 220, 160, 0.18);
   background: linear-gradient(180deg, rgba(6, 6, 8, 0.94), rgba(4, 4, 6, 0.9));
@@ -384,7 +385,7 @@
   transition: background 150ms;
   min-width: 0;
   max-width: none;
-  width: 100%;
+  width: auto;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(6px);
