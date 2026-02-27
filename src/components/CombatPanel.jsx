@@ -1,4 +1,4 @@
-// ===== COMBAT PANEL — with Battle Background Selector =====
+﻿// ===== COMBAT PANEL — with Battle Background Selector =====
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './CombatPanel.module.css';
@@ -201,6 +201,80 @@ const ENEMY_TYPES = [
 ];
 
 const PC_COLORS = ['#a0c4ff','#c0a8ff','#ffd6a0','#a0ffcc','#ffb3b3','#ffe4a0','#b3e0ff'];
+const SPELL_SLOT_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const TOKEN_IMAGE_BY_ID = {
+  arlis: '/Token/arlis.png',
+  castor: '/Token/castor.png',
+  cerci: '/Token/cerci.png',
+  fen: '/Token/fen.png',
+  jasper: '/Token/jasper.png',
+  thryvaris: '/Token/thryvaris.png',
+  vonghul: '/Token/vonghul.png',
+  william: '/Token/will.png',
+};
+const TOKEN_IMAGE_BY_NAME_KEY = {
+  arlisghoth: '/Token/arlis.png',
+  castor: '/Token/castor.png',
+  cercivondonovon: '/Token/cerci.png',
+  fen: '/Token/fen.png',
+  jasperdelancey: '/Token/jasper.png',
+  thryvarisbria: '/Token/thryvaris.png',
+  vonghul: '/Token/vonghul.png',
+  williamspicer: '/Token/will.png',
+};
+
+function tokenKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function tokenImageForCharacter(id, name) {
+  const fromId = TOKEN_IMAGE_BY_ID[tokenKey(id)];
+  if (fromId) return fromId;
+  return TOKEN_IMAGE_BY_NAME_KEY[tokenKey(name)] || '';
+}
+
+function defaultSpellSlots() {
+  return SPELL_SLOT_LEVELS.map((level) => ({ level, max: 0, current: 0 }));
+}
+
+function normalizeSpellSlots(raw) {
+  const byLevel = new Map();
+  if (Array.isArray(raw)) {
+    raw.forEach((slot, i) => {
+      const level = toInt(slot?.level, i + 1);
+      if (level >= 1 && level <= 9) byLevel.set(level, slot || {});
+    });
+  } else if (raw && typeof raw === 'object') {
+    Object.entries(raw).forEach(([levelKey, slot]) => {
+      const level = toInt(levelKey, 0);
+      if (level >= 1 && level <= 9) byLevel.set(level, slot || {});
+    });
+  }
+
+  return defaultSpellSlots().map((slot) => {
+    const src = byLevel.get(slot.level);
+    if (!src) return slot;
+    const max = Math.max(0, toInt(src.max ?? src.total, 0));
+    const fallbackCurrent = src.current ?? src.remaining ?? max;
+    const current = clamp(toInt(fallbackCurrent, max), 0, max);
+    return { level: slot.level, max, current };
+  });
+}
+
+function spellLevelLabel(level) {
+  const n = clamp(toInt(level, 1), 1, 9);
+  if (n === 1) return '1ST';
+  if (n === 2) return '2ND';
+  if (n === 3) return '3RD';
+  return `${n}TH`;
+}
+
+function parseStatusText(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 function loadState() {
   try { const raw = localStorage.getItem(LS_KEY); if (!raw) return null; return JSON.parse(raw); }
@@ -217,6 +291,7 @@ function normalize(enc) {
   const e = { ...base, ...(enc || {}) };
   if (!Array.isArray(e.combatants)) e.combatants = [];
   e.combatants = e.combatants.map((c, i) => ({
+    sourceCharacterId: c.sourceCharacterId || '',
     id: c.id || uid(),
     name: c.name || 'Unknown',
     role: c.role || '',
@@ -229,9 +304,10 @@ function normalize(enc) {
     status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
     concentration: c.concentration || '',
     notes: c.notes || '',
+    spellSlots: normalizeSpellSlots(c.spellSlots),
     dead: !!c.dead,
     enemyType: c.enemyType || 'goblin',
-    customImage: c.customImage || '',
+    customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
     pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
   }));
   e.round = toInt(e.round, 1);
@@ -547,6 +623,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     return (characters || [])
       .filter((c) => c && c.combat)
       .map((c) => ({
+        id: c.id || '',
         name: c.name,
         role: c.role || c.class || '',
         ac: typeof c.ac === 'number' ? c.ac : 0,
@@ -563,6 +640,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', role:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
+  const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
+  const [activeSpellLevel, setActiveSpellLevel] = useState(1);
+  const [statusDraft, setStatusDraft] = useState('');
 
   // ── Battle Background state ─────────────────────────────────────────────
   const [battleBg, setBattleBg] = useState(null);
@@ -654,6 +734,17 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
+  const selectedSpellSlot = useMemo(() => {
+    if (!selected) return null;
+    return selected.spellSlots.find((slot) => slot.level === activeSpellLevel) || null;
+  }, [selected, activeSpellLevel]);
+  const visibleSpellSlot = selectedSpellSlot || { level: activeSpellLevel, max: 0, current: 0 };
+
+  useEffect(() => {
+    if (!editorOpen || !selectedId) return;
+    setHpAdjustAmount('0');
+    setStatusDraft(selected ? selected.status.join(', ') : '');
+  }, [editorOpen, selectedId]);
 
   const addCombatant = (c) => {
     setEncounter(prev => {
@@ -681,8 +772,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       hp: draft.hp==='' ? '' : toInt(draft.hp,0),
       maxHP: draft.maxHP==='' ? '' : toInt(draft.maxHP,0),
       ac: draft.ac==='' ? '' : toInt(draft.ac,0),
-      tempHP:0, status:[], concentration:'', notes:'', dead:false,
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
       enemyType: draft.enemyType || 'goblin', customImage:'',
+      sourceCharacterId:'',
       pcColorIndex: combatants.length % PC_COLORS.length,
     });
     setDraft(d => ({ ...d, name:'', role:'' }));
@@ -695,8 +787,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     addCombatant({
       id: uid(), name: uniqueName(existingNames, adv.name), role: adv.role,
       side: adventurerSide, init:10, hp: adv.hp, maxHP: adv.maxHP, ac: adv.ac,
-      tempHP:0, status:[], concentration:'', notes:'', dead:false,
-      enemyType:'goblin', customImage:'',
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
+      enemyType:'goblin', customImage: tokenImageForCharacter(adv.id, adv.name),
+      sourceCharacterId: adv.id || '',
       pcColorIndex: combatants.length % PC_COLORS.length,
     });
   };
@@ -763,6 +856,74 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     });
   };
 
+  const applyHpAdjustment = (kind) => {
+    if (!selected) return;
+    const amount = Math.abs(toInt(hpAdjustAmount, 0));
+    if (amount <= 0) return;
+
+    const hp = selected.hp === '' ? 0 : toInt(selected.hp, 0);
+    const maxHP = selected.maxHP === '' ? null : toInt(selected.maxHP, 0);
+    const tempHP = toInt(selected.tempHP, 0);
+
+    if (kind === 'damage') {
+      let remaining = amount;
+      const absorbedByTemp = Math.min(tempHP, remaining);
+      remaining -= absorbedByTemp;
+      const nextTempHP = tempHP - absorbedByTemp;
+      const nextHP = Math.max(0, hp - remaining);
+      setSelectedField({ hp: nextHP, tempHP: nextTempHP });
+      return;
+    }
+
+    const healed = hp + amount;
+    const nextHP = maxHP != null && maxHP > 0 ? Math.min(maxHP, healed) : healed;
+    setSelectedField({ hp: nextHP });
+  };
+
+  const setSpellSlotField = (level, patch) => {
+    if (!selected) return;
+    const slots = normalizeSpellSlots(selected.spellSlots);
+    const nextSlots = slots.map((slot) => {
+      if (slot.level !== level) return slot;
+      const merged = typeof patch === 'function' ? patch(slot) : { ...slot, ...patch };
+      const max = clamp(toInt(merged.max, 0), 0, 20);
+      const current = clamp(toInt(merged.current, max), 0, max);
+      return { level, max, current };
+    });
+    setSelectedField({ spellSlots: nextSlots });
+  };
+
+  const nudgeSpellSlotMax = (level, delta) => {
+    setSpellSlotField(level, (slot) => ({ ...slot, max: slot.max + delta }));
+  };
+
+  const setSpellSlotsFromBox = (level, boxIndex) => {
+    setSpellSlotField(level, (slot) => {
+      const clickedValue = boxIndex + 1;
+      const nextCurrent = clickedValue === slot.current ? clickedValue - 1 : clickedValue;
+      return { ...slot, current: nextCurrent };
+    });
+  };
+
+  const longRestSelected = () => {
+    if (!selected) return;
+    const maxHP = selected.maxHP === '' ? '' : toInt(selected.maxHP, 0);
+    const nextHP = maxHP === '' ? selected.hp : maxHP;
+    const nextSpellSlots = normalizeSpellSlots(selected.spellSlots).map((slot) => ({
+      ...slot,
+      current: slot.max,
+    }));
+
+    setStatusDraft('');
+    setSelectedField({
+      hp: nextHP,
+      tempHP: 0,
+      status: [],
+      concentration: '',
+      spellSlots: nextSpellSlots,
+    });
+  };
+
   const resetEncounter = () => {
     setEncounter(prev => {
       const next = normalize(prev);
@@ -773,7 +934,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
-  const openEditorFor = (id) => { setSelectedId(id); setEditorOpen(true); };
+  const openEditorFor = (id) => {
+    const target = combatants.find((c) => c.id === id);
+    const picked = target?.spellSlots?.find((slot) => slot.max > 0)?.level || 1;
+    setSelectedId(id);
+    setActiveSpellLevel(picked);
+    setEditorOpen(true);
+  };
 
   // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
@@ -1086,12 +1253,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       </select>
                     </div>
                   </div>
-                  {(() => { const adv = adventurers.find(a => a.name===adventurerPick); return adv ? (
-                    <div className={styles.previewCard}>
-                      <div className={styles.previewName}>{adv.name}</div>
-                      <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
-                    </div>
-                  ) : null; })()}
+                  {(() => {
+                    const adv = adventurers.find(a => a.name === adventurerPick);
+                    if (!adv) return null;
+                    const tokenSrc = tokenImageForCharacter(adv.id, adv.name);
+                    return (
+                      <div className={styles.previewCard}>
+                        <div className={styles.previewName}>{adv.name}</div>
+                        <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
+                        {tokenSrc && (
+                          <div className={styles.sectionTopGap}>
+                            <div className={styles.label}>Token</div>
+                            <div className={styles.tokenPreview}>
+                              <img src={tokenSrc} alt={`${adv.name} token`} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <button
                     className={btnClass('gold', 'md', styles.btnFull)}
                     onMouseEnter={playHover}
@@ -1162,18 +1342,27 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <div className={styles.editorTitle}>
                   Editing: <span className={styles.editorNameAccent}>{selected.name}</span>
                 </div>
-                <div className={styles.initActions}>
+                <div className={styles.editorHeaderActions}>
                   <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                 </div>
               </div>
 
               <div className={`${styles.editorBody} koa-scrollbar-thin`}>
+                
                 {/* Appearance section */}
                 <div className={styles.sectionTopGap}>
-                  <div className={styles.appearanceTitle}>Appearance</div>
+                  <div className={styles.appearanceHeaderRow}>
+                    <div className={styles.appearanceTitle}>Appearance</div>
+                    <div className={styles.editorTopActions}>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>
+                        Long Rest
+                      </button>
+                    </div>
+                  </div>
+                  
                   <div className={styles.appearanceGrid}>
-                    <div>
-                      <div className={styles.label}>Custom Image</div>
+                    <div className={styles.appearanceCol}>
+                   
                       <div className={styles.uploadRow}>
                         {/* Preview circle */}
                         {selected.customImage && (
@@ -1193,20 +1382,129 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           </button>
                         )}
                       </div>
+                      {selected.side === 'Enemy' && (
+                        <div className={styles.sectionTopGap}>
+                          <div className={styles.label}>Enemy Type</div>
+                          <div className={styles.enemyTypeRow}>
+                            {ENEMY_TYPES.map(et => (
+                              <button key={et.key}
+                                onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
+                                onMouseEnter={playHover}
+                                className={enemyTypeBtnClass(selected.enemyType===et.key)}>{et.label}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    {selected.side === 'Enemy' && (
+
+                    <div className={styles.combatToolsCard}>
+                      <div className={styles.toolsTitle}>Combat Tools</div>
+
                       <div>
-                        <div className={styles.label}>Enemy Type</div>
-                        <div className={styles.enemyTypeRow}>
-                          {ENEMY_TYPES.map(et => (
-                            <button key={et.key}
-                              onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
-                              onMouseEnter={playHover}
-                              className={enemyTypeBtnClass(selected.enemyType===et.key)}>{et.label}</button>
-                          ))}
+                        <div className={styles.label}>HP Quick Adjust</div>
+                        <div className={styles.hpAdjustRow}>
+                          <div className={styles.hpAdjustInputWrap}>
+                            <input
+                              className={`${styles.input} ${styles.compactInput}`}
+                              inputMode="numeric"
+                              maxLength={4}
+                              value={hpAdjustAmount}
+                              onChange={e => setHpAdjustAmount(e.target.value)}
+                              placeholder="Amount"
+                            />
+                          </div>
+                          <button
+                            className={btnClass('danger', 'sm', styles.toolMiniBtn)}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); applyHpAdjustment('damage'); }}
+                          >
+                            - HP
+                          </button>
+                          <button
+                            className={btnClass('gold', 'sm', styles.toolMiniBtn)}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); applyHpAdjustment('heal'); }}
+                          >
+                            + HP
+                          </button>
+                        </div>
+                        <div className={styles.toolsMeta}>
+                          HP {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP} · Temp {selected.tempHP}
                         </div>
                       </div>
-                    )}
+
+                      <div className={styles.toolsDivider}/>
+
+                      <div>
+                        <div className={styles.label}>Spell Slots</div>
+                        <div className={styles.spellLevelControls}>
+                          <select
+                            className={`${styles.input} ${styles.selectInput} ${styles.spellLevelSelect}`}
+                            value={activeSpellLevel}
+                            onChange={(e) => setActiveSpellLevel(toInt(e.target.value, 1))}
+                          >
+                            {SPELL_SLOT_LEVELS.map((level) => (
+                              <option key={level} value={level}>
+                                {spellLevelLabel(level)} Level
+                              </option>
+                            ))}
+                          </select>
+                          <div className={styles.spellMaxControls}>
+                            <button
+                              type="button"
+                              className={btnClass('ghost', 'sm', styles.toolMiniBtn)}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, -1); }}
+                              aria-label={`Decrease max level ${activeSpellLevel} slots`}
+                            >
+                              -
+                            </button>
+                            <input
+                              className={`${styles.input} ${styles.spellMaxInput}`}
+                              inputMode="numeric"
+                              maxLength={2}
+                              value={visibleSpellSlot.max}
+                              onChange={e => setSpellSlotField(activeSpellLevel, { max: toInt(e.target.value, 0) })}
+                              aria-label={`Max level ${activeSpellLevel} slots`}
+                            />
+                            <button
+                              type="button"
+                              className={btnClass('gold', 'sm', styles.toolMiniBtn)}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, 1); }}
+                              aria-label={`Increase max level ${activeSpellLevel} slots`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className={styles.slotBand}>
+                          <div className={styles.slotBandLevel}>{spellLevelLabel(activeSpellLevel)} LEVEL</div>
+                          <div className={styles.slotBandTrack}>
+                            <div className={styles.slotBoxRow}>
+                              {visibleSpellSlot.max <= 0 ? (
+                                <span className={styles.slotBoxHint}>Set max slots</span>
+                              ) : (
+                                Array.from({ length: visibleSpellSlot.max }).map((_, i) => {
+                                  const activeBox = i < visibleSpellSlot.current;
+                                  return (
+                                    <button
+                                      key={`${activeSpellLevel}-${i}`}
+                                      type="button"
+                                      className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
+                                      onMouseEnter={playHover}
+                                      onClick={() => { playNav(); setSpellSlotsFromBox(activeSpellLevel, i); }}
+                                      aria-label={`Toggle level ${activeSpellLevel} slot ${i + 1}`}
+                                    />
+                                  );
+                                })
+                              )}
+                            </div>
+                            <div className={styles.slotBandLabel}>SLOTS</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1232,8 +1530,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <div className={styles.divider}/>
 
                 <div><div className={styles.label}>Status (comma separated)</div>
-                  <input className={styles.input} value={selected.status.join(', ')} placeholder="Poisoned, Grappled, Bless"
-                    onChange={e => setSelectedField({ status: String(e.target.value||'').split(',').map(s=>s.trim()).filter(Boolean) })}/>
+                  <input
+                    className={styles.input}
+                    value={statusDraft}
+                    placeholder="Poisoned, Grappled, Bless"
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setStatusDraft(nextValue);
+                      setSelectedField({ status: parseStatusText(nextValue) });
+                    }}
+                  />
                 </div>
                 <div className={styles.sectionTopGap}><div className={styles.label}>Concentration</div>
                   <input className={styles.input} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>

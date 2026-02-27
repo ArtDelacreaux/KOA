@@ -833,7 +833,7 @@
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
   display: grid;
-  grid-template-rows: 46px 1fr;
+  grid-template-rows: auto 1fr;
 }
 
 .cropModal {
@@ -863,12 +863,19 @@
 }
 
 .editorHeader {
-  padding: 0 12px;
+  padding: 8px 12px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 220, 160, 0.09);
+}
+
+.editorHeaderActions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 
 .modalTitle {
@@ -904,6 +911,24 @@
 .editorBody {
   padding: 12px;
   overflow-y: auto;
+}
+
+.editorTopActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0;
+}
+
+.appearanceHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.appearanceHeaderRow .appearanceTitle {
+  margin-bottom: 0;
 }
 
 .addSectionTitle {
@@ -972,6 +997,168 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.appearanceCol {
+  min-width: 0;
+}
+
+.combatToolsCard {
+  min-width: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.42), rgba(0, 0, 0, 0.24));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toolsTitle {
+  color: rgba(255, 245, 220, 0.84);
+  font-weight: 950;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.hpAdjustRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.hpAdjustInputWrap {
+  flex: 1 1 92px;
+  min-width: 92px;
+}
+
+.toolMiniBtn {
+  min-width: 48px;
+  height: 28px;
+  padding: 0 9px;
+}
+
+.toolsMeta {
+  margin-top: 6px;
+  color: rgba(255, 220, 160, 0.62);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.toolsDivider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, rgba(255, 220, 160, 0.12), transparent);
+  margin: 2px 0;
+}
+
+.spellLevelControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.spellLevelSelect {
+  height: 30px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.spellMaxControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spellMaxInput {
+  width: 44px;
+  height: 28px;
+  padding: 6px 4px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.slotBand {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.3));
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.slotBandLevel {
+  color: rgba(176, 90, 255, 0.95);
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.slotBandTrack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slotBoxRow {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.slotBox {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(176, 90, 255, 0.85);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease;
+}
+
+.slotBox:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.12);
+}
+
+.slotBoxActive {
+  background: linear-gradient(180deg, rgba(131, 60, 188, 0.95), rgba(96, 30, 148, 0.95));
+  box-shadow: 0 0 12px rgba(131, 60, 188, 0.45);
+}
+
+.slotBoxInactive {
+  background: rgba(8, 16, 18, 0.74);
+  border-color: rgba(188, 235, 240, 0.78);
+}
+
+.slotBandLabel {
+  color: rgba(255, 245, 220, 0.84);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.slotBoxHint {
+  color: rgba(255, 220, 160, 0.52);
+  font-size: 11px;
+  font-weight: 900;
+  user-select: none;
+  white-space: nowrap;
 }
 
 .uploadRow {
@@ -1046,6 +1233,7 @@
 .actionRow {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cropBody {
@@ -1134,6 +1322,21 @@
 
   .appearanceGrid {
     grid-template-columns: 1fr;
+  }
+
+  .spellLevelControls {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .slotBand {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .slotBandTrack {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .cropBody {
