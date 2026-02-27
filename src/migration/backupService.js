@@ -1,5 +1,7 @@
 import { repository } from '../repository';
 import { MIGRATION_KEY_SPECS, MIGRATION_SCHEMA_VERSION } from './manifest';
+import { createSnapshotHash } from './hash';
+import { buildSupabaseImportPlan } from './importStrategy';
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -28,13 +30,21 @@ export function buildMigrationSnapshot() {
     payload[spec.id] = readValueBySpec(spec);
   });
 
+  const source = {
+    app: 'tavern-menu',
+    adapter: repository.adapterName,
+  };
+  const snapshotHash = createSnapshotHash({
+    schemaVersion: MIGRATION_SCHEMA_VERSION,
+    source,
+    payload,
+  });
+
   return {
     schemaVersion: MIGRATION_SCHEMA_VERSION,
+    snapshotHash,
     exportedAt: new Date().toISOString(),
-    source: {
-      app: 'tavern-menu',
-      adapter: repository.adapterName,
-    },
+    source,
     payload,
   };
 }
@@ -110,7 +120,24 @@ export async function parseSnapshotFile(file) {
     throw new Error('Backup file is missing payload data.');
   }
 
-  return parsed;
+  const normalized = {
+    ...parsed,
+    schemaVersion: Number.parseInt(parsed.schemaVersion, 10) || MIGRATION_SCHEMA_VERSION,
+    source: toSafeObject(parsed.source),
+    payload: toSafeObject(parsed.payload),
+  };
+
+  const fallbackHash = createSnapshotHash({
+    schemaVersion: normalized.schemaVersion,
+    source: normalized.source,
+    payload: normalized.payload,
+  });
+  const incomingHash = typeof parsed.snapshotHash === 'string' ? parsed.snapshotHash.trim() : '';
+
+  return {
+    ...normalized,
+    snapshotHash: incomingHash || fallbackHash,
+  };
 }
 
 export function applySnapshot(snapshot) {
@@ -121,4 +148,8 @@ export function applySnapshot(snapshot) {
   });
 
   return summarizeSnapshot(snapshot);
+}
+
+export function buildSnapshotImportPlan(snapshot, options = {}) {
+  return buildSupabaseImportPlan(snapshot, options);
 }
