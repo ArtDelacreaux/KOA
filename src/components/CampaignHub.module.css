@@ -114,32 +114,31 @@
 .tabButton {
   padding: 10px 18px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 220, 160, 0.22);
-  background: linear-gradient(180deg, rgba(52, 35, 20, 0.9), rgba(22, 15, 8, 0.92));
-  color: rgba(255, 245, 220, 0.88);
-  cursor: pointer;
-  font-weight: 950;
   font-size: 12px;
   letter-spacing: 0.12em;
-  font-family: var(--koa-font-display);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
-  user-select: none;
+  min-width: 132px;
+  text-align: center;
+  color: rgba(255, 245, 220, 0.9);
   white-space: nowrap;
-  transition: all 150ms ease;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
 }
 
-.tabButton:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.07);
+.tabButton.btnGhost {
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(82, 60, 42, 0.62), rgba(30, 22, 16, 0.54));
+  color: rgba(255, 245, 220, 0.84);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+}
+
+.tabButton.btnGold {
+  border: 1px solid rgba(255, 220, 160, 0.3);
+  background: linear-gradient(180deg, rgba(74, 52, 36, 0.88), rgba(34, 24, 16, 0.84));
+  color: rgba(255, 245, 220, 0.96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.52);
 }
 
 .tabButtonActive {
-  border: 1px solid rgba(255, 220, 160, 0.42);
-  background: linear-gradient(180deg, rgba(60, 40, 20, 0.95), rgba(24, 16, 8, 0.96));
-  color: rgba(255, 245, 220, 0.96);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 220, 160, 0.4);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.52);
 }
 
 .smallBtn {
@@ -172,13 +171,13 @@
 }
 
 .btnGold {
-  background: linear-gradient(180deg, rgba(176, 101, 0, 0.9), rgba(122, 55, 0, 0.92));
-  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(74, 52, 36, 0.88), rgba(34, 24, 16, 0.84));
+  border: 1px solid rgba(255, 220, 160, 0.26);
 }
 
 .btnDanger {
-  background: linear-gradient(180deg, rgba(122, 30, 30, 0.92), rgba(90, 18, 18, 0.92));
-  border: 1px solid rgba(255, 160, 160, 0.26);
+  background: linear-gradient(180deg, rgba(82, 60, 42, 0.62), rgba(30, 22, 16, 0.54));
+  border: 1px solid rgba(255, 220, 160, 0.22);
 }
 
 .btnGhost {
@@ -545,13 +544,13 @@
   margin-top: 8px;
   padding: 10px;
   border-radius: 14px;
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  background: rgba(122, 30, 30, 0.14);
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(24, 18, 12, 0.58), rgba(14, 10, 8, 0.66));
 }
 
 .dangerTitle {
   font-weight: 950;
-  color: rgba(252, 165, 165, 0.92);
+  color: rgba(255, 245, 220, 0.92);
   font-size: 12px;
 }
 
