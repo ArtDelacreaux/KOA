@@ -1623,11 +1623,25 @@
   gap: 6px;
 }
 
-.combatToolsTopRow {
+.sheetToolsTopRow {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.sheetToolsAdjustRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  align-items: end;
+  grid-template-columns: auto 64px auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.sheetToolsAdjustInputWrap {
+  min-width: 0;
+}
+
+.sheetToolsAdjustInput {
+  text-align: center;
 }
 
 .combatToolGroup {
@@ -1882,6 +1896,123 @@
   white-space: nowrap;
 }
 
+.spellSlotsReadGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 316px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.spellSlotsReadRow {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+}
+
+.spellSlotsReadLevel {
+  color: rgba(176, 90, 255, 0.95);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.spellSlotsReadBoxes {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.spellSlotsReadBox {
+  width: 17px;
+  height: 17px;
+  border-radius: 3px;
+  border: 1px solid rgba(188, 235, 240, 0.88);
+}
+
+.spellSlotsReadBoxActive {
+  background: linear-gradient(180deg, rgba(188, 235, 240, 0.42), rgba(126, 205, 219, 0.3));
+  box-shadow: 0 0 10px rgba(126, 205, 219, 0.28);
+}
+
+.spellSlotsReadBoxInactive {
+  background: rgba(8, 16, 18, 0.68);
+}
+
+.spellSlotsReadCount {
+  color: rgba(255, 245, 220, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.spellSlotsEditGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 308px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.spellSlotsEditRow {
+  border-radius: 9px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 7px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.spellSlotsEditLevel {
+  color: rgba(176, 90, 255, 0.95);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.spellSlotsTrack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.spellSlotsTrackBoxes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.spellSlotsEditActions {
+  display: flex;
+  gap: 4px;
+}
+
+.hpQuickRowNoLabel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+}
+
 .uploadRow {
   display: flex;
   align-items: center;
@@ -2116,8 +2247,12 @@
     grid-template-columns: 1fr;
   }
 
-  .combatToolsTopRow {
-    grid-template-columns: 1fr;
+  .sheetToolsTopRow {
+    justify-content: flex-start;
+  }
+
+  .spellSlotsEditGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .sheetAbilityChipGrid {
@@ -2185,6 +2320,10 @@
   }
 
   .sheetInventoryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .spellSlotsEditGrid {
     grid-template-columns: 1fr;
   }
 

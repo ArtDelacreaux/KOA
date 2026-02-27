@@ -931,7 +931,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
   const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
-  const [activeSpellLevel, setActiveSpellLevel] = useState(1);
   const [statusDraft, setStatusDraft] = useState('');
   const [sheetImportState, setSheetImportState] = useState({
     running: false,
@@ -1052,11 +1051,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     () => normalizeSenseRows(selected?.senses),
     [selected]
   );
-  const selectedSpellSlot = useMemo(() => {
-    if (!selected) return null;
-    return selected.spellSlots.find((slot) => slot.level === activeSpellLevel) || null;
-  }, [selected, activeSpellLevel]);
-  const visibleSpellSlot = selectedSpellSlot || { level: activeSpellLevel, max: 0, current: 0 };
+  const allSpellSlots = useMemo(
+    () => normalizeSpellSlots(selected?.spellSlots),
+    [selected]
+  );
+  const visibleSheetSpellSlots = useMemo(
+    () => allSpellSlots.filter((slot) => Number(slot.max) > 0),
+    [allSpellSlots]
+  );
   const initiativeSlots = useMemo(() => {
     if (!combatants.length) return [null, null, null];
     const safeActive = clamp(encounter.activeIndex, 0, combatants.length - 1);
@@ -1340,9 +1342,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
   const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
-    const picked = target?.spellSlots?.find((slot) => slot.max > 0)?.level || 1;
     setSelectedId(id);
-    setActiveSpellLevel(picked);
     setEditorMode(forceMode || (target?.sourceSheet ? 'sheet' : 'edit'));
     setEditorOpen(true);
   };
@@ -1948,67 +1948,59 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <div className={styles.sheetHeroTools}>
                       <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
                         <div className={styles.toolsTitle}>Combat Tools</div>
-                        <div className={styles.combatToolsTopRow}>
-                          <div className={styles.combatToolGroup}>
-                            <div className={styles.label}>HP Quick Adjust</div>
-                            <div className={styles.hpAdjustRow}>
-                              <div className={styles.hpAdjustInputWrap}>
-                                <input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={4} value={hpAdjustAmount} onChange={(e) => setHpAdjustAmount(e.target.value)} />
-                              </div>
-                              <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
-                              <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
+                        <div className={styles.sheetToolsTopRow}>
+                          <div className={styles.sheetToolsAdjustRow}>
+                            <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
+                            <div className={styles.sheetToolsAdjustInputWrap}>
+                              <input
+                                className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
+                                inputMode="numeric"
+                                maxLength={4}
+                                value={hpAdjustAmount}
+                                onChange={(e) => setHpAdjustAmount(e.target.value)}
+                              />
                             </div>
-                          </div>
-                          <div className={styles.combatToolGroup}>
-                            <div className={styles.label}>Spell Slots</div>
-                            <div className={styles.spellLevelControls}>
-                              <select className={`${styles.input} ${styles.selectInput} ${styles.spellLevelSelect}`} value={activeSpellLevel} onChange={(e) => setActiveSpellLevel(toInt(e.target.value, 1))}>
-                                {SPELL_SLOT_LEVELS.map((level) => <option key={level} value={level}>{spellLevelLabel(level)}</option>)}
-                              </select>
-                              <div className={styles.spellMaxControls}>
-                                <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, -1); }}>-</button>
-                                <input className={`${styles.input} ${styles.spellMaxInput}`} inputMode="numeric" maxLength={2} value={visibleSpellSlot.max} onChange={(e) => setSpellSlotField(activeSpellLevel, { max: toInt(e.target.value, 0) })} />
-                                <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, 1); }}>+</button>
-                              </div>
-                            </div>
+                            <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
                           </div>
                         </div>
-                        <div className={styles.slotBand}>
-                          <div className={styles.slotBandLevel}>{spellLevelLabel(activeSpellLevel)} LEVEL</div>
-                          <div className={styles.slotBandTrack}>
-                            <div className={styles.slotBoxRow}>
-                              {visibleSpellSlot.max <= 0 ? <span className={styles.slotBoxHint}>Set max slots</span> : Array.from({ length: visibleSpellSlot.max }).map((_, i) => {
-                                const activeBox = i < visibleSpellSlot.current;
+                        <div className={styles.combatToolGroup}>
+                          <div className={styles.label}>Spell Slots</div>
+                          <div className={styles.spellSlotsReadGrid}>
+                            {visibleSheetSpellSlots.length === 0 ? (
+                              <div className={styles.sheetListFallback}>No spell slots set.</div>
+                            ) : (
+                              visibleSheetSpellSlots.map((slot) => {
+                                const shownBoxes = Math.max(slot.max, 0);
                                 return (
-                                  <button
-                                    key={`${activeSpellLevel}-${i}`}
-                                    type="button"
-                                    className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
-                                    onMouseEnter={playHover}
-                                    onClick={() => { playNav(); setSpellSlotsFromBox(activeSpellLevel, i); }}
-                                  />
+                                  <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
+                                    <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
+                                    <div className={styles.spellSlotsReadBoxes}>
+                                      {Array.from({ length: shownBoxes }).map((_, i) => (
+                                        <span
+                                          key={`sheet-slot-box-${slot.level}-${i}`}
+                                          className={`${styles.spellSlotsReadBox} ${
+                                            i < slot.current ? styles.spellSlotsReadBoxActive : styles.spellSlotsReadBoxInactive
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
+                                  </div>
                                 );
-                              })}
-                            </div>
-                            <div className={styles.slotBandLabel}>SLOTS</div>
+                              })
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {(selectedSheetIssues.length > 0 || sheetImportState.error || sheetImportState.message) && (
+                  {(selectedSheetIssues.length > 0 || sheetImportState.error) && (
                     <div className={styles.sheetIssues}>
                       {sheetImportState.error && sheetImportState.targetId === selected.id && (
                         <div className={styles.sheetIssueBlock}>
                           <div className={styles.sheetIssueLabel}>Import Error</div>
                           <div className={styles.sheetIssueText}>{sheetImportState.error}</div>
-                        </div>
-                      )}
-                      {sheetImportState.message && sheetImportState.targetId === selected.id && (
-                        <div className={styles.sheetIssueBlock}>
-                          <div className={styles.sheetIssueLabel}>Import Status</div>
-                          <div className={styles.sheetIssueText}>{sheetImportState.message}</div>
                         </div>
                       )}
                       {selectedSheetIssues.slice(0, 6).map((issue, idx) => (
@@ -2157,146 +2149,63 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       )}
                     </div>
 
-                    <div className={styles.combatToolsCard} style={{ display: 'none' }}>
+                    <div className={styles.combatToolsCard}>
                       <div className={styles.toolsTitle}>Combat Tools</div>
-
-                      <div>
-                        <div className={styles.label}>HP Quick Adjust</div>
-                        <div className={styles.hpAdjustRow}>
-                          <div className={styles.hpAdjustInputWrap}>
-                            <input
-                              className={`${styles.input} ${styles.compactInput}`}
-                              inputMode="numeric"
-                              maxLength={4}
-                              value={hpAdjustAmount}
-                              onChange={e => setHpAdjustAmount(e.target.value)}
-                              placeholder="Amount"
-                            />
-                          </div>
-                          <button
-                            className={btnClass('danger', 'sm', styles.toolMiniBtn)}
-                            onMouseEnter={playHover}
-                            onClick={() => { playNav(); applyHpAdjustment('damage'); }}
-                          >
-                            - HP
-                          </button>
-                          <button
-                            className={btnClass('gold', 'sm', styles.toolMiniBtn)}
-                            onMouseEnter={playHover}
-                            onClick={() => { playNav(); applyHpAdjustment('heal'); }}
-                          >
-                            + HP
-                          </button>
-                        </div>
-                        <div className={styles.toolsVitalsRow}>
-                          <div className={styles.toolsHpGroup}>
-                            <span className={styles.toolsVitalsLabel}>HP</span>
-                            <span className={styles.toolsVitalsValue}>
-                              {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP}
-                            </span>
-                          </div>
-                          <div className={styles.toolsTempGroup}>
-                            <span className={styles.toolsVitalsLabel}>Temp</span>
-                            <button
-                              type="button"
-                              className={styles.tempAdjustBtn}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); adjustSelectedTempHp(-1); }}
-                              aria-label="Decrease temp HP"
-                            >
-                              -
-                            </button>
-                            <input
-                              className={`${styles.input} ${styles.tempAdjustInput}`}
-                              inputMode="numeric"
-                              maxLength={4}
-                              value={selected.tempHP}
-                              onChange={(e) => updateSelectedTempHp(e.target.value)}
-                              aria-label="Temp HP"
-                            />
-                            <button
-                              type="button"
-                              className={styles.tempAdjustBtn}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); adjustSelectedTempHp(1); }}
-                              aria-label="Increase temp HP"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
+                      <div className={styles.hpQuickRowNoLabel}>
+                        <input
+                          className={`${styles.input} ${styles.compactInput}`}
+                          inputMode="numeric"
+                          maxLength={4}
+                          value={hpAdjustAmount}
+                          onChange={(e) => setHpAdjustAmount(e.target.value)}
+                          placeholder="0"
+                        />
+                        <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>
+                          -
+                        </button>
+                        <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>
+                          +
+                        </button>
                       </div>
-
                       <div className={styles.toolsDivider}/>
-
-                      <div>
-                        <div className={styles.label}>Spell Slots</div>
-                        <div className={styles.spellLevelControls}>
-                          <select
-                            className={`${styles.input} ${styles.selectInput} ${styles.spellLevelSelect}`}
-                            value={activeSpellLevel}
-                            onChange={(e) => setActiveSpellLevel(toInt(e.target.value, 1))}
-                          >
-                            {SPELL_SLOT_LEVELS.map((level) => (
-                              <option key={level} value={level}>
-                                {spellLevelLabel(level)} Level
-                              </option>
-                            ))}
-                          </select>
-                          <div className={styles.spellMaxControls}>
-                            <button
-                              type="button"
-                              className={btnClass('ghost', 'sm', styles.toolMiniBtn)}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, -1); }}
-                              aria-label={`Decrease max level ${activeSpellLevel} slots`}
-                            >
-                              -
-                            </button>
-                            <input
-                              className={`${styles.input} ${styles.spellMaxInput}`}
-                              inputMode="numeric"
-                              maxLength={2}
-                              value={visibleSpellSlot.max}
-                              onChange={e => setSpellSlotField(activeSpellLevel, { max: toInt(e.target.value, 0) })}
-                              aria-label={`Max level ${activeSpellLevel} slots`}
-                            />
-                            <button
-                              type="button"
-                              className={btnClass('gold', 'sm', styles.toolMiniBtn)}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, 1); }}
-                              aria-label={`Increase max level ${activeSpellLevel} slots`}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                        <div className={styles.slotBand}>
-                          <div className={styles.slotBandLevel}>{spellLevelLabel(activeSpellLevel)} LEVEL</div>
-                          <div className={styles.slotBandTrack}>
-                            <div className={styles.slotBoxRow}>
-                              {visibleSpellSlot.max <= 0 ? (
-                                <span className={styles.slotBoxHint}>Set max slots</span>
-                              ) : (
-                                Array.from({ length: visibleSpellSlot.max }).map((_, i) => {
-                                  const activeBox = i < visibleSpellSlot.current;
-                                  return (
-                                    <button
-                                      key={`${activeSpellLevel}-${i}`}
-                                      type="button"
-                                      className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
-                                      onMouseEnter={playHover}
-                                      onClick={() => { playNav(); setSpellSlotsFromBox(activeSpellLevel, i); }}
-                                      aria-label={`Toggle level ${activeSpellLevel} slot ${i + 1}`}
-                                    />
-                                  );
-                                })
-                              )}
+                      <div className={`${styles.spellSlotsEditGrid} koa-scrollbar-thin`}>
+                        {SPELL_SLOT_LEVELS.map((level) => {
+                          const slot = allSpellSlots.find((entry) => entry.level === level) || { level, max: 0, current: 0 };
+                          return (
+                            <div key={`edit-slot-${level}`} className={styles.spellSlotsEditRow}>
+                              <div className={styles.spellSlotsEditLevel}>{spellLevelLabel(level)} Level</div>
+                              <div className={styles.spellSlotsTrack}>
+                                <div className={styles.spellSlotsTrackBoxes}>
+                                  {slot.max <= 0 ? (
+                                    <span className={styles.slotBoxHint}>No slots</span>
+                                  ) : (
+                                    Array.from({ length: slot.max }).map((_, boxIndex) => {
+                                      const activeBox = boxIndex < slot.current;
+                                      return (
+                                        <button
+                                          key={`edit-slot-box-${level}-${boxIndex}`}
+                                          type="button"
+                                          className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
+                                          onMouseEnter={playHover}
+                                          onClick={() => { playNav(); setSpellSlotsFromBox(level, boxIndex); }}
+                                        />
+                                      );
+                                    })
+                                  )}
+                                </div>
+                                <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
+                                <div className={styles.spellSlotsEditActions}>
+                                  <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, -1); }}>
+                                    -
+                                  </button>
+                                  <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, 1); }}>
+                                    +
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                            <div className={styles.slotBandLabel}>SLOTS</div>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
