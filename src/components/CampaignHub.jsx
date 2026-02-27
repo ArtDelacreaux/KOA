@@ -22,9 +22,6 @@ export default function CampaignHub(props) {
     playNav   = () => {},
   } = props;
 
-  const tabButtonClass = (active) =>
-    `${styles.tabButton} ${active ? styles.tabButtonActive : ''}`;
-
   const smallBtnClass = (variant = 'gold', extraClass = '') => {
     const variantClass =
       variant === 'danger'
@@ -34,6 +31,9 @@ export default function CampaignHub(props) {
           : styles.btnGold;
     return `${styles.smallBtn} ${variantClass}${extraClass ? ` ${extraClass}` : ''}`;
   };
+
+  const tabButtonClass = (active) =>
+    smallBtnClass(active ? 'gold' : 'ghost', `${styles.tabButton}${active ? ` ${styles.tabButtonActive}` : ''}`);
 
   const smallBtnHover = () => {
     playHover();
