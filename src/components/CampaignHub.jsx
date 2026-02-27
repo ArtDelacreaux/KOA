@@ -1,6 +1,19 @@
-import React, { useEffect, useState, useMemo } from 'react';
+﻿import React, { useEffect, useState, useMemo, useRef } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './CampaignHub.module.css';
+import owlbearLogo from '../assets/logo/owl.svg';
+import watchPartyLogo from '../assets/logo/watch.webp';
+import { createId } from '../domain/ids';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import useLocalStorageState from '../lib/useLocalStorageState';
+import {
+  applySnapshot,
+  buildMigrationSnapshot,
+  downloadSnapshotFile,
+  formatSnapshotSummary,
+  parseSnapshotFile,
+  summarizeSnapshot,
+} from '../migration/backupService';
 
 export default function CampaignHub(props) {
   const {
@@ -51,7 +64,7 @@ export default function CampaignHub(props) {
   const activeQuests    = useMemo(() => (quests || []).filter((q) => q.status === 'active'),    [quests]);
   const completedQuests = useMemo(() => (quests || []).filter((q) => q.status === 'completed'), [quests]);
 
-  const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const newId = () => createId('quest');
 
   const openAddQuest = () => {
     setEditingQuestId(null);
@@ -92,17 +105,26 @@ export default function CampaignHub(props) {
   /* =========================
      Player Hub Launcher
   ========================= */
-  const LS_LAUNCH_KEY = 'koa:launcher:v1';
-  const [launcherState, setLauncherState] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_LAUNCH_KEY);
-      return raw ? JSON.parse(raw) : { watchUrl: 'https://w2g.tv/en/room/?room_id=h2rq2xmdrlzdlyolcu', owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul', recap: '', notes: '', timerRunning: false, elapsedMs: 0, lastTick: Date.now() };
-    } catch {
-      return { watchUrl: 'https://w2g.tv/en/room/?room_id=h2rq2xmdrlzdlyolcu', owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul', recap: '', notes: '', timerRunning: false, elapsedMs: 0, lastTick: Date.now() };
-    }
-  });
+  const defaultLauncherState = {
+    watchUrl: 'https://w2g.tv/en/room/?room_id=h2rq2xmdrlzdlyolcu',
+    owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul',
+    recap: '',
+    notes: '',
+    timerRunning: false,
+    elapsedMs: 0,
+    lastTick: Date.now(),
+  };
 
-  useEffect(() => { try { localStorage.setItem(LS_LAUNCH_KEY, JSON.stringify(launcherState)); } catch {} }, [launcherState]);
+  const [launcherState, setLauncherState] = useLocalStorageState(STORAGE_KEYS.launcher, defaultLauncherState);
+
+  useEffect(() => {
+    setLauncherState((prev) => ({
+      ...defaultLauncherState,
+      ...(prev && typeof prev === 'object' ? prev : {}),
+    }));
+    // Normalize once on mount in case older saved shapes exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!launcherState.timerRunning) return;
@@ -115,12 +137,59 @@ export default function CampaignHub(props) {
   const fmtElapsed = (ms) => { const total = Math.floor((ms || 0) / 1000); const h = String(Math.floor(total / 3600)).padStart(2, '0'); const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0'); const s = String(total % 60).padStart(2, '0'); return `${h}:${m}:${s}`; };
   const openTool = (kind) => { const url = kind === 'watch' ? launcherState.watchUrl : launcherState.owlbearUrl; if (!url) return; window.open(url, '_blank', 'noopener,noreferrer'); };
 
+  const backupFileRef = useRef(null);
+  const [backupStatus, setBackupStatus] = useState('');
+  const [backupBusy, setBackupBusy] = useState(false);
+
+  const exportBackup = () => {
+    const snapshot = buildMigrationSnapshot();
+    const summary = summarizeSnapshot(snapshot);
+    const filename = downloadSnapshotFile(snapshot);
+    setBackupStatus(`Saved ${filename} (${formatSnapshotSummary(summary)}).`);
+  };
+
+  const openRestorePicker = () => {
+    if (backupBusy) return;
+    if (backupFileRef.current) backupFileRef.current.click();
+  };
+
+  const onBackupPicked = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    setBackupBusy(true);
+    try {
+      const snapshot = await parseSnapshotFile(file);
+      const exportedAt = snapshot?.exportedAt ? new Date(snapshot.exportedAt).toLocaleString() : 'an unknown time';
+      const shouldRestore = confirm(
+        `Restore backup from ${exportedAt}? This will replace local data on this device. A safety backup will download first.`
+      );
+      if (!shouldRestore) return;
+
+      const safetySnapshot = buildMigrationSnapshot();
+      downloadSnapshotFile(safetySnapshot, { filename: `tavern-menu-pre-restore-${Date.now()}.json` });
+
+      const restoredSummary = applySnapshot(snapshot);
+      setBackupStatus(`Backup restored (${formatSnapshotSummary(restoredSummary)}). Reloading...`);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 700);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to restore backup.';
+      setBackupStatus(msg);
+      alert(msg);
+    } finally {
+      setBackupBusy(false);
+      if (backupFileRef.current) backupFileRef.current.value = '';
+    }
+  };
+
   /* =========================
      INVENTORY (Bag of Holding)
   ========================= */
-  const LS_BAG_KEY = 'koa:bagofholding:v1';
   const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
-  const bagNewId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const bagNewId = () => createId('bag');
   const CATEGORIES = ['All', 'Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
   const RARITIES   = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
 
@@ -131,16 +200,26 @@ export default function CampaignHub(props) {
   };
 
 
-  const [bag, setBag] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_BAG_KEY);
-      if (!raw) return { currency: { pp: 0, gp: 0, sp: 0, cp: 0 }, items: [] };
-      const parsed = JSON.parse(raw);
-      return { currency: { pp: parsed?.currency?.pp ?? 0, gp: parsed?.currency?.gp ?? 0, sp: parsed?.currency?.sp ?? 0, cp: parsed?.currency?.cp ?? 0 }, items: Array.isArray(parsed?.items) ? parsed.items : [] };
-    } catch { return { currency: { pp: 0, gp: 0, sp: 0, cp: 0 }, items: [] }; }
-  });
+  const defaultBagState = {
+    currency: { pp: 0, gp: 0, sp: 0, cp: 0 },
+    items: [],
+  };
 
-  useEffect(() => { try { localStorage.setItem(LS_BAG_KEY, JSON.stringify(bag)); } catch {} }, [bag]);
+  const [bag, setBag] = useLocalStorageState(STORAGE_KEYS.bag, defaultBagState);
+
+  useEffect(() => {
+    setBag((prev) => ({
+      currency: {
+        pp: prev?.currency?.pp ?? 0,
+        gp: prev?.currency?.gp ?? 0,
+        sp: prev?.currency?.sp ?? 0,
+        cp: prev?.currency?.cp ?? 0,
+      },
+      items: Array.isArray(prev?.items) ? prev.items : [],
+    }));
+    // Normalize once on mount in case older saved shapes exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [invQuery, setInvQuery] = useState('');
   const [invCat,   setInvCat]   = useState('All');
@@ -221,11 +300,11 @@ export default function CampaignHub(props) {
               className={smallBtnClass('ghost', styles.returnBtn)}
               onMouseEnter={smallBtnHover}
             >
-              ← RETURN
+              RETURN
             </button>
 
             <div className={styles.headerTitleWrap}>
-              <div className={styles.headerKicker}>✦ &nbsp; THE ENVOY'S CIRCLE &nbsp; ✦</div>
+              <div className={styles.headerKicker}>* &nbsp; THE ENVOY'S CIRCLE &nbsp; *</div>
               <h1 className={styles.headerTitle}>PARTY HUB</h1>
             </div>
 
@@ -282,7 +361,9 @@ export default function CampaignHub(props) {
                 <div className={styles.toolGrid}>
                   <div className={styles.toolCard} onMouseEnter={() => playHover()}>
                     <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>🎬</div>
+                      <div className={styles.toolIcon}>
+                        <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
+                      </div>
                       <div>
                         <div className={styles.toolTitle}>Watch Party</div>
                         <div className={styles.toolSub}>Music / Videos / Friends</div>
@@ -295,7 +376,9 @@ export default function CampaignHub(props) {
 
                   <div className={styles.toolCard} onMouseEnter={() => playHover()}>
                     <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>🗺️</div>
+                      <div className={styles.toolIcon}>
+                        <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
+                      </div>
                       <div>
                         <div className={styles.toolTitle}>Owlbear Table</div>
                         <div className={styles.toolSub}>Maps / tokens / encounters</div>
@@ -313,7 +396,7 @@ export default function CampaignHub(props) {
                   <textarea
                     value={launcherState.recap || ''}
                     onChange={(e) => setLauncherState((s) => ({ ...s, recap: e.target.value }))}
-                    placeholder="Last time, the party…"
+                    placeholder="Last time, the party..."
                     rows={5}
                     className={`${styles.inputBase} ${styles.textarea}`}
                   />
@@ -323,7 +406,7 @@ export default function CampaignHub(props) {
               <div className={styles.stackCol}>
                 <div className={styles.softCard}>
                   <div className={styles.iconRow}>
-                    <div className={styles.toolIcon}>⏱️</div>
+                    <div className={styles.toolIcon}>TMR</div>
                     <div>
                       <div className={styles.blockTitle}>Session Timer</div>
                       <div className={styles.blockSub}>Track how long you've been playing.</div>
@@ -350,7 +433,7 @@ export default function CampaignHub(props) {
 
                 <div className={styles.softCard}>
                   <div className={styles.iconRow}>
-                    <div className={styles.toolIcon}>📝</div>
+                    <div className={styles.toolIcon}>NOTES</div>
                     <div>
                       <div className={styles.blockTitle}>Session Notes</div>
                       <div className={styles.blockSub}>Saved locally. Great for improvised names.</div>
@@ -359,10 +442,48 @@ export default function CampaignHub(props) {
                   <textarea
                     value={launcherState.notes || ''}
                     onChange={(e) => setLauncherState((s) => ({ ...s, notes: e.target.value }))}
-                    placeholder={`• NPC:\n• Hook:\n• Loot:\n• Reminder:`}
+                    placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
                     rows={10}
                     className={`${styles.inputBase} ${styles.textarea}`}
                   />
+                </div>
+                <div className={styles.softCard}>
+                  <div className={styles.iconRow}>
+                    <div className={styles.toolIcon}>DB</div>
+                    <div>
+                      <div className={styles.blockTitle}>Cloud Prep Backup</div>
+                      <div className={styles.blockSub}>Download a backup now so future Supabase migration is one-click.</div>
+                    </div>
+                  </div>
+                  <div className={styles.toolActions}>
+                    <button
+                      className={smallBtnClass('gold')}
+                      onMouseEnter={smallBtnHover}
+                      onClick={exportBackup}
+                      disabled={backupBusy}
+                    >
+                      Download Backup
+                    </button>
+                    <button
+                      className={smallBtnClass('ghost')}
+                      onMouseEnter={smallBtnHover}
+                      onClick={openRestorePicker}
+                      disabled={backupBusy}
+                    >
+                      Restore Backup
+                    </button>
+                  </div>
+                  <input
+                    ref={backupFileRef}
+                    type="file"
+                    accept="application/json"
+                    className={styles.hiddenFileInput}
+                    onChange={onBackupPicked}
+                  />
+                  <div className={styles.backupHint}>
+                    Each friend should download their own backup from their own device/browser profile.
+                  </div>
+                  {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
                 </div>
               </div>
             </div>
@@ -460,7 +581,7 @@ export default function CampaignHub(props) {
                   <div className={styles.cardHeaderRow}>
                     <div>
                       <div className={styles.cardTitle}>Bag of Holding</div>
-                      <div className={styles.cardSub}>Shared party inventory — loot, gold totals, quest items, and artifacts.</div>
+                      <div className={styles.cardSub}>Shared party inventory - loot, gold totals, quest items, and artifacts.</div>
                     </div>
                   </div>
                   <div className={styles.sectionDivider} />
@@ -468,7 +589,7 @@ export default function CampaignHub(props) {
                   <div className={styles.filtersGrid}>
                     <div>
                       <div className={styles.inputLabel}>Search</div>
-                      <input value={invQuery} onChange={(e) => setInvQuery(e.target.value)} placeholder="name, notes…" className={styles.inputBase} />
+                      <input value={invQuery} onChange={(e) => setInvQuery(e.target.value)} placeholder="name, notes..." className={styles.inputBase} />
                     </div>
                     <div>
                       <div className={styles.inputLabel}>Category</div>
@@ -561,18 +682,18 @@ export default function CampaignHub(props) {
                           <div className={styles.questTitleRow}>
                             <div className={styles.itemTitle}>{it.name}</div>
                             {it.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
-                            <span className={styles.itemMetaInline}>{it.rarity} · {it.category}</span>
+                            <span className={styles.itemMetaInline}>{it.rarity} - {it.category}</span>
                           </div>
                           {it.notes && <div className={styles.itemNotes}>{it.notes}</div>}
                           <div className={styles.itemStats}>
-                            {it.assignedTo && <span>👤 {it.assignedTo}</span>}
-                            {it.value != null && <span>💰 {it.value} gp</span>}
-                            {it.weight != null && <span>⚖️ {it.weight} lb</span>}
+                            {it.assignedTo && <span>By: {it.assignedTo}</span>}
+                            {it.value != null && <span>Value: {it.value} gp</span>}
+                            {it.weight != null && <span>Wt: {it.weight} lb</span>}
                           </div>
                         </div>
                         <div className={styles.actionsRow}>
-                          <span className={styles.qtyBadge}>×{it.qty ?? 1}</span>
-                          <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">−</button>
+                          <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
+                          <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
                           <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
                           <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
                           <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
@@ -674,7 +795,7 @@ export default function CampaignHub(props) {
                 </div>
                 <div className={styles.fullCol}>
                   <div className={styles.inputLabel}>Notes</div>
-                  <textarea value={invDraft.notes} onChange={(e) => setInvDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Description, effects, flavor text…" rows={3} className={`${styles.inputBase} ${styles.textarea} ${styles.noResize}`} />
+                  <textarea value={invDraft.notes} onChange={(e) => setInvDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Description, effects, flavor text..." rows={3} className={`${styles.inputBase} ${styles.textarea} ${styles.noResize}`} />
                 </div>
                 <div className={styles.fullCol}>
                   <div className={styles.inputLabel}>Tags (comma-separated)</div>

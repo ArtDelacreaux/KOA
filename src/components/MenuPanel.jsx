@@ -5,6 +5,8 @@ import theaterPreviewVideo from '../assets/Theater.mp4';
 import characterBookPreviewVideo from '../assets/CharacterBook.mp4';
 import worldLoreVideo from '../assets/worldlore.mp4';
 import styles from './MenuPanel.module.css';
+import { STORAGE_KEYS, menuNoteKey } from '../lib/storageKeys';
+import { repository } from '../repository';
 
 /*
   Knights of Atria — Main Menu (JRPG vibe, tavern palette)
@@ -37,47 +39,33 @@ export default function MenuPanel({
   onMenuStarted = () => { },
 }) {
   /* ---------- persistence (menu-side, independent of CampaignHub) ---------- */
-  const LS_CAMPAIGN_BRIEF = 'koa:menu:campaignBrief:v2';
-  const LS_NOTE_PREFIX = 'koa:menu:note:v2:'; // characters / video / lore
+  const LS_CAMPAIGN_BRIEF = STORAGE_KEYS.menuCampaignBrief;
 
   const [campaignBrief, setCampaignBrief] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_CAMPAIGN_BRIEF);
-      const p = raw ? JSON.parse(raw) : {};
-      return {
-        location: p.location || '',
-        objective: p.objective || '',
-        updatedAt: p.updatedAt || null,
-      };
-    } catch {
-      return { location: '', objective: '', updatedAt: null };
-    }
+    const p = repository.readJson(LS_CAMPAIGN_BRIEF, {});
+    return {
+      location: p.location || '',
+      objective: p.objective || '',
+      updatedAt: p.updatedAt || null,
+    };
   });
 
   const [notes, setNotes] = useState(() => {
-    try {
-      return {
-        characters: localStorage.getItem(`${LS_NOTE_PREFIX}characters`) || '',
-        video: localStorage.getItem(`${LS_NOTE_PREFIX}video`) || '',
-        lore: localStorage.getItem(`${LS_NOTE_PREFIX}lore`) || '',
-      };
-    } catch {
-      return { characters: '', video: '', lore: '' };
-    }
+    return {
+      characters: repository.readText(menuNoteKey('characters')),
+      video: repository.readText(menuNoteKey('video')),
+      lore: repository.readText(menuNoteKey('lore')),
+    };
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_CAMPAIGN_BRIEF, JSON.stringify(campaignBrief));
-    } catch { }
+    repository.writeJson(LS_CAMPAIGN_BRIEF, campaignBrief);
   }, [campaignBrief]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`${LS_NOTE_PREFIX}characters`, notes.characters || '');
-      localStorage.setItem(`${LS_NOTE_PREFIX}video`, notes.video || '');
-      localStorage.setItem(`${LS_NOTE_PREFIX}lore`, notes.lore || '');
-    } catch { }
+    repository.writeText(menuNoteKey('characters'), notes.characters || '');
+    repository.writeText(menuNoteKey('video'), notes.video || '');
+    repository.writeText(menuNoteKey('lore'), notes.lore || '');
   }, [notes]);
 
   const theaterPreviewRef = useRef(null);

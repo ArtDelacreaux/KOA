@@ -291,6 +291,13 @@
   font-size: 22px;
 }
 
+.toolLogo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+
 .toolTitle {
   font-weight: 950;
   font-size: 14px;
@@ -668,6 +675,25 @@
 
 .noResize {
   resize: none;
+}
+
+.hiddenFileInput {
+  display: none;
+}
+
+.backupHint {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.backupStatus {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 245, 220, 0.9);
+  opacity: 0.95;
 }
 
 .scrollWrap input::placeholder,

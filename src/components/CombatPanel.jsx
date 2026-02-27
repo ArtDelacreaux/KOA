@@ -2,6 +2,9 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './CombatPanel.module.css';
+import { createId } from '../domain/ids';
+import { repository } from '../repository';
+import { STORAGE_KEYS } from '../lib/storageKeys';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
 import battleback1  from '../assets/Backgrounds/battleback1.png';
@@ -28,8 +31,8 @@ const BATTLE_BACKGROUNDS = [
   { label: 'Pasture',         src: battleback10 },
 ];
 
-const LS_KEY = 'koa:combat:v4';
-const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+const LS_KEY = STORAGE_KEYS.combat;
+const uid = () => createId('combat');
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
@@ -277,10 +280,9 @@ function parseStatusText(raw) {
 }
 
 function loadState() {
-  try { const raw = localStorage.getItem(LS_KEY); if (!raw) return null; return JSON.parse(raw); }
-  catch { return null; }
+  return repository.readJson(LS_KEY, null);
 }
-function saveState(state) { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {} }
+function saveState(state) { repository.writeJson(LS_KEY, state); }
 
 function defaultEncounter() {
   return { id: uid(), name: 'Encounter', round: 1, activeIndex: 0, combatants: [], updatedAt: Date.now() };

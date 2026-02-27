@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './InventoryPanel.module.css';
+import { createId } from '../domain/ids';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import useLocalStorageState from '../lib/useLocalStorageState';
 
 export default function InventoryPanel({
   panelType,
   cinematicNav,
   playClick = () => {},
-  storageKey = 'koa:bagofholding:v1',
+  storageKey = STORAGE_KEYS.bag,
 }) {
   /* ---------------- helpers ---------------- */
   const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
-  const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const newId = () => createId('bag');
 
   const CATEGORIES = ['All', 'Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
   const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
@@ -28,30 +31,23 @@ export default function InventoryPanel({
   };
 
   /* ---------------- load/save ---------------- */
-  const [bag, setBag] = useState(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        return {
-          currency: { gp: 0, sp: 0, cp: 0 },
-          items: [],
-        };
-      }
-      const parsed = JSON.parse(raw);
-      return {
-        currency: parsed?.currency || { gp: 0, sp: 0, cp: 0 },
-        items: Array.isArray(parsed?.items) ? parsed.items : [],
-      };
-    } catch {
-      return { currency: { gp: 0, sp: 0, cp: 0 }, items: [] };
-    }
+  const [bag, setBag] = useLocalStorageState(storageKey, {
+    currency: { gp: 0, sp: 0, cp: 0 },
+    items: [],
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(bag));
-    } catch {}
-  }, [bag, storageKey]);
+    setBag((prev) => ({
+      currency: {
+        gp: prev?.currency?.gp ?? 0,
+        sp: prev?.currency?.sp ?? 0,
+        cp: prev?.currency?.cp ?? 0,
+      },
+      items: Array.isArray(prev?.items) ? prev.items : [],
+    }));
+    // Normalize once on mount in case older saved shapes exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ---------------- UI state ---------------- */
   const [query, setQuery] = useState('');

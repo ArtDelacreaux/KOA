@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import styles from './WorldLore.module.css';
+import {
+  normalizeRelatedNpc,
+  normalizeText,
+  normalizeWorldNpc,
+  readCharacterNpcStore,
+  readWorldNpcsRaw,
+  setWorldNpcDeepLink,
+} from '../domain/worldNpcs';
 
 /*
   WorldLore — Knights of Atria
@@ -161,10 +169,6 @@ const INITIAL_ATRIA_POINTS = [
   { locationId: 6, x: 87.7, y: 22.0 }, // Buston
   { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
 ];
-const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
-const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
-const LS_CHAR_NPCS = 'koa:char:npcs:v1';
-
 // ─── Sub-components ────────────────────────────────────────────────────────────
 function CornerOrns() {
   return (
@@ -955,65 +959,8 @@ export default function WorldLore({
     cinematicNav('menu');
   };
 
-  const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
-
-  const normalizeWorldNpc = (npc, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
-    name: (npc?.name || '').trim(),
-    age: (npc?.age || '').trim(),
-    faction: (npc?.faction || '').trim(),
-    occupation: (npc?.occupation || '').trim(),
-    location: (npc?.location || '').trim(),
-    summary: (npc?.summary || npc?.bio || '').trim(),
-    bio: (npc?.bio || '').trim(),
-    image: npc?.image || '',
-    characterLinks: Array.isArray(npc?.characterLinks)
-      ? npc.characterLinks
-        .map((l, linkIndex) => ({
-          characterName: (l?.characterName || '').trim(),
-          relation: (l?.relation || '').trim(),
-          linkIndex,
-        }))
-        .filter((l) => l.characterName)
-      : [],
-  });
-
-  const normalizeRelatedNpc = (npc, charName, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
-    name: (npc?.name || '').trim(),
-    relation: (npc?.relation || '').trim(),
-    age: (npc?.age || '').trim(),
-    faction: (npc?.faction || '').trim(),
-    occupation: (npc?.occupation || '').trim(),
-    summary: (npc?.summary || npc?.bio || '').trim(),
-    bio: (npc?.bio || '').trim(),
-    image: npc?.image || '',
-    source: npc?.source || 'character',
-    worldNpcId: npc?.worldNpcId || null,
-  });
-
-  const readWorldNpcs = () => {
-    try {
-      const raw = localStorage.getItem(LS_WORLD_NPCS);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const readCharacterNpcStore = () => {
-    try {
-      const raw = localStorage.getItem(LS_CHAR_NPCS);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  };
-
   const getFactionMembers = (factionItem) => {
-    const worldNpcs = readWorldNpcs();
+    const worldNpcs = readWorldNpcsRaw();
     const aliases = new Set(
       [factionItem?.title, ...(Array.isArray(factionItem?.factionKeys) ? factionItem.factionKeys : [])]
         .map(normalizeText)
@@ -1076,16 +1023,11 @@ export default function WorldLore({
 
   const openWorldNpcCodex = ({ search = '', faction = '' } = {}) => {
     setLightboxItem(null);
-    try {
-      localStorage.setItem(
-        LS_WORLD_NPC_DEEPLINK,
-        JSON.stringify({
-          search: (search || '').trim(),
-          faction: (faction || '').trim(),
-          ts: Date.now(),
-        })
-      );
-    } catch { }
+    setWorldNpcDeepLink({
+      search: (search || '').trim(),
+      faction: (faction || '').trim(),
+      ts: Date.now(),
+    });
 
     if (typeof setSelectedChar === 'function') setSelectedChar(null);
     if (typeof setSelectedNpc === 'function') setSelectedNpc(null);

@@ -1,6 +1,8 @@
 // ===== TAVERN MENU — ROOT CONTROLLER (RESTORED FX + FIXED LAYOUT + NAV-ONLY SFX) =====
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import styles from './TavernMenu.module.css';
+import useLocalStorageState from './lib/useLocalStorageState';
+import { STORAGE_KEYS } from './lib/storageKeys';
 
 //Components Pages
 import AudioHUD from './components/AudioHUD';
@@ -31,25 +33,6 @@ import menuOpenSfx from './assets/MenuOpen.mp3';
 import backSfx from './assets/back.mp3';
 
 /* ---------- hooks ---------- */
-function useLocalStorageState(key, initialValue) {
-  const [value, setValue] = useState(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : initialValue;
-    } catch {
-      return initialValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch {}
-  }, [key, value]);
-
-  return [value, setValue];
-}
-
 function useAudioLoop(ref, { volume, loop = true }) {
   useEffect(() => {
     if (!ref.current) return;
@@ -75,9 +58,9 @@ export default function TavernMenu() {
   const [campaignTab, setCampaignTab] = useState('launcher');
 
   // ✅ Shared party roster (single source of truth)
-  const [characters, setCharacters] = useLocalStorageState('koa:characters:v2', DEFAULT_CHARACTERS);
+  const [characters, setCharacters] = useLocalStorageState(STORAGE_KEYS.characters, DEFAULT_CHARACTERS);
 
-  const [quests, setQuests] = useLocalStorageState('koa:quests:v2', []);
+  const [quests, setQuests] = useLocalStorageState(STORAGE_KEYS.quests, []);
   const [questModalOpen, setQuestModalOpen] = useState(false);
   const [editingQuestId, setEditingQuestId] = useState(null);
   const [questDraft, setQuestDraft] = useState({
@@ -88,7 +71,7 @@ export default function TavernMenu() {
     description: '',
   });
 
-  const [relationshipValues, setRelationshipValues] = useLocalStorageState('koa:relationships:v1', {});
+  const [relationshipValues, setRelationshipValues] = useLocalStorageState(STORAGE_KEYS.relationships, {});
 
   const [videoChoice, setVideoChoice] = useState(null);
   const videoRef = useRef(null);

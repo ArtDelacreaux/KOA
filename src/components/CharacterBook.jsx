@@ -1,6 +1,14 @@
 ﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './CharacterBook.module.css';
+import { createId } from '../domain/ids';
+import {
+  consumeWorldNpcDeepLink,
+  normalizeRelatedNpc,
+  normalizeWorldNpc,
+} from '../domain/worldNpcs';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import useLocalStorageState from '../lib/useLocalStorageState';
 
 // Character theme music — one import per character
 // Place each MP3 in: src/assets/music/<filename>
@@ -304,51 +312,16 @@ export default function CharacterBook({
   };
 
   /* ---------- World NPC Codex ---------- */
-  const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
-  const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
-  const normalizeWorldNpc = (npc, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
-    name: npc?.name || '',
-    age: npc?.age || '',
-    faction: npc?.faction || '',
-    occupation: npc?.occupation || '',
-    location: npc?.location || '',
-    summary: npc?.summary || npc?.bio || '',
-    bio: npc?.bio || '',
-    image: npc?.image || '',
-    characterLinks: Array.isArray(npc?.characterLinks)
-      ? npc.characterLinks
-        .map((l) => ({
-          characterName: (l?.characterName || '').trim(),
-          relation: (l?.relation || '').trim(),
-        }))
-        .filter((l) => l.characterName)
-      : [],
-    links: Array.isArray(npc?.links)
-      ? npc.links
-        .map((l) => ({
-          targetId: (l?.targetId && String(l.targetId)) || '',
-          note: (l?.note || '').trim(),
-        }))
-        .filter((l) => l.targetId)
-      : [],
-    createdAt: npc?.createdAt || null,
-    updatedAt: npc?.updatedAt || null,
-  });
-
-  const [worldNpcs, setWorldNpcs] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_WORLD_NPCS);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map((npc, idx) => normalizeWorldNpc(npc, idx)) : [];
-    } catch { return []; }
-  });
+  const [worldNpcs, setWorldNpcs] = useLocalStorageState(STORAGE_KEYS.worldNpcs, []);
+  const newId = () => createId('npc');
 
   useEffect(() => {
-    try { localStorage.setItem(LS_WORLD_NPCS, JSON.stringify(worldNpcs)); } catch { }
-  }, [worldNpcs]);
-
-  const newId = () => `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    setWorldNpcs((prev) =>
+      Array.isArray(prev) ? prev.map((npc, idx) => normalizeWorldNpc(npc, idx)) : []
+    );
+    // Normalize once on mount in case older saved shapes exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [npcFilterFaction, setNpcFilterFaction] = useState('All');
   const [npcFilterLocation, setNpcFilterLocation] = useState('All');
@@ -722,34 +695,13 @@ export default function CharacterBook({
     },
   ];
 
-  const LS_CHAR_NPCS = 'koa:char:npcs:v1';
-
-  const normalizeRelatedNpc = (npc, charName, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
-    name: npc?.name || '',
-    relation: npc?.relation || '',
-    age: npc?.age || '',
-    faction: npc?.faction || '',
-    occupation: npc?.occupation || '',
-    summary: npc?.summary || npc?.bio || '',
-    bio: npc?.bio || '',
-    image: npc?.image || '',
-    source: npc?.source || 'character',
-    worldNpcId: npc?.worldNpcId || null,
-  });
-
-  const [charNpcByCharacter, setCharNpcByCharacter] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_CHAR_NPCS);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [charNpcByCharacter, setCharNpcByCharacter] = useLocalStorageState(STORAGE_KEYS.charNpcs, {});
 
   useEffect(() => {
-    try { localStorage.setItem(LS_CHAR_NPCS, JSON.stringify(charNpcByCharacter)); } catch { }
-  }, [charNpcByCharacter]);
+    setCharNpcByCharacter((prev) => (prev && typeof prev === 'object' ? prev : {}));
+    // Normalize once on mount in case older saved shapes exist.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getBaseRelatedNpcs = (char) => {
     if (!char) return [];
@@ -1171,15 +1123,8 @@ export default function CharacterBook({
 
   useEffect(() => {
     if (charView !== 'worldnpcs') return;
-    let payload = null;
-    try {
-      const raw = localStorage.getItem(LS_WORLD_NPC_DEEPLINK);
-      if (!raw) return;
-      payload = JSON.parse(raw);
-      localStorage.removeItem(LS_WORLD_NPC_DEEPLINK);
-    } catch {
-      return;
-    }
+    const payload = consumeWorldNpcDeepLink();
+    if (!payload) return;
 
     const incomingFaction = (payload?.faction || '').trim();
     const incomingSearch = (payload?.search || '').trim();
