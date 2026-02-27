@@ -638,7 +638,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [selectedId, setSelectedId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [draft, setDraft] = useState({ name:'', role:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
+  const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
   const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
   const [activeSpellLevel, setActiveSpellLevel] = useState(1);
@@ -767,7 +767,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     const name = String(draft.name || '').trim();
     if (!name) return;
     addCombatant({
-      id: uid(), name, role: String(draft.role||'').trim(), side: draft.side||'Enemy',
+      id: uid(), name, role: '', side: draft.side||'Enemy',
       init: toInt(draft.init,10),
       hp: draft.hp==='' ? '' : toInt(draft.hp,0),
       maxHP: draft.maxHP==='' ? '' : toInt(draft.maxHP,0),
@@ -777,7 +777,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       sourceCharacterId:'',
       pcColorIndex: combatants.length % PC_COLORS.length,
     });
-    setDraft(d => ({ ...d, name:'', role:'' }));
+    setDraft(d => ({ ...d, name:'' }));
   };
 
   const addAdventurer = () => {
@@ -1298,18 +1298,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <div><div className={styles.label}>Max HP</div><input className={styles.input} value={draft.maxHP} onChange={e => setDraft(d => ({ ...d, maxHP:e.target.value }))}/></div>
                     <div><div className={styles.label}>AC</div><input className={styles.input} value={draft.ac} onChange={e => setDraft(d => ({ ...d, ac:e.target.value }))}/></div>
                   </div>
-                  <div className={styles.twoColEqual}>
-                    <div><div className={styles.label}>Side</div>
-                      <select className={`${styles.input} ${styles.selectInput}`} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
-                        <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
-                      </select>
-                    </div>
-                    <div><div className={styles.label}>Role</div>
-                      <input className={styles.input} value={draft.role} placeholder="Soldier / Mage" onChange={e => setDraft(d => ({ ...d, role:e.target.value }))}/>
-                    </div>
+                  <div className={styles.sideOnlyRow}><div className={styles.label}>Side</div>
+                    <select className={`${styles.input} ${styles.selectInput}`} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
+                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
+                    </select>
                   </div>
                   {draft.side === 'Enemy' && (
-                    <div className={styles.sectionTopGap}>
+                    <div className={`${styles.sectionTopGap} ${styles.addCustomEnemyTypeSection}`}>
                       <div className={styles.label}>Enemy Type</div>
                       <div className={styles.enemyTypeRow}>
                         {ENEMY_TYPES.map(et => (
