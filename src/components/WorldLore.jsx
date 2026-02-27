@@ -156,10 +156,10 @@ const INITIAL_ATRIA_POINTS = [
   { locationId: 1, x: 43.2, y: 21.0 }, // Qonza
   { locationId: 2, x: 97.0, y: 32.0 }, // Williwack
   { locationId: 3, x: 51.6, y: 49.3 }, // Avalon
-  { locationId: 4, x: 16.21,y: 72.59 }, // Metlos
+  { locationId: 4, x: 16.21, y: 72.59 }, // Metlos
   { locationId: 5, x: 35.2, y: 55.8 }, // Orum
   { locationId: 6, x: 87.7, y: 22.0 }, // Buston
-  { locationId: 7, x: 27.4, y: 45.8  }, // SkulPol
+  { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
 ];
 const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
 const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
@@ -952,6 +952,7 @@ export default function WorldLore({
   }, [isActive]);
 
   const goBack = () => {
+    playNav();
     cinematicNav('menu');
   };
 
