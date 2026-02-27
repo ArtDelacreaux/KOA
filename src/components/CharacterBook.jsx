@@ -1410,7 +1410,7 @@ export default function CharacterBook({
         <div ref={headerRef} className={`${styles.headerBar} ${styles.headerBarInset}`}>
           <div className={styles.headerTopRow}>
             <button
-              onClick={() => { navClick(); cinematicNav('menu'); }}
+              onClick={() => { cinematicNav('menu'); }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
                 e.currentTarget.style.color = THEME.creamText;

@@ -1029,7 +1029,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         <div ref={headerRef} className={styles.header}>
           <div className={styles.headerRow}>
             <button
-              onClick={() => { playNav(); cinematicNav('menu'); }}
+              onClick={() => { cinematicNav('menu'); }}
               onMouseEnter={playHover}
               className={styles.returnBtn}
             >

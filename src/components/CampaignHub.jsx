@@ -217,7 +217,7 @@ export default function CampaignHub(props) {
         <div className={styles.headerSticky}>
           <div className={styles.headerRow}>
             <button
-              onClick={() => { playNav(); cinematicNav('menu'); }}
+              onClick={() => { cinematicNav('menu'); }}
               className={smallBtnClass('ghost', styles.returnBtn)}
               onMouseEnter={smallBtnHover}
             >

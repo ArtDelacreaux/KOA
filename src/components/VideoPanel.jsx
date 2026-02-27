@@ -54,7 +54,6 @@ export default function VideoPanel({
   }, [videoChoice]);
 
   const goBack = () => {
-    playNav();
     cinematicNav('menu', { flip: true });
   };
 
@@ -77,7 +76,6 @@ export default function VideoPanel({
           <button
             onClick={goBack}
             onMouseEnter={playHover}
-            onMouseDown={playNav}
             className={`${styles.backBtn} koa-glass-btn`}
           >
             {TXT_RETURN}

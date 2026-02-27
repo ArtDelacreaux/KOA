@@ -106,7 +106,7 @@ const GALLERY = {
       title: 'The Village of SkulPol',
       src: 'lore/skolpol.jpg',
       description: 'Overview of SkulPol.',
-      summary: 'SkulPol is remote, weathered, and deeply superstitious, with locals who trust memory more than maps.',
+      summary: 'SkulPol is remote, weathered, and in ruins.',
       region: 'Fogline Hills',
       governance: 'Clan heads and shrine keepers',
       economy: 'Hunting, salvage, and seasonal trade',
@@ -952,7 +952,6 @@ export default function WorldLore({
   }, [isActive]);
 
   const goBack = () => {
-    playNav();
     cinematicNav('menu');
   };
 

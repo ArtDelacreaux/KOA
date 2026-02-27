@@ -28,6 +28,7 @@ import pageFlip from './assets/PageFlip.mp3';
 import hoverSfx from './assets/Hover.mp3';
 import buttonSfx from './assets/Button.mp3';
 import menuOpenSfx from './assets/MenuOpen.mp3';
+import backSfx from './assets/back.mp3';
 
 /* ---------- hooks ---------- */
 function useLocalStorageState(key, initialValue) {
@@ -112,6 +113,7 @@ export default function TavernMenu() {
   const hoverRef = useRef(null);
   const uiNavRef = useRef(null);
   const menuOpenRef = useRef(null);
+  const backRef = useRef(null);
 
   // ✅ anti-machinegun hover
   const lastHoverAtRef = useRef(0);
@@ -157,6 +159,17 @@ export default function TavernMenu() {
     const a = menuOpenRef.current;
     if (!a) return;
     a.volume = uiNavVol; // reuse UI volume knob
+    try {
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch {}
+  };
+
+  // ✅ Return-to-menu SFX (back.mp3)
+  const playBackToMenu = () => {
+    const a = backRef.current;
+    if (!a) return;
+    a.volume = uiNavVol;
     try {
       a.currentTime = 0;
       a.play().catch(() => {});
@@ -306,8 +319,13 @@ export default function TavernMenu() {
     }, FADE_TOTAL_MS);
   };
 
-  // flip defaults ON (menu buttons + back to menu will use this)
+  // flip defaults ON, except when returning to menu (uses back.mp3 instead)
   const cinematicNav = (nextPanel, { flip = true } = {}) => {
+    const returningToMenu = nextPanel === 'menu' && panelType !== 'menu';
+    if (returningToMenu) {
+      playBackToMenu();
+    }
+
     cinematicDo(() => {
       setPanelType(nextPanel);
 
@@ -328,7 +346,7 @@ export default function TavernMenu() {
       }
 
       if (nextPanel === 'campaign') setCampaignTab('launcher');
-    }, { flip });
+    }, { flip: returningToMenu ? false : flip });
   };
 
   // play video selection is NAV click (Button.mp3), NOT page flip
@@ -433,6 +451,7 @@ export default function TavernMenu() {
       <audio ref={hoverRef} src={hoverSfx} preload="auto" />
       <audio ref={uiNavRef} src={buttonSfx} preload="auto" />
       <audio ref={menuOpenRef} src={menuOpenSfx} preload="auto" />
+      <audio ref={backRef} src={backSfx} preload="auto" />
 
       {/* HUD (always above panels; only HUD captures clicks) */}
       <div className={styles.hudLayer}>
