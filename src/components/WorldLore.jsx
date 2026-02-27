@@ -952,7 +952,6 @@ export default function WorldLore({
   }, [isActive]);
 
   const goBack = () => {
-    playNav();
     cinematicNav('menu');
   };
 

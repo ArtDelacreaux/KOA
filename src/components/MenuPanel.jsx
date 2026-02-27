@@ -210,7 +210,7 @@ export default function MenuPanel({
         titleColor: 'rgba(246,229,207,0.98)',
         sub: 'Initiative, HP, slots, and statuses.',
         title: 'Combat Tracker',
-        desc: 'Run encounters fast. Add/drop combatants mid-fight and track conditions.',
+        desc: 'Keep track of your battles here.',
         primary: { label: 'Open Combat Tracker', onClick: goCombat },
       },
       {
@@ -219,7 +219,7 @@ export default function MenuPanel({
         titleColor: 'rgba(249,234,214,0.98)',
         sub: 'Profiles, NPCs, and party bonds.',
         title: 'Character Book',
-        desc: 'Quick-jump to Party or World NPCs. Keep post-session updates here.',
+        desc: 'Quick-jump to Party or World NPCs.',
         primary: { label: 'Open Character Book', onClick: () => goCharacters('grid') },
       },
       {
@@ -228,7 +228,7 @@ export default function MenuPanel({
         titleColor: 'rgba(252,239,221,0.98)',
         sub: 'Cinematic scenes & mood setting.',
         title: 'Cinematics',
-        desc: 'Set the stage. Open the Theater to play your intro and outro cinematics.',
+        desc: 'Set the stage. Open the Theater to play your cinematics.',
         primary: { label: 'Open Cinematics', onClick: goVideo },
       },
       {
@@ -236,7 +236,7 @@ export default function MenuPanel({
         label: 'World Lore',
         sub: 'Codex, maps, and setting archive.',
         title: 'World Lore',
-        desc: 'Browse maps, scenes, and locations. Watch the world introduction video.',
+        desc: 'Browse maps, scenes, and locations.',
         primary: { label: 'Open', onClick: goLore },
       },
     ],
