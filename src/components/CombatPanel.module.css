@@ -1010,6 +1010,8 @@
 
 .editorNameAccent {
   color: rgba(255, 220, 160, 0.88);
+  white-space: nowrap;
+  display: inline-block;
 }
 
 .addModalBody {
@@ -1244,6 +1246,10 @@
   margin-bottom: 8px;
 }
 
+.sheetCardTitleCentered {
+  text-align: center;
+}
+
 .sheetAbilityChipGrid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1468,6 +1474,20 @@
   white-space: nowrap;
 }
 
+.sheetStatTagProficient {
+  border-color: rgba(110, 220, 255, 0.68);
+  background: linear-gradient(180deg, rgba(50, 120, 150, 0.45), rgba(26, 76, 96, 0.38));
+  color: rgba(218, 245, 255, 0.98);
+  box-shadow: 0 0 0 1px rgba(110, 220, 255, 0.24) inset;
+}
+
+.sheetStatTagExpert {
+  border-color: rgba(200, 140, 255, 0.72);
+  background: linear-gradient(180deg, rgba(105, 60, 150, 0.52), rgba(66, 30, 104, 0.42));
+  color: rgba(240, 220, 255, 0.98);
+  box-shadow: 0 0 0 1px rgba(200, 140, 255, 0.3) inset;
+}
+
 .sheetStatLabel {
   color: rgba(255, 245, 220, 0.86);
   font-size: 12px;
@@ -1487,6 +1507,14 @@
   font-weight: 950;
   text-align: center;
   white-space: nowrap;
+}
+
+.sheetStatRowProficient {
+  border-color: rgba(110, 220, 255, 0.28);
+}
+
+.sheetStatRowExpert {
+  border-color: rgba(200, 140, 255, 0.34);
 }
 
 .sheetListFallback {
@@ -1625,7 +1653,7 @@
 
 .sheetToolsTopRow {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: center;
 }
 
@@ -1721,6 +1749,10 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   user-select: none;
+}
+
+.combatToolsCardCompact .toolsTitle {
+  text-align: center;
 }
 
 .hpAdjustRow {
@@ -1934,11 +1966,16 @@
   flex-wrap: wrap;
 }
 
+.spellSlotsReadBtn {
+  line-height: 0;
+}
+
 .spellSlotsReadBox {
   width: 17px;
   height: 17px;
   border-radius: 3px;
   border: 1px solid rgba(188, 235, 240, 0.88);
+  transition: transform 120ms ease, filter 120ms ease;
 }
 
 .spellSlotsReadBoxActive {
@@ -2248,7 +2285,7 @@
   }
 
   .sheetToolsTopRow {
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .spellSlotsEditGrid {

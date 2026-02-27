@@ -372,6 +372,30 @@ function abilityModifier(score) {
   return Math.floor((toInt(score, 10) - 10) / 2);
 }
 
+function proficiencyBonusFromLevel(level) {
+  const n = toInt(level, 0);
+  if (!n || n < 1) return 0;
+  const clamped = clamp(n, 1, 20);
+  return 2 + Math.floor((clamped - 1) / 4);
+}
+
+function abilityKeyFromShort(short) {
+  const match = ABILITY_META.find((meta) => meta.short === short);
+  return match ? match.key : '';
+}
+
+function inferProficiencyTier(totalBonus, baseBonus, proficiencyBonus, allowExpertise = true) {
+  if (totalBonus == null || baseBonus == null) return 0;
+  const delta = toInt(totalBonus, 0) - toInt(baseBonus, 0);
+  if (delta <= 0) return 0;
+  if (proficiencyBonus > 0) {
+    if (allowExpertise && delta >= (proficiencyBonus * 2) - 1) return 2;
+    if (delta >= Math.max(1, proficiencyBonus - 1)) return 1;
+    return 0;
+  }
+  return 1;
+}
+
 function extractBonusValue(text) {
   const source = String(text || '');
   const signedMatch = source.match(/[-+]\s*\d+/);
@@ -403,11 +427,12 @@ function normalizeFeatureList(raw) {
   return normalizeStringList(text.split(/[;]+/g));
 }
 
-function normalizeSavingThrowRows(rawSavingThrows, abilityScores) {
+function normalizeSavingThrowRows(rawSavingThrows, abilityScores, level) {
   const fallbackByAbility = {};
   ABILITY_META.forEach(({ key, short }) => {
     fallbackByAbility[short] = abilityModifier(abilityScores?.[key]);
   });
+  const proficiencyBonus = proficiencyBonusFromLevel(level);
 
   const parsedByAbility = {};
   normalizeStringList(rawSavingThrows).forEach((line) => {
@@ -421,11 +446,18 @@ function normalizeSavingThrowRows(rawSavingThrows, abilityScores) {
   return ABILITY_META.map(({ short }) => ({
     tag: short,
     value: parsedByAbility[short] ?? fallbackByAbility[short],
+    proficiencyTier: inferProficiencyTier(
+      parsedByAbility[short] ?? fallbackByAbility[short],
+      fallbackByAbility[short],
+      proficiencyBonus,
+      false
+    ),
   }));
 }
 
-function normalizeSkillRows(rawSkills, abilityScores) {
+function normalizeSkillRows(rawSkills, abilityScores, level) {
   const rows = [];
+  const proficiencyBonus = proficiencyBonusFromLevel(level);
   normalizeStringList(rawSkills).forEach((line, index) => {
     if (!/[a-z]/i.test(line)) return;
     const compact = line.replace(/\s+/g, ' ').trim();
@@ -467,6 +499,8 @@ function normalizeSkillRows(rawSkills, abilityScores) {
       ability = fallbackAbility?.[1] || '';
     }
 
+    const abilityKey = abilityKeyFromShort(ability);
+    const baseBonus = abilityKey ? abilityModifier(abilityScores?.[abilityKey]) : null;
     let resolvedBonus = bonus;
     if (resolvedBonus == null && ability) {
       const meta = ABILITY_META.find((item) => item.short === ability);
@@ -478,6 +512,7 @@ function normalizeSkillRows(rawSkills, abilityScores) {
       skill: skillName,
       ability: ability || '—',
       bonus: resolvedBonus,
+      proficiencyTier: inferProficiencyTier(resolvedBonus, baseBonus, proficiencyBonus, true),
     });
   });
   return rows;
@@ -544,19 +579,98 @@ function buildSheetPatch(combatant, parsedResult) {
   };
 }
 
+function sheetProfileKey(sourceCharacterId, name) {
+  const sourceKey = tokenKey(sourceCharacterId);
+  if (sourceKey) return `char:${sourceKey}`;
+  const nameKey = tokenKey(name);
+  if (nameKey) return `name:${nameKey}`;
+  return '';
+}
+
+function normalizeSheetProfile(raw) {
+  const className = cleanText(raw?.className || raw?.role);
+  return {
+    race: cleanText(raw?.race),
+    className,
+    role: className,
+    level: raw?.level === '' || raw?.level == null ? '' : toInt(raw.level, ''),
+    hp: raw?.hp === '' || raw?.hp == null ? '' : toInt(raw.hp, 0),
+    maxHP: raw?.maxHP === '' || raw?.maxHP == null ? '' : toInt(raw.maxHP, 0),
+    ac: raw?.ac === '' || raw?.ac == null ? '' : toInt(raw.ac, 0),
+    speed: raw?.speed === '' || raw?.speed == null ? '' : toInt(raw.speed, 0),
+    initiativeBonus: raw?.initiativeBonus == null || raw?.initiativeBonus === '' ? 0 : toInt(raw.initiativeBonus, 0),
+    abilities: normalizeAbilities(raw?.abilities),
+    savingThrows: normalizeStringList(raw?.savingThrows),
+    skills: normalizeStringList(raw?.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(raw?.senses),
+    spellList: normalizeStringList(raw?.spellList),
+    classFeatures: normalizeFeatureList(raw?.classFeatures),
+    spellSlots: normalizeSpellSlots(raw?.spellSlots),
+    equipmentItems: normalizeStringList(raw?.equipmentItems),
+    otherPossessions: normalizeStringList(raw?.otherPossessions),
+    sourceSheet: !!raw?.sourceSheet,
+    sourceSheetFileName: cleanText(raw?.sourceSheetFileName),
+    sourceSheetFormat: cleanText(raw?.sourceSheetFormat),
+    sheetWarnings: normalizeStringList(raw?.sheetWarnings),
+    sheetMissingFields: normalizeStringList(raw?.sheetMissingFields),
+    sheetUnknownFields: normalizeStringList(raw?.sheetUnknownFields),
+    sheetImportedAt: toInt(raw?.sheetImportedAt, 0),
+  };
+}
+
+function buildSheetProfileFromCombatant(combatant) {
+  return normalizeSheetProfile(combatant);
+}
+
+function applySheetProfileToCombatant(combatant, profile) {
+  if (!profile || typeof profile !== 'object') return combatant;
+  const normalized = normalizeSheetProfile(profile);
+  return {
+    ...combatant,
+    ...normalized,
+    name: combatant.name,
+    sourceCharacterId: combatant.sourceCharacterId || '',
+    side: combatant.side || 'Enemy',
+    init: toInt(combatant.init, 10),
+    tempHP: toInt(combatant.tempHP, 0),
+    status: Array.isArray(combatant.status) ? combatant.status : [],
+    concentration: combatant.concentration || '',
+    notes: combatant.notes || '',
+    dead: !!combatant.dead,
+    enemyType: combatant.enemyType || 'goblin',
+    customImage: combatant.customImage || '',
+    pcColorIndex: combatant.pcColorIndex != null ? combatant.pcColorIndex : 0,
+  };
+}
+
 function loadState() {
   return repository.readJson(LS_KEY, null);
 }
 function saveState(state) { repository.writeJson(LS_KEY, state); }
 
 function defaultEncounter() {
-  return { id: uid(), name: 'Encounter', round: 1, activeIndex: 0, combatants: [], updatedAt: Date.now() };
+  return {
+    id: uid(),
+    name: 'Encounter',
+    round: 1,
+    activeIndex: 0,
+    combatants: [],
+    sheetProfiles: {},
+    updatedAt: Date.now(),
+  };
 }
 
 function normalize(enc) {
   const base = defaultEncounter();
   const e = { ...base, ...(enc || {}) };
   if (!Array.isArray(e.combatants)) e.combatants = [];
+  const rawProfiles = e.sheetProfiles && typeof e.sheetProfiles === 'object' ? e.sheetProfiles : {};
+  e.sheetProfiles = Object.entries(rawProfiles).reduce((acc, [key, value]) => {
+    const normalizedKey = cleanText(key);
+    if (!normalizedKey) return acc;
+    acc[normalizedKey] = normalizeSheetProfile(value);
+    return acc;
+  }, {});
   e.combatants = e.combatants.map((c, i) => ({
     sourceCharacterId: c.sourceCharacterId || '',
     id: c.id || uid(),
@@ -1040,11 +1154,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
   const selectedSavingThrowRows = useMemo(
-    () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities),
+    () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
     [selected]
   );
   const selectedSkillRows = useMemo(
-    () => normalizeSkillRows(selected?.skills, selected?.abilities),
+    () => normalizeSkillRows(selected?.skills, selected?.abilities, selected?.level),
     [selected]
   );
   const selectedSenseRows = useMemo(
@@ -1097,8 +1211,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const addCombatant = (c) => {
     setEncounter(prev => {
       const next = normalize(prev);
+      const profileKey = sheetProfileKey(c.sourceCharacterId, c.name);
+      const profile = profileKey ? next.sheetProfiles?.[profileKey] : null;
+      const nextCombatant = profile ? applySheetProfileToCombatant(c, profile) : c;
       const activeId = next.combatants[next.activeIndex]?.id || null;
-      next.combatants = sortCombatants([...next.combatants, c]);
+      next.combatants = sortCombatants([...next.combatants, nextCombatant]);
       if (next.combatants.length === 0) next.activeIndex = 0;
       else if (activeId) {
         const idx = next.combatants.findIndex(x => x.id === activeId);
@@ -1230,8 +1347,19 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     if (!selected) return;
     setEncounter(prev => {
       const next = normalize(prev);
+      const previousProfileKey = sheetProfileKey(selected.sourceCharacterId, selected.name);
       const activeId = next.combatants[next.activeIndex]?.id || null;
       next.combatants = next.combatants.map(x => x.id === selected.id ? { ...x, ...patch } : x);
+      const updatedSelected = next.combatants.find((x) => x.id === selected.id);
+      if (updatedSelected) {
+        const nextProfileKey = sheetProfileKey(updatedSelected.sourceCharacterId, updatedSelected.name);
+        if (nextProfileKey && (updatedSelected.sourceSheet || next.sheetProfiles?.[nextProfileKey] || next.sheetProfiles?.[previousProfileKey])) {
+          const nextProfiles = { ...(next.sheetProfiles || {}) };
+          if (previousProfileKey && previousProfileKey !== nextProfileKey) delete nextProfiles[previousProfileKey];
+          nextProfiles[nextProfileKey] = buildSheetProfileFromCombatant(updatedSelected);
+          next.sheetProfiles = nextProfiles;
+        }
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'init') || Object.prototype.hasOwnProperty.call(patch, 'side') || Object.prototype.hasOwnProperty.call(patch, 'name')) {
         next.combatants = sortCombatants(next.combatants);
         if (next.combatants.length === 0) next.activeIndex = 0;
@@ -1339,7 +1467,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     });
   };
 
-  const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
+  const clearEncounter = () => {
+    setEncounter((prev) => {
+      const next = defaultEncounter();
+      const prior = normalize(prev);
+      next.sheetProfiles = prior.sheetProfiles || {};
+      return next;
+    });
+    setSelectedId(null);
+    setEditorOpen(false);
+  };
   const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
     setSelectedId(id);
@@ -1408,10 +1545,21 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
       setEncounter((prev) => {
         const next = normalize(prev);
+        let updatedCombatant = null;
         next.combatants = next.combatants.map((combatant) => {
           if (combatant.id !== targetId) return combatant;
-          return { ...combatant, ...buildSheetPatch(combatant, parsedResult) };
+          updatedCombatant = { ...combatant, ...buildSheetPatch(combatant, parsedResult) };
+          return updatedCombatant;
         });
+        if (updatedCombatant) {
+          const key = sheetProfileKey(updatedCombatant.sourceCharacterId, updatedCombatant.name);
+          if (key) {
+            next.sheetProfiles = {
+              ...(next.sheetProfiles || {}),
+              [key]: buildSheetProfileFromCombatant(updatedCombatant),
+            };
+          }
+        }
         return next;
       });
 
@@ -1976,11 +2124,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                                     <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
                                     <div className={styles.spellSlotsReadBoxes}>
                                       {Array.from({ length: shownBoxes }).map((_, i) => (
-                                        <span
+                                        <button
+                                          type="button"
                                           key={`sheet-slot-box-${slot.level}-${i}`}
-                                          className={`${styles.spellSlotsReadBox} ${
-                                            i < slot.current ? styles.spellSlotsReadBoxActive : styles.spellSlotsReadBoxInactive
+                                          className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                            i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
                                           }`}
+                                          onMouseEnter={playHover}
+                                          onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
+                                          aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                          title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
                                         />
                                       ))}
                                     </div>
@@ -2014,7 +2167,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
                   <div className={styles.sheetSectionGrid}>
                     <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={styles.sheetCardTitle}>Core Stats</div>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Core Stats</div>
                       <div className={styles.sheetAbilityChipGrid}>
                         {ABILITY_META.map((ability) => {
                           const score = selected.abilities?.[ability.key];
@@ -2031,7 +2184,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </div>
 
                     <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={styles.sheetCardTitle}>Combat Stats</div>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Combat Stats</div>
                       <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
                         <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
                         <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
@@ -2040,21 +2193,32 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </div>
 
                     <div className={styles.sheetCard}>
-                      <div className={styles.sheetCardTitle}>Saving Throws & Senses</div>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Saving Throws & Senses</div>
                       <div className={styles.sheetSaveSenseGrid}>
                         <div>
-                          <div className={styles.sheetSubTitle}>Saving Throws</div>
                           <div className={styles.sheetSavingThrowGrid}>
                             {selectedSavingThrowRows.map((row) => (
-                              <div key={row.tag} className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow}`}>
-                                <div className={styles.sheetStatMain}><span className={styles.sheetStatTag}>{row.tag}</span></div>
+                              <div
+                                key={row.tag}
+                                className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow} ${
+                                  row.proficiencyTier === 2 ? styles.sheetStatRowExpert : row.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                                }`}
+                              >
+                                <div className={styles.sheetStatMain}>
+                                  <span
+                                    className={`${styles.sheetStatTag} ${
+                                      row.proficiencyTier === 2 ? styles.sheetStatTagExpert : row.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                    }`}
+                                  >
+                                    {row.tag}
+                                  </span>
+                                </div>
                                 <span className={styles.sheetStatValue}>{formatSigned(row.value)}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                         <div>
-                          <div className={styles.sheetSubTitle}>Senses</div>
                           <div className={styles.sheetStatRows}>
                             {selectedSenseRows.length ? selectedSenseRows.map((sense) => (
                               <div key={sense.id} className={styles.sheetStatRow}>
@@ -2069,17 +2233,32 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           <div className={styles.sheetListBlock}>
                             {normalizeStringList(selected.equipmentItems).length ? normalizeStringList(selected.equipmentItems).join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
                           </div>
+                          <div className={styles.sheetSubTitle}>Other Possessions</div>
+                          <div className={styles.sheetListBlock}>
+                            {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
+                          </div>
                         </div>
                       </div>
                     </div>
 
                     <div className={styles.sheetCard}>
-                      <div className={styles.sheetCardTitle}>Skills</div>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
                       <div className={styles.sheetStatRows}>
                         {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
-                          <div key={skillRow.id} className={styles.sheetStatRow}>
+                          <div
+                            key={skillRow.id}
+                            className={`${styles.sheetStatRow} ${
+                              skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                            }`}
+                          >
                             <div className={styles.sheetStatMain}>
-                              <span className={styles.sheetStatTag}>{skillRow.ability}</span>
+                              <span
+                                className={`${styles.sheetStatTag} ${
+                                  skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                }`}
+                              >
+                                {skillRow.ability}
+                              </span>
                               <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
                             </div>
                             <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
@@ -2088,12 +2267,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       </div>
                     </div>
 
-                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={styles.sheetCardTitle}>Other Possessions</div>
-                      <div className={styles.sheetListBlock}>
-                        {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
