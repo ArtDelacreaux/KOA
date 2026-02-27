@@ -220,14 +220,30 @@
 }
 
 .initStrip {
-  padding: 7px 8px;
-  border-bottom: 1px solid rgba(255, 220, 160, 0.08);
-  background: linear-gradient(180deg, rgba(10, 8, 6, 0.54), rgba(10, 8, 6, 0.3));
+  width: min(100%, 760px);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
-  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.initOverlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
 }
 
 .initHeaderGrid {
@@ -263,12 +279,61 @@
   flex-wrap: wrap;
 }
 
+.initButtons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.importStatusBar {
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.44), rgba(0, 0, 0, 0.26));
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.importStatusTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.importStatusText {
+  color: rgba(255, 240, 210, 0.86);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  font-weight: 900;
+}
+
+.importCancelBtn {
+  min-width: 84px;
+}
+
+.importProgressTrack {
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.importProgressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(245, 190, 90, 0.9), rgba(255, 220, 150, 0.95));
+  box-shadow: 0 0 14px rgba(255, 200, 90, 0.45);
+}
+
 .initScroll {
-  flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   padding-bottom: 2px;
+}
+
+.initCardsViewport {
+  width: 100%;
+  overflow: hidden;
 }
 
 .initEmpty {
@@ -290,28 +355,44 @@
 }
 
 .initCardsRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   justify-content: center;
+}
+
+.initCardsRowNext {
+  animation: initSlideNext 180ms ease;
+}
+
+.initCardsRowPrev {
+  animation: initSlidePrev 180ms ease;
+}
+
+.initCardGhost {
+  width: 100%;
+  min-height: 1px;
 }
 
 .initCard {
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.022);
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(6, 6, 8, 0.94), rgba(4, 4, 6, 0.9));
   padding: 5px 7px;
   cursor: pointer;
   transition: background 150ms;
-  min-width: 186px;
-  max-width: 232px;
-  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .initCardActive {
   border-color: rgba(255, 210, 130, 0.38);
-  background: rgba(176, 101, 0, 0.12);
+  background: linear-gradient(180deg, rgba(60, 42, 22, 0.9), rgba(22, 16, 10, 0.82));
 }
 
 .initCardSelected {
@@ -404,16 +485,17 @@
 .battlefieldWrap {
   flex: 1;
   min-height: 0;
-  padding: 5px 12px 14px;
+  height: 100%;
+  padding: 0;
   display: flex;
   justify-content: center;
   align-items: stretch;
 }
 
 .battlefieldInner {
-  width: min(100%, 1220px);
+  width: min(100%, 1380px);
   height: 100%;
-  max-height: 640px;
+  position: relative;
 }
 
 .sceneRoot {
@@ -470,7 +552,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  top: 19%;
+  top: 22%;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -498,7 +580,7 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 12%;
+  bottom: 3%;
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -836,6 +918,15 @@
   grid-template-rows: auto 1fr;
 }
 
+.sheetManagerModal {
+  width: min(760px, 92vw);
+  max-height: 82vh;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
 .cropModal {
   width: min(720px, 96vw);
   border-radius: 18px;
@@ -865,7 +956,7 @@
 .editorHeader {
   padding: 8px 12px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 220, 160, 0.09);
@@ -873,9 +964,30 @@
 
 .editorHeaderActions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.editorHeaderActions button {
+  min-width: 0;
+}
+
+.sheetHeaderActions {
   gap: 6px;
+}
+
+.sheetHeaderActions button {
+  flex: 0 1 auto;
+}
+
+.editorCloseButton {
+  min-width: 34px !important;
+  width: 34px;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .modalTitle {
@@ -911,6 +1023,492 @@
 .editorBody {
   padding: 12px;
   overflow-y: auto;
+}
+
+.managerBody {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.managerHint {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.managerTextarea {
+  min-height: 280px;
+  resize: vertical;
+}
+
+.managerActions {
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 220, 160, 0.09);
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sheetView {
+  padding: 14px;
+  overflow-y: auto;
+}
+
+.sheetTopRow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 10px;
+}
+
+.sheetHero {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(34, 24, 16, 0.74), rgba(10, 8, 6, 0.7));
+  padding: 14px 16px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheetHeroTools {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(34, 24, 16, 0.74), rgba(10, 8, 6, 0.7));
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.sheetName {
+  color: var(--koa-cream);
+  font-size: 24px;
+  font-weight: 950;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.sheetMeta {
+  margin-top: 6px;
+  color: rgba(255, 220, 160, 0.8);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sheetImportMeta {
+  margin-top: 8px;
+  color: rgba(255, 245, 220, 0.45);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sheetHeroVitals {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.sheetHeroVitalsRow {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(0, 0, 0, 0.24);
+  min-height: 40px;
+  padding: 7px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sheetHeroHpGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sheetHeroTempGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sheetHeroTempControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sheetHeroVitalsLabel {
+  color: rgba(255, 220, 160, 0.74);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.sheetHeroVitalsValue {
+  color: var(--koa-cream);
+  font-size: 13px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  text-align: right;
+}
+
+.sheetHeroVitalsValueMain {
+  font-size: 16px;
+}
+
+.tempAdjustBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: linear-gradient(180deg, rgba(44, 30, 16, 0.86), rgba(22, 14, 10, 0.9));
+  color: rgba(255, 235, 200, 0.92);
+  font-weight: 950;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tempAdjustInput {
+  width: 48px;
+  height: 24px;
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.sheetIssues {
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 170, 120, 0.24);
+  background: rgba(120, 50, 24, 0.2);
+  padding: 10px 12px;
+}
+
+.sheetIssueBlock + .sheetIssueBlock {
+  margin-top: 7px;
+}
+
+.sheetIssueLabel {
+  color: rgba(255, 210, 160, 0.88);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.sheetIssueText {
+  margin-top: 3px;
+  color: rgba(255, 230, 205, 0.92);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sheetIssueHint {
+  margin-top: 7px;
+  color: rgba(255, 220, 160, 0.76);
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 900;
+}
+
+.sheetSectionGrid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sheetCard {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.15);
+  background: linear-gradient(180deg, rgba(14, 10, 8, 0.72), rgba(6, 5, 4, 0.64));
+  padding: 10px;
+}
+
+.sheetCardFull {
+  grid-column: 1 / -1;
+}
+
+.sheetCardTitle {
+  color: rgba(255, 240, 210, 0.86);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-weight: 950;
+  margin-bottom: 8px;
+}
+
+.sheetAbilityChipGrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sheetAbilityChip {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(20, 15, 12, 0.78), rgba(8, 6, 5, 0.6));
+  padding: 8px 6px 7px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sheetAbilityChipLabel {
+  color: rgba(255, 220, 160, 0.7);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.sheetAbilityChipMod {
+  color: var(--koa-cream);
+  font-size: 28px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.sheetAbilityChipScore {
+  min-width: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: rgba(255, 220, 160, 0.08);
+  padding: 2px 8px;
+  color: rgba(255, 235, 205, 0.9);
+  font-size: 12px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.sheetAbilityGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sheetAbilityRow {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheetAbilityLabel {
+  color: rgba(255, 220, 160, 0.7);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.sheetAbilityValue {
+  color: var(--koa-cream);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.sheetAbilityMod {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.sheetStatsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sheetStatsGridRow {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sheetStatsGrid div {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 7px 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sheetStatsGrid span {
+  color: rgba(255, 220, 160, 0.62);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.sheetStatsGrid b {
+  color: var(--koa-cream);
+  font-size: 12px;
+}
+
+.sheetResourceRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.09);
+  color: rgba(255, 245, 220, 0.84);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sheetResourceRow:last-child {
+  border-bottom: none;
+}
+
+.sheetTextBlock {
+  color: rgba(255, 245, 220, 0.84);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.sheetListBlock {
+  color: rgba(255, 245, 220, 0.84);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.sheetStatRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sheetSaveSenseGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheetSaveSenseGrid .sheetSubTitle {
+  margin-top: 0;
+  margin-bottom: 6px;
+}
+
+.sheetSavingThrowGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.sheetSaveSenseGrid > div,
+.sheetSavingThrowGrid > div,
+.sheetSaveSenseGrid .sheetStatRow {
+  min-width: 0;
+}
+
+.sheetSaveSenseGrid .sheetStatMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sheetSavingThrowRow .sheetStatTag {
+  padding: 1px 5px;
+}
+
+.sheetSavingThrowLabel {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheetSavingThrowRow .sheetStatValue {
+  min-width: 44px;
+  padding: 2px 6px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.sheetStatRow {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sheetStatMain {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheetStatTag {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(255, 220, 160, 0.06);
+  padding: 1px 6px;
+  color: rgba(255, 220, 160, 0.85);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sheetStatLabel {
+  color: rgba(255, 245, 220, 0.86);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.sheetStatValue {
+  border-radius: 7px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: rgba(0, 0, 0, 0.32);
+  min-width: 48px;
+  padding: 3px 8px;
+  color: var(--koa-cream);
+  font-size: 12px;
+  font-weight: 950;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sheetListFallback {
+  color: rgba(255, 220, 160, 0.62);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+}
+
+.sheetSubTitle {
+  color: rgba(255, 220, 160, 0.78);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 8px 0 4px;
+}
+
+.sheetInventoryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .editorTopActions {
@@ -1018,6 +1616,90 @@
   gap: 8px;
 }
 
+.combatToolsCardCompact {
+  border: none;
+  background: transparent;
+  padding: 0;
+  gap: 6px;
+}
+
+.combatToolsTopRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.combatToolGroup {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.combatToolsCardCompact .hpAdjustRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.combatToolsCardCompact .hpAdjustInputWrap {
+  min-width: 0;
+}
+
+.combatToolsCardCompact .toolMiniBtn {
+  min-width: 42px;
+  height: 26px;
+  padding: 0 7px;
+}
+
+.combatToolsCardCompact .toolsMeta {
+  margin-top: 0;
+  padding-top: 2px;
+  font-size: 12px;
+}
+
+.combatToolsCardCompact .spellLevelControls {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin-bottom: 6px;
+  gap: 6px;
+}
+
+.combatToolsCardCompact .spellLevelSelect {
+  height: 28px;
+  padding: 4px 6px;
+}
+
+.combatToolsCardCompact .spellMaxInput {
+  width: 36px;
+  height: 26px;
+  padding: 4px 3px;
+}
+
+.combatToolsCardCompact .spellMaxControls {
+  gap: 4px;
+}
+
+.combatToolsCardCompact .slotBand {
+  padding: 5px 7px;
+  gap: 8px;
+}
+
+.combatToolsCardCompact .slotBandLevel {
+  font-size: 13px;
+}
+
+.combatToolsCardCompact .slotBoxRow {
+  gap: 4px;
+}
+
+.combatToolsCardCompact .slotBox {
+  width: 16px;
+  height: 16px;
+}
+
 .toolsTitle {
   color: rgba(255, 245, 220, 0.84);
   font-weight: 950;
@@ -1051,6 +1733,41 @@
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
+}
+
+.toolsVitalsRow {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.toolsHpGroup {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.toolsTempGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolsVitalsLabel {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.toolsVitalsValue {
+  color: var(--koa-cream);
+  font-size: 16px;
+  font-weight: 950;
 }
 
 .toolsDivider {
@@ -1213,6 +1930,18 @@
   margin-bottom: 10px;
 }
 
+.sheetEditAbilityGrid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sheetTextarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
 .compactFields {
   display: flex;
   flex-wrap: wrap;
@@ -1303,6 +2032,28 @@
   }
 }
 
+@keyframes initSlideNext {
+  from {
+    opacity: 0.75;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes initSlidePrev {
+  from {
+    opacity: 0.75;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @media (max-width: 980px) {
   .header {
     padding: 20px 16px 12px;
@@ -1323,6 +2074,17 @@
     justify-content: center;
   }
 
+  .initOverlay {
+    left: 8px;
+    right: 8px;
+    top: 4px;
+  }
+
+  .initStrip {
+    width: 100%;
+    padding: 6px 7px;
+  }
+
   .addModalBody {
     grid-template-columns: 1fr;
     gap: 18px;
@@ -1332,9 +2094,47 @@
     grid-template-columns: 1fr;
   }
 
+  .sheetSectionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sheetTopRow {
+    grid-template-columns: 1fr;
+  }
+
+  .sheetHeroVitalsRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sheetHeroHpGroup,
+  .sheetHeroTempGroup {
+    justify-content: space-between;
+  }
+
+  .sheetSaveSenseGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .combatToolsTopRow {
+    grid-template-columns: 1fr;
+  }
+
+  .sheetAbilityChipGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sheetCardFull {
+    grid-column: auto;
+  }
+
   .spellLevelControls {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .sheetStatsGridRow {
+    grid-template-columns: 1fr;
   }
 
   .slotBand {
@@ -1357,12 +2157,44 @@
   .threeCol,
   .twoCol,
   .twoColEqual,
-  .fieldGrid2 {
+  .fieldGrid2,
+  .sheetEditAbilityGrid {
     grid-template-columns: 1fr;
   }
 
   .compactSideField,
   .compactStatField {
     width: 100%;
+  }
+
+  .sheetAbilityGrid,
+  .sheetStatsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sheetSavingThrowGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sheetAbilityChipGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .sheetAbilityChipMod {
+    font-size: 24px;
+  }
+
+  .sheetInventoryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .initOverlay {
+    left: 6px;
+    right: 6px;
+    top: 3px;
+  }
+
+  .initCard {
+    min-width: 0;
   }
 }

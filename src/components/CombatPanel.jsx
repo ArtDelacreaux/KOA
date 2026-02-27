@@ -5,6 +5,7 @@ import styles from './CombatPanel.module.css';
 import { createId } from '../domain/ids';
 import { repository } from '../repository';
 import { STORAGE_KEYS } from '../lib/storageKeys';
+import { parseCharacterSheetFile } from '../lib/sheetParser';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
 import battleback1  from '../assets/Backgrounds/battleback1.png';
@@ -226,6 +227,51 @@ const TOKEN_IMAGE_BY_NAME_KEY = {
   williamspicer: '/Token/will.png',
 };
 
+const ABILITY_META = [
+  { key: 'str', short: 'STR', label: 'Strength' },
+  { key: 'dex', short: 'DEX', label: 'Dexterity' },
+  { key: 'con', short: 'CON', label: 'Constitution' },
+  { key: 'int', short: 'INT', label: 'Intelligence' },
+  { key: 'wis', short: 'WIS', label: 'Wisdom' },
+  { key: 'cha', short: 'CHA', label: 'Charisma' },
+];
+
+const ABILITY_SHORT_BY_WORD = {
+  str: 'STR',
+  strength: 'STR',
+  dex: 'DEX',
+  dexterity: 'DEX',
+  con: 'CON',
+  constitution: 'CON',
+  int: 'INT',
+  intelligence: 'INT',
+  wis: 'WIS',
+  wisdom: 'WIS',
+  cha: 'CHA',
+  charisma: 'CHA',
+};
+
+const SKILL_TO_ABILITY = {
+  acrobatics: 'DEX',
+  'animal handling': 'WIS',
+  arcana: 'INT',
+  athletics: 'STR',
+  deception: 'CHA',
+  history: 'INT',
+  insight: 'WIS',
+  intimidation: 'CHA',
+  investigation: 'INT',
+  medicine: 'WIS',
+  nature: 'INT',
+  perception: 'WIS',
+  performance: 'CHA',
+  persuasion: 'CHA',
+  religion: 'INT',
+  'sleight of hand': 'DEX',
+  stealth: 'DEX',
+  survival: 'WIS',
+};
+
 function tokenKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -279,6 +325,225 @@ function parseStatusText(raw) {
     .filter(Boolean);
 }
 
+function normalizeStringList(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  const text = String(raw || '').trim();
+  if (!text) return [];
+  return text
+    .split(/[\r\n,;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function cleanText(value) {
+  return String(value ?? '').trim();
+}
+
+function defaultAbilities() {
+  return { str: null, dex: null, con: null, int: null, wis: null, cha: null };
+}
+
+function normalizeAbilities(raw) {
+  const out = defaultAbilities();
+  if (!raw || typeof raw !== 'object') return out;
+  ABILITY_META.forEach(({ key }) => {
+    const value = raw[key];
+    if (value == null || value === '') {
+      out[key] = null;
+      return;
+    }
+    const parsed = toInt(value, null);
+    out[key] = parsed == null ? null : parsed;
+  });
+  return out;
+}
+
+function formatSigned(value, empty = '—') {
+  if (value == null || value === '') return empty;
+  const n = toInt(value, null);
+  if (n == null) return empty;
+  return n >= 0 ? `+${n}` : `${n}`;
+}
+
+function abilityModifier(score) {
+  if (score == null || score === '') return null;
+  return Math.floor((toInt(score, 10) - 10) / 2);
+}
+
+function extractBonusValue(text) {
+  const source = String(text || '');
+  const signedMatch = source.match(/[-+]\s*\d+/);
+  if (signedMatch) {
+    return toInt(signedMatch[0].replace(/\s+/g, ''), null);
+  }
+  const unsignedMatch = source.match(/\b\d+\b/);
+  if (unsignedMatch) return toInt(unsignedMatch[0], null);
+  return null;
+}
+
+function inferAbilityShort(text, fallback = '') {
+  const lowered = String(text || '').toLowerCase();
+  if (!lowered) return fallback;
+  const keys = Object.keys(ABILITY_SHORT_BY_WORD);
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    const pattern = new RegExp(`\\b${key}\\b`, 'i');
+    if (pattern.test(lowered)) return ABILITY_SHORT_BY_WORD[key];
+  }
+  return fallback;
+}
+
+function normalizeFeatureList(raw) {
+  if (Array.isArray(raw)) return normalizeStringList(raw);
+  const text = cleanText(raw);
+  if (!text) return [];
+  if (text.includes('\n')) return normalizeStringList(text.split(/\r?\n/g));
+  return normalizeStringList(text.split(/[;]+/g));
+}
+
+function normalizeSavingThrowRows(rawSavingThrows, abilityScores) {
+  const fallbackByAbility = {};
+  ABILITY_META.forEach(({ key, short }) => {
+    fallbackByAbility[short] = abilityModifier(abilityScores?.[key]);
+  });
+
+  const parsedByAbility = {};
+  normalizeStringList(rawSavingThrows).forEach((line) => {
+    const ability = inferAbilityShort(line, '');
+    if (!ability) return;
+    const value = extractBonusValue(line);
+    if (value == null) return;
+    parsedByAbility[ability] = value;
+  });
+
+  return ABILITY_META.map(({ short }) => ({
+    tag: short,
+    value: parsedByAbility[short] ?? fallbackByAbility[short],
+  }));
+}
+
+function normalizeSkillRows(rawSkills, abilityScores) {
+  const rows = [];
+  normalizeStringList(rawSkills).forEach((line, index) => {
+    if (!/[a-z]/i.test(line)) return;
+    const compact = line.replace(/\s+/g, ' ').trim();
+    if (!compact) return;
+
+    const bonus = extractBonusValue(compact);
+    const abilityInParens = compact.match(/\(([A-Za-z]{3,})\)/);
+    let ability = inferAbilityShort(abilityInParens ? abilityInParens[1] : compact, '');
+
+    let skillName = '';
+    const lowered = compact.toLowerCase();
+    const knownNames = Object.keys(SKILL_TO_ABILITY);
+    for (let i = 0; i < knownNames.length; i += 1) {
+      const known = knownNames[i];
+      if (lowered.includes(known)) {
+        skillName = known
+          .split(' ')
+          .map((token) => token[0].toUpperCase() + token.slice(1))
+          .join(' ');
+        if (!ability) ability = SKILL_TO_ABILITY[known];
+        break;
+      }
+    }
+
+    if (!skillName) {
+      skillName = compact
+        .replace(/\([^)]*\)/g, '')
+        .replace(/[-+]\s*\d+/g, '')
+        .replace(/\b(?:str|dex|con|int|wis|cha)\b/gi, '')
+        .replace(/\b(?:strength|dexterity|constitution|intelligence|wisdom|charisma)\b/gi, '')
+        .replace(/[,:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    if (!skillName || !/[a-z]/i.test(skillName)) return;
+
+    if (!ability) {
+      const fallbackAbility = Object.entries(SKILL_TO_ABILITY).find(([name]) => name === skillName.toLowerCase());
+      ability = fallbackAbility?.[1] || '';
+    }
+
+    let resolvedBonus = bonus;
+    if (resolvedBonus == null && ability) {
+      const meta = ABILITY_META.find((item) => item.short === ability);
+      resolvedBonus = meta ? abilityModifier(abilityScores?.[meta.key]) : null;
+    }
+
+    rows.push({
+      id: `${skillName}-${index}`,
+      skill: skillName,
+      ability: ability || '—',
+      bonus: resolvedBonus,
+    });
+  });
+  return rows;
+}
+
+function normalizeSenseRows(rawSenses) {
+  return normalizeStringList(rawSenses)
+    .filter((line) => /[a-z]/i.test(line))
+    .map((line, index) => {
+      const compact = line.replace(/\s+/g, ' ').trim();
+      const trailingValue = compact.match(/(-?\d+)\s*$/);
+      if (trailingValue) {
+        const value = toInt(trailingValue[1], null);
+        const label = compact.slice(0, trailingValue.index).trim() || compact;
+        return { id: `${label}-${index}`, label, value };
+      }
+      return { id: `${compact}-${index}`, label: compact, value: null };
+    });
+}
+
+function buildSheetPatch(combatant, parsedResult) {
+  const parsed = parsedResult?.parsed || {};
+  const mergedAbilities = normalizeAbilities(parsed.abilities || combatant.abilities);
+  const className = cleanText(parsed.className || combatant.className || combatant.role);
+  const level = parsed.level == null ? combatant.level : toInt(parsed.level, '');
+  const hpMax =
+    parsed.hpMax == null
+      ? combatant.maxHP
+      : Math.max(0, toInt(parsed.hpMax, combatant.maxHP === '' ? 0 : combatant.maxHP || 0));
+  const hpCurrentRaw =
+    parsed.hpCurrent == null
+      ? combatant.hp
+      : Math.max(0, toInt(parsed.hpCurrent, combatant.hp === '' ? 0 : combatant.hp || 0));
+  const hpCurrent = hpMax === '' ? hpCurrentRaw : Math.min(hpCurrentRaw, hpMax);
+  const initiativeBonus =
+    parsed.initiativeBonus == null ? toInt(combatant.initiativeBonus, 0) : toInt(parsed.initiativeBonus, 0);
+
+  return {
+    name: cleanText(parsed.name) || combatant.name,
+    race: cleanText(parsed.race) || cleanText(combatant.race),
+    className,
+    role: className || combatant.role,
+    level: level === '' ? '' : level,
+    hp: hpCurrent,
+    maxHP: hpMax,
+    ac: parsed.ac == null ? combatant.ac : Math.max(0, toInt(parsed.ac, 0)),
+    speed: parsed.speed == null ? combatant.speed : Math.max(0, toInt(parsed.speed, 0)),
+    initiativeBonus,
+    abilities: mergedAbilities,
+    savingThrows: normalizeStringList(parsed.savingThrows),
+    skills: normalizeStringList(parsed.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(parsed.senses),
+    spellList: normalizeStringList(parsed.spellList),
+    classFeatures: normalizeFeatureList(parsed.classFeatures || parsed.abilitiesText),
+    equipmentItems: normalizeStringList(parsed.equipmentItems || parsed.equipment),
+    otherPossessions: normalizeStringList(parsed.otherPossessions),
+    sourceSheet: true,
+    sourceSheetFileName: cleanText(parsedResult?.sourceFileName) || cleanText(combatant.sourceSheetFileName),
+    sourceSheetFormat: cleanText(parsedResult?.format) || cleanText(combatant.sourceSheetFormat),
+    sheetWarnings: normalizeStringList(parsedResult?.validation?.warnings),
+    sheetMissingFields: normalizeStringList(parsedResult?.validation?.missingFields),
+    sheetUnknownFields: normalizeStringList(parsedResult?.validation?.unknownFields),
+    sheetImportedAt: Date.now(),
+  };
+}
+
 function loadState() {
   return repository.readJson(LS_KEY, null);
 }
@@ -297,16 +562,36 @@ function normalize(enc) {
     id: c.id || uid(),
     name: c.name || 'Unknown',
     role: c.role || '',
+    race: c.race || '',
+    className: c.className || c.role || '',
+    level: c.level === '' || c.level == null ? '' : toInt(c.level, ''),
     side: c.side || 'Enemy',
     init: toInt(c.init, 10),
+    initiativeBonus: c.initiativeBonus == null || c.initiativeBonus === '' ? 0 : toInt(c.initiativeBonus, 0),
     maxHP: c.maxHP === '' || c.maxHP == null ? '' : toInt(c.maxHP, 0),
     hp: c.hp === '' || c.hp == null ? '' : toInt(c.hp, 0),
     tempHP: toInt(c.tempHP, 0),
     ac: c.ac === '' || c.ac == null ? '' : toInt(c.ac, 0),
+    speed: c.speed === '' || c.speed == null ? '' : toInt(c.speed, 0),
+    abilities: normalizeAbilities(c.abilities),
+    savingThrows: normalizeStringList(c.savingThrows),
+    skills: normalizeStringList(c.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(c.senses),
+    spellList: normalizeStringList(c.spellList),
+    classFeatures: normalizeFeatureList(c.classFeatures),
     status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
     concentration: c.concentration || '',
     notes: c.notes || '',
     spellSlots: normalizeSpellSlots(c.spellSlots),
+    equipmentItems: normalizeStringList(c.equipmentItems),
+    otherPossessions: normalizeStringList(c.otherPossessions),
+    sourceSheet: !!c.sourceSheet,
+    sourceSheetFileName: c.sourceSheetFileName || '',
+    sourceSheetFormat: c.sourceSheetFormat || '',
+    sheetWarnings: normalizeStringList(c.sheetWarnings),
+    sheetMissingFields: normalizeStringList(c.sheetMissingFields),
+    sheetUnknownFields: normalizeStringList(c.sheetUnknownFields),
+    sheetImportedAt: toInt(c.sheetImportedAt, 0),
     dead: !!c.dead,
     enemyType: c.enemyType || 'goblin',
     customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
@@ -639,12 +924,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
   const [selectedId, setSelectedId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState('edit');
+  const [listEditorMode, setListEditorMode] = useState('');
+  const [listEditorText, setListEditorText] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
   const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
   const [activeSpellLevel, setActiveSpellLevel] = useState(1);
   const [statusDraft, setStatusDraft] = useState('');
+  const [sheetImportState, setSheetImportState] = useState({
+    running: false,
+    progress: 0,
+    stage: '',
+    targetId: '',
+    message: '',
+    error: '',
+  });
+  const [initSlideDirection, setInitSlideDirection] = useState('next');
+  const [initSlideTick, setInitSlideTick] = useState(0);
 
   // ── Battle Background state ─────────────────────────────────────────────
   const [battleBg, setBattleBg] = useState(null);
@@ -657,13 +955,19 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const sheetFileInputRef = useRef(null);
+  const sheetImportAbortRef = useRef(null);
 
   useEffect(() => {
-    const anyModalOpen = cropOpen || addModalOpen || editorOpen;
+    const anyModalOpen = cropOpen || addModalOpen || editorOpen || !!listEditorMode;
     if (!anyModalOpen) return;
 
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
+      if (listEditorMode) {
+        setListEditorMode('');
+        return;
+      }
       if (cropOpen) {
         setCropOpen(false);
         return;
@@ -679,7 +983,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, editorOpen]);
+  }, [cropOpen, addModalOpen, editorOpen, listEditorMode]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -736,17 +1040,57 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
+  const selectedSavingThrowRows = useMemo(
+    () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities),
+    [selected]
+  );
+  const selectedSkillRows = useMemo(
+    () => normalizeSkillRows(selected?.skills, selected?.abilities),
+    [selected]
+  );
+  const selectedSenseRows = useMemo(
+    () => normalizeSenseRows(selected?.senses),
+    [selected]
+  );
   const selectedSpellSlot = useMemo(() => {
     if (!selected) return null;
     return selected.spellSlots.find((slot) => slot.level === activeSpellLevel) || null;
   }, [selected, activeSpellLevel]);
   const visibleSpellSlot = selectedSpellSlot || { level: activeSpellLevel, max: 0, current: 0 };
+  const initiativeSlots = useMemo(() => {
+    if (!combatants.length) return [null, null, null];
+    const safeActive = clamp(encounter.activeIndex, 0, combatants.length - 1);
+    const getByOffset = (offset) => {
+      const idx = (safeActive + offset + combatants.length) % combatants.length;
+      return combatants[idx];
+    };
+    if (combatants.length === 1) return [null, getByOffset(0), null];
+    if (combatants.length === 2) return [getByOffset(-1), getByOffset(0), null];
+    return [getByOffset(-1), getByOffset(0), getByOffset(1)];
+  }, [combatants, encounter.activeIndex]);
 
   useEffect(() => {
     if (!editorOpen || !selectedId) return;
     setHpAdjustAmount('0');
     setStatusDraft(selected ? selected.status.join(', ') : '');
   }, [editorOpen, selectedId]);
+
+  useEffect(() => {
+    if (!listEditorMode || !selected) return;
+    if (listEditorMode === 'spellbook') {
+      setListEditorText(normalizeStringList(selected.spellList).join('\n'));
+      return;
+    }
+    if (listEditorMode === 'features') {
+      setListEditorText(normalizeStringList(selected.classFeatures).join('\n'));
+    }
+  }, [listEditorMode, selected]);
+
+  useEffect(() => {
+    return () => {
+      if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+    };
+  }, []);
 
   const addCombatant = (c) => {
     setEncounter(prev => {
@@ -771,10 +1115,29 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     addCombatant({
       id: uid(), name, role: '', side: draft.side||'Enemy',
       init: toInt(draft.init,10),
+      initiativeBonus: 0,
       hp: draft.hp==='' ? '' : toInt(draft.hp,0),
       maxHP: draft.maxHP==='' ? '' : toInt(draft.maxHP,0),
       ac: draft.ac==='' ? '' : toInt(draft.ac,0),
+      speed: '',
+      race: '',
+      className: '',
+      level: '',
+      abilities: defaultAbilities(),
+      savingThrows: [],
+      skills: [],
+      senses: [],
+      spellList: [],
+      classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
+      equipmentItems:[], otherPossessions:[],
+      sourceSheet: false,
+      sourceSheetFileName: '',
+      sourceSheetFormat: '',
+      sheetWarnings: [],
+      sheetMissingFields: [],
+      sheetUnknownFields: [],
+      sheetImportedAt: 0,
       enemyType: draft.enemyType || 'goblin', customImage:'',
       sourceCharacterId:'',
       pcColorIndex: combatants.length % PC_COLORS.length,
@@ -789,7 +1152,26 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     addCombatant({
       id: uid(), name: uniqueName(existingNames, adv.name), role: adv.role,
       side: adventurerSide, init:10, hp: adv.hp, maxHP: adv.maxHP, ac: adv.ac,
+      initiativeBonus: 0,
+      speed: '',
+      race: '',
+      className: adv.role || '',
+      level: '',
+      abilities: defaultAbilities(),
+      savingThrows: [],
+      skills: [],
+      senses: [],
+      spellList: [],
+      classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
+      equipmentItems:[], otherPossessions:[],
+      sourceSheet: false,
+      sourceSheetFileName: '',
+      sourceSheetFormat: '',
+      sheetWarnings: [],
+      sheetMissingFields: [],
+      sheetUnknownFields: [],
+      sheetImportedAt: 0,
       enemyType:'goblin', customImage: tokenImageForCharacter(adv.id, adv.name),
       sourceCharacterId: adv.id || '',
       pcColorIndex: combatants.length % PC_COLORS.length,
@@ -817,6 +1199,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoNext = () => {
+    setInitSlideDirection('next');
+    setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
       const next = normalize(prev);
       if (next.combatants.length === 0) return next;
@@ -828,6 +1212,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoPrev = () => {
+    setInitSlideDirection('prev');
+    setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
       const next = normalize(prev);
       if (next.combatants.length === 0) return next;
@@ -856,6 +1242,22 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       }
       return next;
     });
+  };
+
+  const adjustSelectedTempHp = (delta) => {
+    if (!selected) return;
+    const current = Math.max(0, toInt(selected.tempHP, 0));
+    setSelectedField({ tempHP: Math.max(0, current + delta) });
+  };
+
+  const updateSelectedTempHp = (raw) => {
+    if (!selected) return;
+    const text = String(raw ?? '').trim();
+    if (!text) {
+      setSelectedField({ tempHP: 0 });
+      return;
+    }
+    setSelectedField({ tempHP: Math.max(0, toInt(text, 0)) });
   };
 
   const applyHpAdjustment = (kind) => {
@@ -936,12 +1338,124 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
-  const openEditorFor = (id) => {
+  const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
     const picked = target?.spellSlots?.find((slot) => slot.max > 0)?.level || 1;
     setSelectedId(id);
     setActiveSpellLevel(picked);
+    setEditorMode(forceMode || (target?.sourceSheet ? 'sheet' : 'edit'));
     setEditorOpen(true);
+  };
+
+  const triggerSheetImport = (targetId, replacing = false) => {
+    const target = combatants.find((c) => c.id === targetId);
+    if (!target) return;
+    if (replacing && target.sourceSheet) {
+      const ok = window.confirm(`Replace imported sheet for ${target.name}?`);
+      if (!ok) return;
+    }
+    setSheetImportState({
+      running: false,
+      progress: 0,
+      stage: '',
+      targetId: target.id,
+      message: '',
+      error: '',
+    });
+    if (sheetFileInputRef.current) {
+      sheetFileInputRef.current.value = '';
+      sheetFileInputRef.current.click();
+    }
+  };
+
+  const cancelSheetImport = () => {
+    if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+  };
+
+  const handleSheetFilePick = async (event) => {
+    const file = event.target.files?.[0];
+    const targetId = sheetImportState.targetId || selectedId;
+    if (!file || !targetId) return;
+
+    const target = combatants.find((c) => c.id === targetId);
+    if (!target) return;
+
+    if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+    const controller = new AbortController();
+    sheetImportAbortRef.current = controller;
+    setSheetImportState((prev) => ({
+      ...prev,
+      running: true,
+      progress: 5,
+      stage: 'starting',
+      message: '',
+      error: '',
+      targetId,
+    }));
+
+    try {
+      const parsedResult = await parseCharacterSheetFile(file, {
+        signal: controller.signal,
+        onProgress: ({ progress, stage }) => {
+          setSheetImportState((prev) => ({
+            ...prev,
+            running: true,
+            progress: Number.isFinite(progress) ? progress : prev.progress,
+            stage: stage || prev.stage,
+          }));
+        },
+      });
+
+      setEncounter((prev) => {
+        const next = normalize(prev);
+        next.combatants = next.combatants.map((combatant) => {
+          if (combatant.id !== targetId) return combatant;
+          return { ...combatant, ...buildSheetPatch(combatant, parsedResult) };
+        });
+        return next;
+      });
+
+      setSelectedId(targetId);
+      setEditorOpen(true);
+      setEditorMode('sheet');
+      setSheetImportState((prev) => ({
+        ...prev,
+        running: false,
+        progress: 100,
+        stage: 'complete',
+        message: `Imported sheet for ${parsedResult.parsed?.name || target.name}.`,
+        error: '',
+      }));
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        setSheetImportState((prev) => ({
+          ...prev,
+          running: false,
+          message: '',
+          error: 'Import cancelled.',
+        }));
+      } else {
+        setSheetImportState((prev) => ({
+          ...prev,
+          running: false,
+          message: '',
+          error: error?.message || 'Import failed.',
+        }));
+      }
+    } finally {
+      sheetImportAbortRef.current = null;
+      event.target.value = '';
+    }
+  };
+
+  const saveListEditor = () => {
+    if (!selected || !listEditorMode) return;
+    if (listEditorMode === 'spellbook') {
+      setSelectedField({ spellList: normalizeStringList(listEditorText) });
+    } else if (listEditorMode === 'features') {
+      setSelectedField({ classFeatures: normalizeStringList(listEditorText) });
+    }
+    setListEditorMode('');
   };
 
   // image upload — opens crop modal instead of applying directly
@@ -1018,6 +1532,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
   const iconMiniBtnClass = (variant = 'ghost') => [styles.btnIconMini, variant === 'danger' ? styles.btnIconDanger : styles.btnIconGhost].join(' ');
   const enemyTypeBtnClass = (activeType) => [styles.enemyTypeBtn, activeType ? styles.enemyTypeBtnActive : ''].filter(Boolean).join(' ');
+  const sheetImportStageLabel = sheetImportState.stage
+    ? sheetImportState.stage.replace(/[-_]/g, ' ').toUpperCase()
+    : 'IMPORTING';
+  const selectedSheetIssues = useMemo(() => {
+    if (!selected) return [];
+    return [
+      ...normalizeStringList(selected.sheetMissingFields).map((line) => ({ kind: 'Missing Fields', text: line })),
+      ...normalizeStringList(selected.sheetWarnings).map((line) => ({ kind: 'Warning', text: line })),
+    ];
+  }, [selected]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -1113,7 +1637,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             </div>
           </div>
 
-        {/* ── MAIN LAYOUT — initiative bar above battlefield ── */}
+        {/* ── MAIN LAYOUT ── */}
         <div
           className={styles.mainLayout}
           style={{
@@ -1123,112 +1647,134 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             bottom: PAD,
           }}
         >
-          <div className={styles.glassPanel}>
-            {/* ── INITIATIVE STRIP ── */}
-            <div className={styles.initStrip}>
-              <div className={styles.initHeaderGrid}>
-                <div />
-                <div className={styles.initHeaderCenter}>
-                  <div className={styles.initHeading}>
-                    Initiative
+          <div className={styles.battlefieldWrap}>
+            <div className={styles.battlefieldInner}>
+              <BattlefieldScene
+                combatants={combatants}
+                activeCombatantId={activeCombatantId}
+                selectedId={selectedId}
+                openEditorFor={openEditorFor}
+                playHover={playHover}
+                playNav={playNav}
+                battleBg={battleBg}
+              />
+
+              <div className={styles.initOverlay}>
+                <div className={styles.initStrip}>
+                  <div className={styles.initHeaderGrid}>
+                    <div />
+                    <div className={styles.initHeaderCenter}>
+                      <div className={styles.initHeading}>Initiative</div>
+                      <div className={styles.initButtons}>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+                        <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                      </div>
+                    </div>
+                    <div />
                   </div>
-                  <div className={styles.initButtons}>
-                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                    <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+
+                  <div className={styles.initScroll}>
+                    {combatants.length === 0 ? (
+                      <div className={styles.initEmpty}>
+                        Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
+                      </div>
+                    ) : (
+                      <div className={styles.initCardsViewport}>
+                        <div
+                          key={`${activeCombatantId || 'none'}-${initSlideTick}`}
+                          className={`${styles.initCardsRow} ${
+                            initSlideDirection === 'next' ? styles.initCardsRowNext : styles.initCardsRowPrev
+                          }`}
+                        >
+                          {initiativeSlots.map((c, slotIndex) => {
+                            if (!c) {
+                              return <div key={`slot-empty-${slotIndex}`} className={styles.initCardGhost} />;
+                            }
+                            const isActive = c.id === activeCombatantId;
+                            const isSelected = c.id === selectedId;
+                            const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
+                            const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
+                            const pct = max > 0 ? (hp / max) * 100 : 100;
+                            const hpColor =
+                              pct > 50
+                                ? 'rgba(80,200,120,0.80)'
+                                : pct > 20
+                                  ? 'rgba(230,170,40,0.80)'
+                                  : 'rgba(220,70,70,0.80)';
+                            const cardClass = [
+                              styles.initCard,
+                              isActive ? styles.initCardActive : '',
+                              !isActive && isSelected ? styles.initCardSelected : '',
+                              c.dead ? styles.initCardDead : '',
+                            ].filter(Boolean).join(' ');
+                            const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
+
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => openEditorFor(c.id)}
+                                onMouseEnter={playHover}
+                                className={cardClass}
+                              >
+                                <div className={styles.initCardTop}>
+                                  <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
+                                  <div className={initClass}>{toInt(c.init, 0)}</div>
+                                  <div className={styles.initNameWrap}>
+                                    <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
+                                      {c.name}
+                                    </div>
+                                    {c.role && <div className={styles.initRole}>{c.role}</div>}
+                                  </div>
+                                  <div className={styles.initHp} style={{ color: hpColor }}>
+                                    {c.hp === '' ? '—' : c.hp}
+                                  </div>
+                                  <div className={styles.initActions}>
+                                    <button
+                                      title={c.dead ? 'Revive' : 'Mark dead'}
+                                      onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
+                                      onMouseEnter={playHover}
+                                      className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
+                                    >
+                                      ☠
+                                    </button>
+                                    <button
+                                      title="Remove"
+                                      onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
+                                      onMouseEnter={playHover}
+                                      className={iconMiniBtnClass('danger')}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className={styles.initHpTrack}>
+                                  <div className={styles.initHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
+                                </div>
+
+                                {isActive && <div className={styles.activeTurnTag}>▶ ACTIVE TURN</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div />
-              </div>
-
-              <div className={`${styles.initScroll} koa-scrollbar-thin`}>
-                {combatants.length === 0 ? (
-                  <div className={styles.initEmpty}>
-                    Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
-                  </div>
-                ) : (
-                  <div className={styles.initCardsRow}>
-                    {combatants.map(c => {
-                      const isActive   = c.id === activeCombatantId;
-                      const isSelected = c.id === selectedId;
-                      const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
-                      const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
-                      const pct = max > 0 ? (hp / max) * 100 : 100;
-                      const hpColor = pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)';
-                      const cardClass = [
-                        styles.initCard,
-                        isActive ? styles.initCardActive : '',
-                        !isActive && isSelected ? styles.initCardSelected : '',
-                        c.dead ? styles.initCardDead : '',
-                      ].filter(Boolean).join(' ');
-                      const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
-
-                      return (
-                        <div
-                          key={c.id}
-                          onClick={() => openEditorFor(c.id)}
-                          onMouseEnter={playHover}
-                          className={cardClass}
-                        >
-                          <div className={styles.initCardTop}>
-                            <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
-                            <div className={initClass}>
-                              {toInt(c.init,0)}
-                            </div>
-                            <div className={styles.initNameWrap}>
-                              <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
-                                {c.name}
-                              </div>
-                              {c.role && <div className={styles.initRole}>{c.role}</div>}
-                            </div>
-                            <div className={styles.initHp} style={{ color: hpColor }}>
-                              {c.hp===''?'—':c.hp}
-                            </div>
-                            <div className={styles.initActions}>
-                              <button title={c.dead ? 'Revive' : 'Mark dead'}
-                                onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                                onMouseEnter={playHover}
-                                className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}>☠</button>
-                              <button title="Remove"
-                                onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                                onMouseEnter={playHover}
-                                className={iconMiniBtnClass('danger')}>✕</button>
-                            </div>
-                          </div>
-
-                          <div className={styles.initHpTrack}>
-                            <div className={styles.initHpFill} style={{ width:`${clamp(pct,0,100)}%`, background:hpGradient(pct) }}/>
-                          </div>
-
-                          {isActive && (
-                            <div className={styles.activeTurnTag}>
-                              ▶ ACTIVE TURN
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── BATTLEFIELD ── */}
-            <div className={styles.battlefieldWrap}>
-              <div className={styles.battlefieldInner}>
-                <BattlefieldScene
-                  combatants={combatants}
-                  activeCombatantId={activeCombatantId}
-                  selectedId={selectedId}
-                  openEditorFor={openEditorFor}
-                  playHover={playHover}
-                  playNav={playNav}
-                  battleBg={battleBg}
-                />
               </div>
             </div>
           </div>
         </div>
+
+        <input
+          ref={sheetFileInputRef}
+          type="file"
+          accept=".pdf,.json,.txt"
+          className={styles.hiddenInput}
+          onChange={handleSheetFilePick}
+          aria-label="Import character sheet"
+        />
 
         {/* ── ADD MODAL ── */}
         {addModalOpen && (
@@ -1334,16 +1880,233 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         {/* ── EDITOR MODAL ── */}
         {editorOpen && selected && (
           <div className={styles.modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
-            <div className={`${styles.modalCard} ${styles.editorModal}`}>
+            <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal}`}>
               <div className={styles.editorHeader}>
                 <div className={styles.editorTitle}>
-                  Editing: <span className={styles.editorNameAccent}>{selected.name}</span>
+                  {editorMode === 'sheet' ? 'Character Sheet:' : 'Editing:'} <span className={styles.editorNameAccent}>{selected.name}</span>
                 </div>
-                <div className={styles.editorHeaderActions}>
-                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                <div className={`${styles.editorHeaderActions} ${editorMode === 'sheet' ? styles.sheetHeaderActions : ''}`}>
+                  {editorMode === 'sheet' ? (
+                    <>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>Edit</button>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}>
+                        {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
+                      </button>
+                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      {selected.sourceSheet && (
+                        <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('sheet'); }}>
+                          Character Sheet
+                        </button>
+                      )}
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}>
+                        {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
+                      </button>
+                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                    </>
+                  )}
                 </div>
               </div>
 
+              {editorMode === 'sheet' && (
+                <div className={`${styles.sheetView} koa-scrollbar-thin`}>
+                  <div className={styles.sheetTopRow}>
+                    <div className={styles.sheetHero}>
+                      <div className={styles.sheetName}>{selected.name}</div>
+                      <div className={styles.sheetMeta}>
+                        {[cleanText(selected.race) || 'Unknown', cleanText(selected.className || selected.role) || 'Unclassified', selected.level === '' || selected.level == null ? 'Level —' : `Level ${selected.level}`].join(' • ')}
+                      </div>
+                      {selected.sourceSheetFileName && (
+                        <div className={styles.sheetImportMeta}>
+                          {selected.sourceSheetFileName}
+                          {selected.sourceSheetFormat ? ` (${selected.sourceSheetFormat.toUpperCase()})` : ''}
+                        </div>
+                      )}
+                      <div className={styles.sheetHeroVitals}>
+                        <div className={styles.sheetHeroVitalsRow}>
+                          <div className={styles.sheetHeroHpGroup}>
+                            <span className={styles.sheetHeroVitalsLabel}>HP</span>
+                            <span className={`${styles.sheetHeroVitalsValue} ${styles.sheetHeroVitalsValueMain}`}>
+                              {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP}
+                            </span>
+                          </div>
+                          <div className={styles.sheetHeroTempGroup}>
+                            <span className={styles.sheetHeroVitalsLabel}>Temp HP</span>
+                            <div className={styles.sheetHeroTempControls}>
+                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(-1); }}>-</button>
+                              <input className={`${styles.input} ${styles.tempAdjustInput}`} inputMode="numeric" maxLength={4} value={selected.tempHP} onChange={(e) => updateSelectedTempHp(e.target.value)} />
+                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(1); }}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={styles.sheetHeroTools}>
+                      <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
+                        <div className={styles.toolsTitle}>Combat Tools</div>
+                        <div className={styles.combatToolsTopRow}>
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>HP Quick Adjust</div>
+                            <div className={styles.hpAdjustRow}>
+                              <div className={styles.hpAdjustInputWrap}>
+                                <input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={4} value={hpAdjustAmount} onChange={(e) => setHpAdjustAmount(e.target.value)} />
+                              </div>
+                              <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
+                              <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
+                            </div>
+                          </div>
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>Spell Slots</div>
+                            <div className={styles.spellLevelControls}>
+                              <select className={`${styles.input} ${styles.selectInput} ${styles.spellLevelSelect}`} value={activeSpellLevel} onChange={(e) => setActiveSpellLevel(toInt(e.target.value, 1))}>
+                                {SPELL_SLOT_LEVELS.map((level) => <option key={level} value={level}>{spellLevelLabel(level)}</option>)}
+                              </select>
+                              <div className={styles.spellMaxControls}>
+                                <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, -1); }}>-</button>
+                                <input className={`${styles.input} ${styles.spellMaxInput}`} inputMode="numeric" maxLength={2} value={visibleSpellSlot.max} onChange={(e) => setSpellSlotField(activeSpellLevel, { max: toInt(e.target.value, 0) })} />
+                                <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(activeSpellLevel, 1); }}>+</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className={styles.slotBand}>
+                          <div className={styles.slotBandLevel}>{spellLevelLabel(activeSpellLevel)} LEVEL</div>
+                          <div className={styles.slotBandTrack}>
+                            <div className={styles.slotBoxRow}>
+                              {visibleSpellSlot.max <= 0 ? <span className={styles.slotBoxHint}>Set max slots</span> : Array.from({ length: visibleSpellSlot.max }).map((_, i) => {
+                                const activeBox = i < visibleSpellSlot.current;
+                                return (
+                                  <button
+                                    key={`${activeSpellLevel}-${i}`}
+                                    type="button"
+                                    className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
+                                    onMouseEnter={playHover}
+                                    onClick={() => { playNav(); setSpellSlotsFromBox(activeSpellLevel, i); }}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className={styles.slotBandLabel}>SLOTS</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(selectedSheetIssues.length > 0 || sheetImportState.error || sheetImportState.message) && (
+                    <div className={styles.sheetIssues}>
+                      {sheetImportState.error && sheetImportState.targetId === selected.id && (
+                        <div className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>Import Error</div>
+                          <div className={styles.sheetIssueText}>{sheetImportState.error}</div>
+                        </div>
+                      )}
+                      {sheetImportState.message && sheetImportState.targetId === selected.id && (
+                        <div className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>Import Status</div>
+                          <div className={styles.sheetIssueText}>{sheetImportState.message}</div>
+                        </div>
+                      )}
+                      {selectedSheetIssues.slice(0, 6).map((issue, idx) => (
+                        <div key={`${issue.kind}-${idx}`} className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>{issue.kind}</div>
+                          <div className={styles.sheetIssueText}>{issue.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={styles.sheetSectionGrid}>
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={styles.sheetCardTitle}>Core Stats</div>
+                      <div className={styles.sheetAbilityChipGrid}>
+                        {ABILITY_META.map((ability) => {
+                          const score = selected.abilities?.[ability.key];
+                          const mod = abilityModifier(score);
+                          return (
+                            <div key={ability.key} className={styles.sheetAbilityChip}>
+                              <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
+                              <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
+                              <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={styles.sheetCardTitle}>Combat Stats</div>
+                      <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
+                        <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
+                        <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
+                        <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetCard}>
+                      <div className={styles.sheetCardTitle}>Saving Throws & Senses</div>
+                      <div className={styles.sheetSaveSenseGrid}>
+                        <div>
+                          <div className={styles.sheetSubTitle}>Saving Throws</div>
+                          <div className={styles.sheetSavingThrowGrid}>
+                            {selectedSavingThrowRows.map((row) => (
+                              <div key={row.tag} className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow}`}>
+                                <div className={styles.sheetStatMain}><span className={styles.sheetStatTag}>{row.tag}</span></div>
+                                <span className={styles.sheetStatValue}>{formatSigned(row.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={styles.sheetSubTitle}>Senses</div>
+                          <div className={styles.sheetStatRows}>
+                            {selectedSenseRows.length ? selectedSenseRows.map((sense) => (
+                              <div key={sense.id} className={styles.sheetStatRow}>
+                                <div className={styles.sheetStatMain}><span className={styles.sheetStatLabel}>{sense.label}</span></div>
+                                <span className={styles.sheetStatValue}>{sense.value == null ? '—' : sense.value}</span>
+                              </div>
+                            )) : <div className={styles.sheetListFallback}>No senses parsed.</div>}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={styles.sheetSubTitle}>Equipment</div>
+                          <div className={styles.sheetListBlock}>
+                            {normalizeStringList(selected.equipmentItems).length ? normalizeStringList(selected.equipmentItems).join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetCard}>
+                      <div className={styles.sheetCardTitle}>Skills</div>
+                      <div className={styles.sheetStatRows}>
+                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
+                          <div key={skillRow.id} className={styles.sheetStatRow}>
+                            <div className={styles.sheetStatMain}>
+                              <span className={styles.sheetStatTag}>{skillRow.ability}</span>
+                              <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
+                            </div>
+                            <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
+                          </div>
+                        )) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={styles.sheetCardTitle}>Other Possessions</div>
+                      <div className={styles.sheetListBlock}>
+                        {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {editorMode !== 'sheet' && (
               <div className={`${styles.editorBody} koa-scrollbar-thin`}>
                 
                 {/* Appearance section */}
@@ -1394,7 +2157,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       )}
                     </div>
 
-                    <div className={styles.combatToolsCard}>
+                    <div className={styles.combatToolsCard} style={{ display: 'none' }}>
                       <div className={styles.toolsTitle}>Combat Tools</div>
 
                       <div>
@@ -1425,8 +2188,42 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             + HP
                           </button>
                         </div>
-                        <div className={styles.toolsMeta}>
-                          HP {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP} · Temp {selected.tempHP}
+                        <div className={styles.toolsVitalsRow}>
+                          <div className={styles.toolsHpGroup}>
+                            <span className={styles.toolsVitalsLabel}>HP</span>
+                            <span className={styles.toolsVitalsValue}>
+                              {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP}
+                            </span>
+                          </div>
+                          <div className={styles.toolsTempGroup}>
+                            <span className={styles.toolsVitalsLabel}>Temp</span>
+                            <button
+                              type="button"
+                              className={styles.tempAdjustBtn}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); adjustSelectedTempHp(-1); }}
+                              aria-label="Decrease temp HP"
+                            >
+                              -
+                            </button>
+                            <input
+                              className={`${styles.input} ${styles.tempAdjustInput}`}
+                              inputMode="numeric"
+                              maxLength={4}
+                              value={selected.tempHP}
+                              onChange={(e) => updateSelectedTempHp(e.target.value)}
+                              aria-label="Temp HP"
+                            />
+                            <button
+                              type="button"
+                              className={styles.tempAdjustBtn}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); adjustSelectedTempHp(1); }}
+                              aria-label="Increase temp HP"
+                            >
+                              +
+                            </button>
+                          </div>
                         </div>
                       </div>
 
@@ -1505,6 +2302,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </div>
                 </div>
 
+                <div className={styles.sectionTopGap}>
+                  <div className={styles.label}>Equipment (one per line)</div>
+                  <textarea
+                    className={`${styles.input} ${styles.textareaInput}`}
+                    value={normalizeStringList(selected.equipmentItems).join('\n')}
+                    onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
+                  />
+                </div>
+
                 <div className={styles.divider}/>
 
                 <div className={styles.fieldGrid2}>
@@ -1546,6 +2352,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     placeholder="Tactics, resistances, legendary uses..." onChange={e => setSelectedField({ notes:e.target.value })}/>
                 </div>
 
+                <div className={styles.sectionTopGap}><div className={styles.label}>Other Possessions (one per line)</div>
+                  <textarea
+                    className={`${styles.input} ${styles.textareaInput}`}
+                    value={normalizeStringList(selected.otherPossessions).join('\n')}
+                    onChange={(e) => setSelectedField({ otherPossessions: normalizeStringList(e.target.value) })}
+                  />
+                </div>
+
                 <div className={styles.divider}/>
                 <div className={styles.actionRow}>
                   <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
@@ -1555,6 +2369,57 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     {selected.dead ? 'Revive' : 'Mark dead'}
                   </button>
                 </div>
+              </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {sheetImportState.running && editorOpen && selected && sheetImportState.targetId === selected.id && (
+          <div className={styles.modalBack} onMouseDown={(e) => { if (e.target === e.currentTarget) cancelSheetImport(); }}>
+            <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Importing Character Sheet</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); cancelSheetImport(); }}>
+                  Cancel
+                </button>
+              </div>
+              <div className={styles.managerBody}>
+                <div className={styles.managerHint}>{sheetImportStageLabel} • {sheetImportState.progress}%</div>
+                <div className={styles.importProgressTrack}>
+                  <div className={styles.importProgressFill} style={{ width: `${sheetImportState.progress}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editorOpen && selected && listEditorMode && (
+          <div className={styles.modalBack} onMouseDown={(e) => { if (e.target === e.currentTarget) setListEditorMode(''); }}>
+            <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                  Close
+                </button>
+              </div>
+              <div className={styles.managerBody}>
+                <div className={styles.managerHint}>
+                  {listEditorMode === 'spellbook' ? 'Add one spell per line.' : 'Add one class feature per line.'}
+                </div>
+                <textarea
+                  className={`${styles.input} ${styles.managerTextarea}`}
+                  value={listEditorText}
+                  onChange={(e) => setListEditorText(e.target.value)}
+                />
+              </div>
+              <div className={styles.managerActions}>
+                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                  Cancel
+                </button>
+                <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); saveListEditor(); }}>
+                  Save
+                </button>
               </div>
             </div>
           </div>
