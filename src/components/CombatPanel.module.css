@@ -979,11 +979,23 @@
 
 .sheetHeaderActions {
   gap: 6px;
-  padding-right: 44px;
 }
 
 .sheetHeaderActions button {
   flex: 0 1 auto;
+}
+
+.longRestBtn {
+  border-color: rgba(120, 180, 255, 0.42) !important;
+  background: linear-gradient(180deg, rgba(42, 68, 102, 0.72), rgba(20, 34, 54, 0.68)) !important;
+  color: rgba(205, 228, 255, 0.9) !important;
+  box-shadow: 0 8px 18px rgba(12, 22, 36, 0.4);
+}
+
+.longRestBtn:hover {
+  border-color: rgba(150, 205, 255, 0.62) !important;
+  color: rgba(232, 244, 255, 0.98) !important;
+  filter: brightness(1.06);
 }
 
 .editorCloseButton {

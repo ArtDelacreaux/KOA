@@ -2117,6 +2117,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
+                      <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>Long Rest</button>
+                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   ) : (
                     <>
@@ -2132,15 +2134,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </>
                   )}
                 </div>
-                {editorMode === 'sheet' && (
-                  <button
-                    className={btnClass('danger', 'sm', styles.editorCloseButton, styles.sheetHeaderCloseButton)}
-                    onMouseEnter={playHover}
-                    onClick={() => { playNav(); setEditorOpen(false); }}
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
 
               {editorMode === 'sheet' && (
@@ -2404,11 +2397,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <div className={styles.sectionTopGap}>
                   <div className={styles.appearanceHeaderRow}>
                     <div className={styles.appearanceTitle}>Appearance</div>
-                    <div className={styles.editorTopActions}>
-                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>
-                        Long Rest
-                      </button>
-                    </div>
                   </div>
                   
                   <div className={styles.appearanceGrid}>
