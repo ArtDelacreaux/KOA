@@ -8,6 +8,8 @@ import {
   readWorldNpcsRaw,
   setWorldNpcDeepLink,
 } from '../domain/worldNpcs';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import { repository } from '../repository';
 
 /*
   WorldLore — Knights of Atria
@@ -33,14 +35,15 @@ const TABS = [
   Import your images at the top of this file like:
     import worldMapImg from '../assets/lore/world-map.jpg';
 */
-const GALLERY = {
+// initial, default gallery data; users can override via the repository
+const DEFAULT_GALLERY = {
   maps: [
     { id: 1, title: 'The Continent of Atria', src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
     { id: 2, title: 'The Shattered Canyon', src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
   ],
   scenes: [
-    { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
-    { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
+    { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.', summary: '' },
+    { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.', summary: '' },
   ],
   locations: [
     {
@@ -48,22 +51,22 @@ const GALLERY = {
       title: 'The City of Qonza',
       src: 'lore/Qonza.webp',
       description: 'Crescent moon city with a cruel justice system.',
-      summary: 'Qonza thrives on strict order, wealth, and carefully guarded status. Most power flows through courts, contracts, and those who can afford both.',
-      region: 'Southern Trade Crescent',
-      governance: 'Magistrate houses and legal guild councils',
-      economy: 'Contract law, caravan tolls, and luxury trade',
-      tensions: 'Class unrest, selective justice, and border corruption',
+      summary: 'Crescent moon city with a cruel justice system.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 2,
       title: 'The City of Williwack',
       src: 'lore/Williwack.jpg',
       description: 'A desert kingdom that borders the World Spear.',
-      summary: 'Williwack stands where scorched routes meet mountain shadow. Survival forged a proud city-state known for discipline and resource control.',
-      region: 'Western Desert Verge',
-      governance: 'Crown-appointed stewards with military oversight',
-      economy: 'Water rights, glasswork, and spear-route caravans',
-      tensions: 'Border skirmishes and drought-year rationing',
+      summary: 'A desert kingdom that borders the World Spear.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 3,
@@ -72,31 +75,31 @@ const GALLERY = {
       description: 'Overview of the Center Kingdom.',
       summary: 'Avalon is a political and religious center where noble influence and temple authority constantly negotiate for control.',
       region: 'Central Kingdom',
-      governance: 'Crown administration with temple arbitration',
-      economy: 'State levies, artisan districts, and temple patronage',
-      tensions: 'Court intrigue, church pressure, and urban crime',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 4,
       title: 'The City of Metlos',
       src: 'lore/Metlos.jpg',
       description: 'Overview of Metlos.',
-      summary: 'Metlos is a fortified industrial city known for foundries, military supply chains, and a ruthless approach to efficiency.',
-      region: 'Ironward Basin',
-      governance: 'Militia council with merchant bloc influence',
-      economy: 'Steelworks, siege craft, and contract labor',
-      tensions: 'Labor strikes and black-market weapons',
+      summary: 'Metlos is a Golden Isles city.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 5,
       title: 'The Village of Orum',
       src: 'lore/orum.png',
       description: 'Overview of Orum.',
-      summary: 'Orum is a small but stubborn settlement that survives by community pacts, hidden trails, and local herbal trade.',
-      region: 'Greenhollow Reach',
-      governance: 'Elder circle and rotating wardens',
-      economy: 'Herbs, timber, and river ferries',
-      tensions: 'Bandit pressure and crop blight seasons',
+      summary: 'Orum is a small but stubborn settlement that holds a very powerful home.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 6,
@@ -104,10 +107,10 @@ const GALLERY = {
       src: 'lore/Buston.jpg',
       description: 'Overview of Buston.',
       summary: 'Buston sits on key roads and acts as a noisy commercial hinge between noble capitals and frontier outposts.',
-      region: 'Northroad Junction',
-      governance: 'Chartered city council',
-      economy: 'Transit tariffs, inns, and warehousing',
-      tensions: 'Guild turf wars and smuggling rings',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 7,
@@ -115,10 +118,10 @@ const GALLERY = {
       src: 'lore/skolpol.jpg',
       description: 'Overview of SkulPol.',
       summary: 'SkulPol is remote, weathered, and in ruins.',
-      region: 'Fogline Hills',
-      governance: 'Clan heads and shrine keepers',
-      economy: 'Hunting, salvage, and seasonal trade',
-      tensions: 'Disappearing travelers and old-feud violence',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
   ],
   factions: [
@@ -169,6 +172,25 @@ const INITIAL_ATRIA_POINTS = [
   { locationId: 6, x: 87.7, y: 22.0 }, // Buston
   { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
 ];
+
+// helper that merges stored edits with defaults
+function mergeGallery(defaultGallery, storedGallery) {
+  if (!storedGallery || typeof storedGallery !== 'object') return defaultGallery;
+  const out = {};
+  TABS.forEach((tab) => {
+    const defaultList = Array.isArray(defaultGallery[tab.id]) ? defaultGallery[tab.id] : [];
+    const storedList = Array.isArray(storedGallery[tab.id]) ? storedGallery[tab.id] : [];
+    const map = new Map(defaultList.map((item) => [item.id, { ...item }]));
+    storedList.forEach((item) => {
+      if (item && item.id != null) {
+        map.set(item.id, { ...map.get(item.id) || {}, ...item });
+      }
+    });
+    out[tab.id] = Array.from(map.values());
+  });
+  return out;
+}
+
 // ─── Sub-components ────────────────────────────────────────────────────────────
 function CornerOrns() {
   return (
@@ -641,6 +663,9 @@ function ImageCard({ item, onClick }) {
 
       <div className={styles.imageCardBody}>
         <div className={styles.imageCardTitle}>{item.title}</div>
+        {item.summary ? (
+          <div className={styles.imageCardSummary}>{item.summary}</div>
+        ) : null}
         <div className={styles.imageCardDesc}>{item.description}</div>
       </div>
     </div>
@@ -653,11 +678,29 @@ function Lightbox({
   onOpenWorldNpcs = () => { },
   onOpenMember = () => { },
   getFactionMembers = () => [],
+  editMode = false,
+  onUpdateItem = () => {},
 }) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, panX: 0, panY: 0 });
+
+  // editing state when editMode is active
+  const [editData, setEditData] = useState(item ? { ...item } : null);
+  useEffect(() => {
+    setEditData(item ? { ...item } : null);
+  }, [item]);
+
+  const handleFieldChange = (field, value) => {
+    setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = () => {
+    if (editData) {
+      onUpdateItem(editData);
+    }
+  };
 
   useEffect(() => {
     if (!item) return;
@@ -677,10 +720,106 @@ function Lightbox({
 
   if (!item) return null;
 
+
   const tab = item._tab || 'maps';
   const isLocation = tab === 'locations';
   const isFaction = tab === 'factions';
   const factionMembers = isFaction ? getFactionMembers(item) : [];
+  const isZoom = !isLocation && !isFaction; // maps & scenes
+
+  const renderEditFields = () => {
+    if (!editMode || !editData) return null;
+    return (
+      <div className={styles.lightboxEditPanel} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Title</label>
+          <input
+            className={styles.editInput}
+            value={editData.title || ''}
+            onChange={(e) => handleFieldChange('title', e.target.value)}
+          />
+        </div>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Summary</label>
+          <textarea
+            className={styles.editTextarea}
+            value={editData.summary || ''}
+            onChange={(e) => handleFieldChange('summary', e.target.value)}
+          />
+        </div>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Description</label>
+          <textarea
+            className={styles.editTextarea}
+            value={editData.description || ''}
+            onChange={(e) => handleFieldChange('description', e.target.value)}
+          />
+        </div>
+        {isLocation && (
+          <>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Region</label>
+              <input
+                className={styles.editInput}
+                value={editData.region || ''}
+                onChange={(e) => handleFieldChange('region', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Governance</label>
+              <input
+                className={styles.editInput}
+                value={editData.governance || ''}
+                onChange={(e) => handleFieldChange('governance', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Economy</label>
+              <input
+                className={styles.editInput}
+                value={editData.economy || ''}
+                onChange={(e) => handleFieldChange('economy', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Tensions</label>
+              <input
+                className={styles.editInput}
+                value={editData.tensions || ''}
+                onChange={(e) => handleFieldChange('tensions', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        {isFaction && (
+          <>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Influence</label>
+              <input
+                className={styles.editInput}
+                value={editData.influence || ''}
+                onChange={(e) => handleFieldChange('influence', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Doctrine</label>
+              <input
+                className={styles.editInput}
+                value={editData.doctrine || ''}
+                onChange={(e) => handleFieldChange('doctrine', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        <button
+          className={`koa-glass-btn koa-interactive-lift ${styles.editSaveBtn}`}
+          onClick={handleSave}
+        >
+          Save
+        </button>
+      </div>
+    );
+  };
 
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const setZoomClamped = (val) => setZoom(clamp(val, 1, 5));
@@ -734,6 +873,7 @@ function Lightbox({
               ✕
             </button>
           </div>
+          {renderEditFields()}
 
           <div
             className={`koa-scrollbar-thin ${styles.lightboxInfoGrid}`}
@@ -758,7 +898,7 @@ function Lightbox({
             <div className={styles.lightboxInfoPanel}>
               <div className={styles.lightboxInfoSummary}>
                 {(item.summary || item.description || '').trim() || 'No summary has been added for this entry yet.'}
-              </div>
+            </div>
 
               <div className={`koa-divider-line ${styles.lightboxInfoDivider}`} />
 
@@ -824,6 +964,9 @@ function Lightbox({
           </div>
 
           <div className={styles.lightboxFooterDesc}>
+            {item.summary && isZoom && (
+              <div className={styles.lightboxInfoSummary}>{item.summary}</div>
+            )}
             {item.description}
           </div>
 
@@ -891,6 +1034,7 @@ function Lightbox({
             >✕</button>
           </div>
         </div>
+        {renderEditFields()}
 
         <div
           onWheel={onWheel}
@@ -948,6 +1092,29 @@ export default function WorldLore({
 }) {
   const [activeTab, setActiveTab] = useState('maps');
   const [lightboxItem, setLightboxItem] = useState(null);
+
+  // important: persistent gallery state with ability to override summary/etc
+  const [gallery, setGallery] = useState(() => {
+    const stored = repository.readJson(STORAGE_KEYS.worldLore, null);
+    const merged = mergeGallery(DEFAULT_GALLERY, stored);
+    // persist defaults on first visit so backup has something meaningful
+    if (!stored) {
+      try { repository.writeJson(STORAGE_KEYS.worldLore, merged); } catch {}
+    }
+    return merged;
+  });
+  const saveGallery = (next) => {
+    setGallery(next);
+    try {
+      repository.writeJson(STORAGE_KEYS.worldLore, next);
+    } catch (e) {
+      // ignore write errors
+      console.warn('failed to save world lore', e);
+    }
+  };
+
+  // when the user toggles edit mode for lore entries
+  const [loreEditMode, setLoreEditMode] = useState(false);
 
   const isActive = panelType === 'worldLore';
 
@@ -1019,6 +1186,15 @@ export default function WorldLore({
     });
 
     return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  };
+
+  const handleUpdateItem = (updated) => {
+    if (!updated || updated.id == null) return;
+    const tab = updated._tab || activeTab;
+    const list = (gallery[tab] || []).map((it) => (it.id === updated.id ? { ...updated } : it));
+    const next = { ...gallery, [tab]: list };
+    saveGallery(next);
+    setLightboxItem({ ...updated, _tab: tab });
   };
 
   const openWorldNpcCodex = ({ search = '', faction = '' } = {}) => {
@@ -1144,7 +1320,7 @@ export default function WorldLore({
   };
 
   const openLocationFromMap = (locationId) => {
-    const picked = GALLERY.locations.find((location) => location.id === locationId);
+    const picked = gallery.locations.find((location) => location.id === locationId);
     if (!picked) return;
     setLightboxItem({ ...picked, _tab: 'locations' });
   };
@@ -1153,12 +1329,14 @@ export default function WorldLore({
     <div className={`${styles.panel} ${isActive ? styles.panelActive : styles.panelInactive}`}>
       <div className={`koa-scrollbar-thin ${styles.worldLoreScrollWrap}`}>
         <div className={styles.worldLoreHeader}>
-          <button
-            onClick={goBack}
-            className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreReturnBtn}`}
-          >
-            ← RETURN
-          </button>
+          <div className={styles.worldLoreHeaderLeft}>
+            <button
+              onClick={goBack}
+              className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreReturnBtn}`}
+            >
+              ← RETURN
+            </button>
+          </div>
 
           <div className={styles.worldLoreTitleWrap}>
             <div className={styles.worldLoreKicker}>
@@ -1174,7 +1352,7 @@ export default function WorldLore({
           <section>
             <SectionDivider label="World Map" />
             <InteractiveAtriaMap
-              locations={GALLERY.locations}
+              locations={gallery.locations}
               onOpenLocation={openLocationFromMap}
             />
           </section>
@@ -1199,7 +1377,7 @@ export default function WorldLore({
             </div>
 
             <div className={styles.galleryGrid}>
-              {GALLERY[activeTab].map((item) => (
+              {(gallery[activeTab] || []).map((item) => (
                 <ImageCard
                   key={item.id}
                   item={item}
@@ -1211,6 +1389,15 @@ export default function WorldLore({
             <div className={styles.tabCaption}>
               {tabDescriptions[activeTab]}
             </div>
+
+            <div className={styles.worldLoreBottomActions}>
+              <button
+                onClick={() => setLoreEditMode((prev) => !prev)}
+                className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
+              >
+                {loreEditMode ? 'DONE EDITING' : 'EDIT LORE'}
+              </button>
+            </div>
           </section>
         </div>
       </div>
@@ -1218,6 +1405,8 @@ export default function WorldLore({
       {/* Lightbox */}
       <Lightbox
         item={lightboxItem}
+        editMode={loreEditMode}
+        onUpdateItem={handleUpdateItem}
         onClose={() => setLightboxItem(null)}
         onOpenWorldNpcs={openWorldNpcCodex}
         onOpenMember={openFactionMemberProfile}

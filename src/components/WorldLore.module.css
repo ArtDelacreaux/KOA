@@ -2,10 +2,10 @@
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   transition: opacity 220ms ease, transform 220ms ease;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .panelActive {
@@ -60,6 +60,36 @@
   border-color: rgba(255, 220, 160, 0.45);
   color: rgba(255, 245, 220, 0.96);
   transform: translateY(-1px);
+}
+
+.worldLoreHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.worldLoreEditBtn {
+  color: rgba(255, 220, 160, 0.8);
+  padding: 9px 18px;
+  border-radius: 14px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 900;
+  backdrop-filter: blur(10px);
+  transition: border-color 150ms ease, color 150ms ease, transform 150ms ease;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.worldLoreEditBtn:hover {
+  border-color: rgba(255, 220, 160, 0.45);
+  color: rgba(255, 245, 220, 0.96);
+  transform: translateY(-1px);
+}
+
+.worldLoreBottomActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
 }
 
 .worldLoreTitleWrap {
@@ -620,6 +650,16 @@
   color: rgba(255, 245, 220, 0.96);
 }
 
+.imageCardSummary {
+  font-size: 11px;
+  color: rgba(255, 245, 220, 0.9);
+  line-height: 1.5;
+  margin-top: 2px;
+  max-height: 3em;
+  overflow: hidden;
+  text-align: center;
+}
+
 .imageCardDesc {
   font-size: 11.5px;
   font-weight: 850;
@@ -855,6 +895,44 @@
   line-height: 1.7;
 }
 
+/* editing helpers */
+.lightboxEditPanel {
+  padding: 12px;
+  border: 1px solid rgba(255,220,160,0.2);
+  background: rgba(0,0,0,0.75);
+  margin-bottom: 12px;
+  border-radius: 10px;
+}
+.editRow {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+.editLabel {
+  font-size: 11px;
+  color: rgba(255,220,160,0.9);
+  margin-bottom: 2px;
+  font-weight: 700;
+}
+.editInput,
+.editTextarea {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: #fff;
+  background: rgba(10,6,4,0.9);
+  border: 1px solid rgba(255,220,160,0.3);
+  border-radius: 4px;
+}
+.editTextarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.editSaveBtn {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
 .factionMembersList {
   display: grid;
   gap: 8px;
@@ -1013,6 +1091,10 @@
 
   .atriaMapCopyStatus {
     margin-left: 0;
+  }
+
+  .worldLoreBottomActions {
+    margin-top: 12px;
   }
 }
 

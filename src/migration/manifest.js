@@ -15,4 +15,6 @@ export const MIGRATION_KEY_SPECS = [
   { id: 'menuNoteCharacters', key: menuNoteKey('characters'), type: 'text', fallback: '' },
   { id: 'menuNoteVideo', key: menuNoteKey('video'), type: 'text', fallback: '' },
   { id: 'menuNoteLore', key: menuNoteKey('lore'), type: 'text', fallback: '' },
+  // world lore (mirrors the default gallery, user edits are stored here)
+  { id: 'worldLore', key: STORAGE_KEYS.worldLore, type: 'json', fallback: { maps: [], scenes: [], locations: [], factions: [] } },
 ];

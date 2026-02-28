@@ -61,10 +61,18 @@ export function summarizeSnapshot(snapshot) {
     return Object.keys(obj).length;
   };
 
+  const worldLorePayload = toSafeObject(payload.worldLore);
+  const worldLoreCount =
+    countArray(worldLorePayload.maps) +
+    countArray(worldLorePayload.scenes) +
+    countArray(worldLorePayload.locations) +
+    countArray(worldLorePayload.factions);
+
   return {
     characters: countArray(payload.characters),
     quests: countArray(payload.quests),
     worldNpcs: countArray(payload.worldNpcs),
+    worldLore: worldLoreCount,
     characterNpcBuckets: countKeys(payload.charNpcs),
     bagItems: countArray(bag.items),
     hasRecap: !!String(launcher.recap || '').trim(),
@@ -74,12 +82,16 @@ export function summarizeSnapshot(snapshot) {
 }
 
 export function formatSnapshotSummary(summary) {
-  return [
+  const items = [
     `${summary.characters} characters`,
     `${summary.quests} quests`,
     `${summary.worldNpcs} world NPCs`,
-    `${summary.bagItems} bag items`,
-  ].join(', ');
+  ];
+  if (summary.worldLore != null) {
+    items.push(`${summary.worldLore} lore entries`);
+  }
+  items.push(`${summary.bagItems} bag items`);
+  return items.join(', ');
 }
 
 export function downloadSnapshotFile(snapshot, options = {}) {
