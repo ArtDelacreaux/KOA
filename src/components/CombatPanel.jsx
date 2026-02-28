@@ -2064,16 +2064,18 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <div className={`${styles.sheetView} koa-scrollbar-thin`}>
                   <div className={styles.sheetTopRow}>
                     <div className={styles.sheetHero}>
-                      <div className={styles.sheetName}>{selected.name}</div>
-                      <div className={styles.sheetMeta}>
-                        {[cleanText(selected.race) || 'Unknown', cleanText(selected.className || selected.role) || 'Unclassified', selected.level === '' || selected.level == null ? 'Level —' : `Level ${selected.level}`].join(' • ')}
-                      </div>
-                      {selected.sourceSheetFileName && (
-                        <div className={styles.sheetImportMeta}>
-                          {selected.sourceSheetFileName}
-                          {selected.sourceSheetFormat ? ` (${selected.sourceSheetFormat.toUpperCase()})` : ''}
+                      <div className={styles.sheetIdentity}>
+                        <div className={styles.sheetName}>{selected.name}</div>
+                        <div className={styles.sheetMeta}>
+                          {[cleanText(selected.race) || 'Unknown', cleanText(selected.className || selected.role) || 'Unclassified', selected.level === '' || selected.level == null ? 'Level —' : `Level ${selected.level}`].join(' • ')}
                         </div>
-                      )}
+                        {selected.sourceSheetFileName && (
+                          <div className={styles.sheetImportMeta}>
+                            {selected.sourceSheetFileName}
+                            {selected.sourceSheetFormat ? ` (${selected.sourceSheetFormat.toUpperCase()})` : ''}
+                          </div>
+                        )}
+                      </div>
                       <div className={styles.sheetHeroVitals}>
                         <div className={styles.sheetHeroVitalsRow}>
                           <div className={styles.sheetHeroHpGroup}>
