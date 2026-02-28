@@ -310,6 +310,21 @@ function normalizeSpellSlots(raw) {
   });
 }
 
+function normalizeFeatureCharges(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry, index) => {
+    const fallbackName = `Feature ${index + 1}`;
+    const source = entry && typeof entry === 'object' ? entry : {};
+    const id = cleanText(source.id) || `feature-${index + 1}`;
+    const hasCustomName = Object.prototype.hasOwnProperty.call(source, 'name') || Object.prototype.hasOwnProperty.call(source, 'label');
+    const name = hasCustomName ? String(source.name ?? source.label ?? '') : fallbackName;
+    const max = clamp(toInt(source.max ?? source.charges, 0), 0, 20);
+    const fallbackCurrent = source.current ?? source.remaining ?? max;
+    const current = clamp(toInt(fallbackCurrent, max), 0, max);
+    return { id, name, max, current };
+  });
+}
+
 function spellLevelLabel(level) {
   const n = clamp(toInt(level, 1), 1, 9);
   if (n === 1) return '1ST';
@@ -606,6 +621,7 @@ function normalizeSheetProfile(raw) {
     spellList: normalizeStringList(raw?.spellList),
     classFeatures: normalizeFeatureList(raw?.classFeatures),
     spellSlots: normalizeSpellSlots(raw?.spellSlots),
+    featureCharges: normalizeFeatureCharges(raw?.featureCharges),
     equipmentItems: normalizeStringList(raw?.equipmentItems),
     otherPossessions: normalizeStringList(raw?.otherPossessions),
     sourceSheet: !!raw?.sourceSheet,
@@ -697,6 +713,7 @@ function normalize(enc) {
     concentration: c.concentration || '',
     notes: c.notes || '',
     spellSlots: normalizeSpellSlots(c.spellSlots),
+    featureCharges: normalizeFeatureCharges(c.featureCharges),
     equipmentItems: normalizeStringList(c.equipmentItems),
     otherPossessions: normalizeStringList(c.otherPossessions),
     sourceSheet: !!c.sourceSheet,
@@ -1173,6 +1190,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     () => allSpellSlots.filter((slot) => Number(slot.max) > 0),
     [allSpellSlots]
   );
+  const allFeatureCharges = useMemo(
+    () => normalizeFeatureCharges(selected?.featureCharges),
+    [selected]
+  );
+  const visibleSheetFeatureCharges = useMemo(
+    () => allFeatureCharges.filter((feature) => Number(feature.max) > 0),
+    [allFeatureCharges]
+  );
   const initiativeSlots = useMemo(() => {
     if (!combatants.length) return [null, null, null];
     const safeActive = clamp(encounter.activeIndex, 0, combatants.length - 1);
@@ -1248,7 +1273,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       senses: [],
       spellList: [],
       classFeatures: [],
-      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -1282,7 +1307,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       senses: [],
       spellList: [],
       classFeatures: [],
-      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), dead:false,
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -1439,6 +1464,55 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     });
   };
 
+  const setFeatureChargeField = (id, patch) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const nextCharges = charges.map((charge) => {
+      if (charge.id !== id) return charge;
+      const merged = typeof patch === 'function' ? patch(charge) : { ...charge, ...patch };
+      return {
+        id: charge.id,
+        name: cleanText(merged.name) || charge.name,
+        max: clamp(toInt(merged.max, charge.max), 0, 20),
+        current: clamp(toInt(merged.current, charge.current), 0, clamp(toInt(merged.max, charge.max), 0, 20)),
+      };
+    });
+    setSelectedField({ featureCharges: nextCharges });
+  };
+
+  const addFeatureCharge = () => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const id = createId('feature');
+    const next = [...charges, { id, name: `Feature ${charges.length + 1}`, max: 0, current: 0 }];
+    setSelectedField({ featureCharges: next });
+  };
+
+  const removeFeatureCharge = (id) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    setSelectedField({ featureCharges: charges.filter((charge) => charge.id !== id) });
+  };
+
+  const nudgeFeatureChargeMax = (id, delta) => {
+    setFeatureChargeField(id, (charge) => ({ ...charge, max: charge.max + delta }));
+  };
+
+  const setFeatureChargesFromBox = (id, boxIndex) => {
+    setFeatureChargeField(id, (charge) => {
+      const clickedValue = boxIndex + 1;
+      const nextCurrent = clickedValue === charge.current ? clickedValue - 1 : clickedValue;
+      return { ...charge, current: nextCurrent };
+    });
+  };
+
+  const updateFeatureChargeName = (id, rawName) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const next = charges.map((charge) => (charge.id === id ? { ...charge, name: String(rawName || '') } : charge));
+    setSelectedField({ featureCharges: next });
+  };
+
   const longRestSelected = () => {
     if (!selected) return;
     const maxHP = selected.maxHP === '' ? '' : toInt(selected.maxHP, 0);
@@ -1446,6 +1520,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     const nextSpellSlots = normalizeSpellSlots(selected.spellSlots).map((slot) => ({
       ...slot,
       current: slot.max,
+    }));
+    const nextFeatureCharges = normalizeFeatureCharges(selected.featureCharges).map((feature) => ({
+      ...feature,
+      current: feature.max,
     }));
 
     setStatusDraft('');
@@ -1455,6 +1533,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       status: [],
       concentration: '',
       spellSlots: nextSpellSlots,
+      featureCharges: nextFeatureCharges,
     });
   };
 
@@ -2038,11 +2117,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>Edit</button>
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}>
-                        {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
-                      </button>
-                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   ) : (
                     <>
@@ -2058,6 +2132,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </>
                   )}
                 </div>
+                {editorMode === 'sheet' && (
+                  <button
+                    className={btnClass('danger', 'sm', styles.editorCloseButton, styles.sheetHeaderCloseButton)}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); setEditorOpen(false); }}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {editorMode === 'sheet' && (
@@ -2113,37 +2196,73 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
                           </div>
                         </div>
-                        <div className={styles.combatToolGroup}>
-                          <div className={styles.label}>Spell Slots</div>
-                          <div className={styles.spellSlotsReadGrid}>
-                            {visibleSheetSpellSlots.length === 0 ? (
-                              <div className={styles.sheetListFallback}>No spell slots set.</div>
-                            ) : (
-                              visibleSheetSpellSlots.map((slot) => {
-                                const shownBoxes = Math.max(slot.max, 0);
-                                return (
-                                  <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
-                                    <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
-                                    <div className={styles.spellSlotsReadBoxes}>
-                                      {Array.from({ length: shownBoxes }).map((_, i) => (
-                                        <button
-                                          type="button"
-                                          key={`sheet-slot-box-${slot.level}-${i}`}
-                                          className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
-                                            i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
-                                          }`}
-                                          onMouseEnter={playHover}
-                                          onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
-                                          aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                          title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                        />
-                                      ))}
+                        <div className={styles.sheetToolsResourceGrid}>
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>Feature Charges</div>
+                            <div className={styles.spellSlotsReadGrid}>
+                              {visibleSheetFeatureCharges.length === 0 ? (
+                                <div className={styles.sheetListFallback}>No feature charges set.</div>
+                              ) : (
+                                visibleSheetFeatureCharges.map((feature) => {
+                                  const shownBoxes = Math.max(feature.max, 0);
+                                  return (
+                                    <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
+                                      <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
+                                      <div className={styles.spellSlotsReadBoxes}>
+                                        {Array.from({ length: shownBoxes }).map((_, i) => (
+                                          <button
+                                            type="button"
+                                            key={`sheet-feature-box-${feature.id}-${i}`}
+                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                              i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                            }`}
+                                            onMouseEnter={playHover}
+                                            onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
+                                            aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                            title={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
                                     </div>
-                                    <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
-                                  </div>
-                                );
-                              })
-                            )}
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>Spell Slots</div>
+                            <div className={styles.spellSlotsReadGrid}>
+                              {visibleSheetSpellSlots.length === 0 ? (
+                                <div className={styles.sheetListFallback}>No spell slots set.</div>
+                              ) : (
+                                visibleSheetSpellSlots.map((slot) => {
+                                  const shownBoxes = Math.max(slot.max, 0);
+                                  return (
+                                    <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
+                                      <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
+                                      <div className={styles.spellSlotsReadBoxes}>
+                                        {Array.from({ length: shownBoxes }).map((_, i) => (
+                                          <button
+                                            type="button"
+                                            key={`sheet-slot-box-${slot.level}-${i}`}
+                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                              i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                            }`}
+                                            onMouseEnter={playHover}
+                                            onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
+                                            aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                            title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2191,6 +2310,32 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
                         <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
                         <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetCard}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
+                      <div className={styles.sheetStatRows}>
+                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
+                          <div
+                            key={skillRow.id}
+                            className={`${styles.sheetStatRow} ${
+                              skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                            }`}
+                          >
+                            <div className={styles.sheetStatMain}>
+                              <span
+                                className={`${styles.sheetStatTag} ${
+                                  skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                }`}
+                              >
+                                {skillRow.ability}
+                              </span>
+                              <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
+                            </div>
+                            <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
+                          </div>
+                        )) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
                       </div>
                     </div>
 
@@ -2243,32 +2388,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       </div>
                     </div>
 
-                    <div className={styles.sheetCard}>
-                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
-                      <div className={styles.sheetStatRows}>
-                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
-                          <div
-                            key={skillRow.id}
-                            className={`${styles.sheetStatRow} ${
-                              skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
-                            }`}
-                          >
-                            <div className={styles.sheetStatMain}>
-                              <span
-                                className={`${styles.sheetStatTag} ${
-                                  skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
-                                }`}
-                              >
-                                {skillRow.ability}
-                              </span>
-                              <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
-                            </div>
-                            <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
-                          </div>
-                        )) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
-                      </div>
-                    </div>
-
+                  </div>
+                  <div className={styles.sheetBottomActions}>
+                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
+                      Edit
+                    </button>
                   </div>
                 </div>
               )}
@@ -2289,7 +2413,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   
                   <div className={styles.appearanceGrid}>
                     <div className={styles.appearanceCol}>
-                   
                       <div className={styles.uploadRow}>
                         {/* Preview circle */}
                         {selected.customImage && (
@@ -2323,30 +2446,88 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
 
-                    <div className={styles.combatToolsCard}>
-                      <div className={styles.toolsTitle}>Spell Slots</div>
-                      <div className={`${styles.spellSlotsEditGrid} koa-scrollbar-thin`}>
-                        {SPELL_SLOT_LEVELS.map((level) => {
-                          const slot = allSpellSlots.find((entry) => entry.level === level) || { level, max: 0, current: 0 };
-                          return (
-                            <div key={`edit-slot-${level}`} className={styles.spellSlotsEditRow}>
-                              <div className={styles.spellSlotsEditLevel}>{spellLevelLabel(level)} Level</div>
-                              <div className={styles.spellSlotsTrack}>
-                                <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
-                                <div className={styles.spellSlotsEditActions}>
-                                  <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, -1); }}>
-                                    -
-                                  </button>
-                                  <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, 1); }}>
-                                    +
-                                  </button>
-                                </div>
-                              </div>
+                <div className={`${styles.sectionTopGap} ${styles.editToolsGrid}`}>
+                  <div className={`${styles.combatToolsCard} ${styles.featureChargesCard}`}>
+                    <div className={styles.toolsTitle}>Feature Charges</div>
+                    <div className={`${styles.featureChargesGrid} koa-scrollbar-thin`}>
+                      {allFeatureCharges.length === 0 ? (
+                        <div className={styles.sheetListFallback}>No feature charges added.</div>
+                      ) : (
+                        allFeatureCharges.map((feature) => (
+                          <div key={feature.id} className={styles.featureChargeRow}>
+                            <input
+                              className={`${styles.input} ${styles.featureChargeNameInput}`}
+                              value={feature.name}
+                              placeholder="Feature name"
+                              onChange={(e) => updateFeatureChargeName(feature.id, e.target.value)}
+                            />
+                            <div className={styles.featureChargeControls}>
+                              <button
+                                type="button"
+                                className={btnClass('ghost', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); nudgeFeatureChargeMax(feature.id, -1); }}
+                              >
+                                -
+                              </button>
+                              <button
+                                type="button"
+                                className={btnClass('gold', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); nudgeFeatureChargeMax(feature.id, 1); }}
+                              >
+                                +
+                              </button>
+                              <span className={styles.spellSlotsEditCount}>{feature.max}</span>
+                              <button
+                                type="button"
+                                className={btnClass('danger', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); removeFeatureCharge(feature.id); }}
+                                title="Delete feature"
+                              >
+                                X
+                              </button>
                             </div>
-                          );
-                        })}
-                      </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className={btnClass('ghost', 'sm', styles.featureChargeAddBtn)}
+                      onMouseEnter={playHover}
+                      onClick={() => { playNav(); addFeatureCharge(); }}
+                    >
+                      + Add Feature
+                    </button>
+                  </div>
+
+                  <div className={`${styles.combatToolsCard} ${styles.spellSlotsEditCard}`}>
+                    <div className={styles.toolsTitle}>Spell Slots</div>
+                    <div className={`${styles.spellSlotsEditGrid} koa-scrollbar-thin`}>
+                      {SPELL_SLOT_LEVELS.map((level) => {
+                        const slot = allSpellSlots.find((entry) => entry.level === level) || { level, max: 0, current: 0 };
+                        return (
+                          <div key={`edit-slot-${level}`} className={styles.spellSlotsEditRow}>
+                            <div className={styles.spellSlotsEditLevel} title={`${spellLevelLabel(level)} Level`}>{level}</div>
+                            <div className={styles.spellSlotsTrack}>
+                              <div className={styles.spellSlotsEditActions}>
+                                <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, -1); }}>
+                                  -
+                                </button>
+                                <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, 1); }}>
+                                  +
+                                </button>
+                              </div>
+                              <span className={styles.spellSlotsEditCount}>{slot.max}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

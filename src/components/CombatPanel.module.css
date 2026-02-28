@@ -961,6 +961,7 @@
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 220, 160, 0.09);
+  position: relative;
 }
 
 .editorHeaderActions {
@@ -978,6 +979,7 @@
 
 .sheetHeaderActions {
   gap: 6px;
+  padding-right: 44px;
 }
 
 .sheetHeaderActions button {
@@ -989,6 +991,12 @@
   width: 34px;
   padding-left: 0 !important;
   padding-right: 0 !important;
+}
+
+.sheetHeaderCloseButton {
+  position: absolute;
+  top: 8px;
+  right: 12px;
 }
 
 .modalTitle {
@@ -1056,6 +1064,14 @@
 .sheetView {
   padding: 14px;
   overflow-y: auto;
+}
+
+.sheetBottomActions {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 220, 160, 0.1);
+  display: flex;
+  justify-content: flex-end;
 }
 
 .sheetTopRow {
@@ -1642,12 +1658,19 @@
 
 .appearanceGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
 .appearanceCol {
   min-width: 0;
+}
+
+.editToolsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 .combatToolsCard {
@@ -1694,6 +1717,30 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.sheetToolsResourceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.featureChargesReadRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.featureChargesReadRow .spellSlotsReadLevel {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.2;
+  padding-right: 8px;
+}
+
+.featureChargesReadRow .spellSlotsReadBoxes {
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .combatToolsCardCompact .hpAdjustRow {
@@ -2054,6 +2101,120 @@
   gap: 4px;
 }
 
+.spellSlotsEditCount {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: rgba(255, 220, 160, 0.06);
+  color: rgba(255, 240, 210, 0.9);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.spellSlotsEditCard {
+  padding: 8px;
+  gap: 6px;
+}
+
+.spellSlotsEditCard .toolsTitle {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.spellSlotsEditCard .spellSlotsEditGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 4px;
+  max-height: 228px;
+}
+
+.spellSlotsEditCard .spellSlotsEditRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  align-items: center;
+}
+
+.spellSlotsEditCard .spellSlotsEditLevel {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spellSlotsEditCard .spellSlotsTrack {
+  gap: 6px;
+  justify-content: flex-start;
+}
+
+.spellSlotsEditCard .spellSlotsEditActions {
+  gap: 3px;
+}
+
+.spellSlotsEditCard .toolMiniBtn {
+  min-width: 40px;
+  height: 24px;
+  padding: 0 6px;
+}
+
+.featureChargesCard {
+  padding: 8px;
+  gap: 6px;
+}
+
+.featureChargesCard .toolsTitle {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.featureChargesGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 228px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.featureChargeRow {
+  border-radius: 8px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 4px 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.featureChargeNameInput {
+  height: 24px;
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.featureChargeControls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.featureChargesCard .toolMiniBtn {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 4px;
+}
+
+.featureChargeAddBtn {
+  align-self: flex-start;
+}
+
 .uploadRow {
   display: flex;
   align-items: center;
@@ -2266,6 +2427,10 @@
     grid-template-columns: 1fr;
   }
 
+  .editToolsGrid {
+    grid-template-columns: 1fr;
+  }
+
   .sheetSectionGrid {
     grid-template-columns: 1fr;
   }
@@ -2290,6 +2455,10 @@
 
   .sheetToolsTopRow {
     justify-content: center;
+  }
+
+  .sheetToolsResourceGrid {
+    grid-template-columns: 1fr;
   }
 
   .spellSlotsEditGrid {
