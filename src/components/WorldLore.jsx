@@ -161,6 +161,14 @@ const DEFAULT_GALLERY = {
   ],
 };
 
+const DEFAULT_IDS_BY_TAB = TABS.reduce((acc, tab) => {
+  acc[tab.id] = new Set(
+    (Array.isArray(DEFAULT_GALLERY[tab.id]) ? DEFAULT_GALLERY[tab.id] : [])
+      .map((item) => String(item?.id))
+  );
+  return acc;
+}, {});
+
 const ATRIA_MAP_SRC = 'lore/world-map.jpg';
 const ATRIA_MAP_ASPECT = '4 / 3'; // world-map.jpg is 2048x1536
 const INITIAL_ATRIA_POINTS = [
@@ -680,6 +688,8 @@ function Lightbox({
   getFactionMembers = () => [],
   editMode = false,
   onUpdateItem = () => { },
+  canDeleteItem = () => false,
+  onDeleteItem = () => { },
 }) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -700,6 +710,13 @@ function Lightbox({
     if (editData) {
       onUpdateItem(editData);
     }
+  };
+  const handleDelete = () => {
+    if (!editData || !canDeleteItem(editData)) return;
+    const title = (editData.title || 'this entry').trim();
+    const confirmed = window.confirm(`Delete "${title}"? This cannot be undone.`);
+    if (!confirmed) return;
+    onDeleteItem(editData);
   };
 
   useEffect(() => {
@@ -729,6 +746,7 @@ function Lightbox({
 
   const renderEditFields = () => {
     if (!editMode || !editData) return null;
+    const canDelete = canDeleteItem(editData);
     return (
       <div className={styles.lightboxEditPanel} onClick={(e) => e.stopPropagation()}>
         <div className={styles.editRow}>
@@ -811,12 +829,22 @@ function Lightbox({
             </div>
           </>
         )}
-        <button
-          className={`koa-glass-btn koa-interactive-lift ${styles.editSaveBtn}`}
-          onClick={handleSave}
-        >
-          Save
-        </button>
+        <div className={styles.editActionRow}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.editSaveBtn}`}
+            onClick={handleSave}
+          >
+            Save
+          </button>
+          {canDelete && (
+            <button
+              className={`koa-glass-btn koa-interactive-lift ${styles.editDeleteBtn}`}
+              onClick={handleDelete}
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     );
   };
@@ -1318,6 +1346,85 @@ export default function WorldLore({
     locations: 'Places of interest, wonder, and danger throughout the realm.',
     factions: 'Power blocs, sects, and alliances that shape the realm.',
   };
+  const tabSingularLabels = {
+    maps: 'Map',
+    scenes: 'Scene',
+    locations: 'Location',
+    factions: 'Faction',
+  };
+
+  const isUserAddedItem = (tab, item) => {
+    if (!item || item.id == null) return false;
+    if (item.userAdded === true) return true;
+    const defaults = DEFAULT_IDS_BY_TAB[tab] || new Set();
+    return !defaults.has(String(item.id));
+  };
+
+  const buildNewItem = (tab, id) => {
+    const base = {
+      id,
+      title: `New ${tabSingularLabels[tab] || 'Entry'}`,
+      src: '',
+      summary: '',
+      description: '',
+      userAdded: true,
+    };
+    if (tab === 'locations') {
+      return {
+        ...base,
+        region: 'Unknown',
+        governance: 'Unknown',
+        economy: 'Unknown',
+        tensions: 'Unknown',
+      };
+    }
+    if (tab === 'factions') {
+      return {
+        ...base,
+        influence: 'Unknown',
+        doctrine: 'Unknown',
+        factionKeys: [],
+        memberHints: [],
+      };
+    }
+    return base;
+  };
+
+  const handleAddItem = () => {
+    const tab = activeTab;
+    const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
+    const nextId = currentList.reduce((maxId, item) => {
+      const numericId = Number(item?.id);
+      return Number.isFinite(numericId) ? Math.max(maxId, numericId) : maxId;
+    }, 0) + 1;
+
+    const nextItem = buildNewItem(tab, nextId);
+    const nextGallery = {
+      ...gallery,
+      [tab]: [...currentList, nextItem],
+    };
+
+    saveGallery(nextGallery);
+    setLightboxItem({ ...nextItem, _tab: tab });
+  };
+
+  const handleDeleteItem = (candidate) => {
+    if (!candidate || candidate.id == null) return;
+    const tab = candidate._tab || activeTab;
+    if (!isUserAddedItem(tab, candidate)) return;
+
+    const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
+    const nextList = currentList.filter((item) => String(item?.id) !== String(candidate.id));
+    if (nextList.length === currentList.length) return;
+
+    saveGallery({ ...gallery, [tab]: nextList });
+    setLightboxItem((prev) => {
+      if (!prev) return prev;
+      const prevTab = prev._tab || tab;
+      if (prevTab !== tab) return prev;
+      return String(prev.id) === String(candidate.id) ? null : prev;
+    });
+  };
 
   const openLocationFromMap = (locationId) => {
     const picked = gallery.locations.find((location) => location.id === locationId);
@@ -1391,6 +1498,14 @@ export default function WorldLore({
             </div>
 
             <div className={styles.worldLoreBottomActions}>
+              {loreEditMode && (
+                <button
+                  onClick={handleAddItem}
+                  className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
+                >
+                  {`ADD ${tabSingularLabels[activeTab].toUpperCase()}`}
+                </button>
+              )}
               <button
                 onClick={() => setLoreEditMode((prev) => !prev)}
                 className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
@@ -1407,6 +1522,8 @@ export default function WorldLore({
         item={lightboxItem}
         editMode={loreEditMode}
         onUpdateItem={handleUpdateItem}
+        canDeleteItem={(entry) => isUserAddedItem(entry?._tab || activeTab, entry)}
+        onDeleteItem={handleDeleteItem}
         onClose={() => setLightboxItem(null)}
         onOpenWorldNpcs={openWorldNpcCodex}
         onOpenMember={openFactionMemberProfile}
