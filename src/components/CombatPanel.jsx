@@ -2323,24 +2323,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </div>
 
                     <div className={styles.combatToolsCard}>
-                      <div className={styles.toolsTitle}>Combat Tools</div>
-                      <div className={styles.hpQuickRowNoLabel}>
-                        <input
-                          className={`${styles.input} ${styles.compactInput}`}
-                          inputMode="numeric"
-                          maxLength={4}
-                          value={hpAdjustAmount}
-                          onChange={(e) => setHpAdjustAmount(e.target.value)}
-                          placeholder="0"
-                        />
-                        <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>
-                          -
-                        </button>
-                        <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>
-                          +
-                        </button>
-                      </div>
-                      <div className={styles.toolsDivider}/>
+                      <div className={styles.toolsTitle}>Spell Slots</div>
                       <div className={`${styles.spellSlotsEditGrid} koa-scrollbar-thin`}>
                         {SPELL_SLOT_LEVELS.map((level) => {
                           const slot = allSpellSlots.find((entry) => entry.level === level) || { level, max: 0, current: 0 };
@@ -2348,24 +2331,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             <div key={`edit-slot-${level}`} className={styles.spellSlotsEditRow}>
                               <div className={styles.spellSlotsEditLevel}>{spellLevelLabel(level)} Level</div>
                               <div className={styles.spellSlotsTrack}>
-                                <div className={styles.spellSlotsTrackBoxes}>
-                                  {slot.max <= 0 ? (
-                                    <span className={styles.slotBoxHint}>No slots</span>
-                                  ) : (
-                                    Array.from({ length: slot.max }).map((_, boxIndex) => {
-                                      const activeBox = boxIndex < slot.current;
-                                      return (
-                                        <button
-                                          key={`edit-slot-box-${level}-${boxIndex}`}
-                                          type="button"
-                                          className={`${styles.slotBox} ${activeBox ? styles.slotBoxActive : styles.slotBoxInactive}`}
-                                          onMouseEnter={playHover}
-                                          onClick={() => { playNav(); setSpellSlotsFromBox(level, boxIndex); }}
-                                        />
-                                      );
-                                    })
-                                  )}
-                                </div>
                                 <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
                                 <div className={styles.spellSlotsEditActions}>
                                   <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, -1); }}>

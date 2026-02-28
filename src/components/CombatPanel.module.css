@@ -2026,29 +2026,15 @@
 }
 
 .spellSlotsTrack {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 6px;
-}
-
-.spellSlotsTrackBoxes {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 .spellSlotsEditActions {
   display: flex;
   gap: 4px;
-}
-
-.hpQuickRowNoLabel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 6px;
-  align-items: center;
 }
 
 .uploadRow {
