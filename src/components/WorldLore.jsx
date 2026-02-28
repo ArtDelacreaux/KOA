@@ -877,10 +877,7 @@ function Lightbox({
 
   if (isLocation || isFaction) {
     return (
-      <div
-        onClick={onClose}
-        className={styles.lightboxOverlay}
-      >
+      <div className={styles.lightboxOverlay}>
         <div
           onClick={(e) => e.stopPropagation()}
           className={`${styles.lightboxCard} ${styles.lightboxInfoCard}`}
@@ -1004,14 +1001,13 @@ function Lightbox({
     );
   }
 
-  return (
-    <div
-      onClick={onClose}
-      onMouseMove={moveDrag}
-      onMouseUp={endDrag}
-      onMouseLeave={endDrag}
-      className={styles.lightboxOverlay}
-    >
+    return (
+      <div
+        onMouseMove={moveDrag}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        className={styles.lightboxOverlay}
+      >
       <div
         onClick={e => e.stopPropagation()}
         className={`${styles.lightboxCard} ${styles.lightboxZoomCard}`}

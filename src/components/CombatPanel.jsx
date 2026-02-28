@@ -1926,7 +1926,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── ADD MODAL ── */}
         {addModalOpen && (
-          <div className={styles.modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setAddModalOpen(false); }}>
+          <div className={styles.modalBack}>
             <div className={`${styles.modalCard} ${styles.addModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>Add Combatants</div>
@@ -2027,7 +2027,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── EDITOR MODAL ── */}
         {editorOpen && selected && (
-          <div className={styles.modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
+          <div className={styles.modalBack}>
             <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal}`}>
               <div className={styles.editorHeader}>
                 <div className={styles.editorTitle}>
@@ -2458,7 +2458,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         )}
 
         {sheetImportState.running && editorOpen && selected && sheetImportState.targetId === selected.id && (
-          <div className={styles.modalBack} onMouseDown={(e) => { if (e.target === e.currentTarget) cancelSheetImport(); }}>
+          <div className={styles.modalBack}>
             <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>Importing Character Sheet</div>
@@ -2477,7 +2477,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         )}
 
         {editorOpen && selected && listEditorMode && (
-          <div className={styles.modalBack} onMouseDown={(e) => { if (e.target === e.currentTarget) setListEditorMode(''); }}>
+          <div className={styles.modalBack}>
             <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
@@ -2509,8 +2509,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── IMAGE CROP MODAL ── */}
         {cropOpen && (
-          <div className={`${styles.modalBack} ${styles.modalBackCrop}`}
-            onMouseDown={e => { if (e.target===e.currentTarget) setCropOpen(false); }}>
+          <div className={`${styles.modalBack} ${styles.modalBackCrop}`}>
             <div className={styles.cropModal}>
               {/* Header */}
               <div className={`${styles.modalHeader} ${styles.modalHeaderCrop}`}>

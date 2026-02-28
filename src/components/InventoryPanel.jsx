@@ -460,12 +460,7 @@ export default function InventoryPanel({
         </div>
 
         {modalOpen && (
-          <div
-            className={styles.modalOverlay}
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setModalOpen(false);
-            }}
-          >
+          <div className={styles.modalOverlay}>
             <div className={styles.modalCard}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{editingId ? 'Edit Item' : 'Add Item'}</div>

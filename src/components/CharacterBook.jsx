@@ -1974,10 +1974,7 @@ export default function CharacterBook({
 
         {/* CONNECTION WEB MODAL */}
         {connectionWebModalOpen && (
-          <div
-            className={`${styles.modalOverlay} ${styles.modalZ31}`}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setConnectionWebModalOpen(false); }}
-          >
+          <div className={`${styles.modalOverlay} ${styles.modalZ31}`}>
             <div className={`${styles.modalShell} ${styles.modalShellConn}`}>
               <div className={styles.modalHeader}>
                 <div>
@@ -2048,10 +2045,7 @@ export default function CharacterBook({
 
         {/* CHARACTER NPC MODAL */}
         {charNpcModalOpen && (
-          <div
-            className={`${styles.modalOverlay} ${styles.modalZ32}`}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) closeCharNpcModal(); }}
-          >
+          <div className={`${styles.modalOverlay} ${styles.modalZ32}`}>
             <div className={`${styles.modalShell} ${styles.modalShellChar}`}>
               <div className={styles.modalHeader}>
                 <div>
@@ -2219,10 +2213,7 @@ export default function CharacterBook({
 
         {/* WORLD NPC MODAL */}
         {worldNpcModalOpen && (
-          <div
-            className={`${styles.modalOverlay} ${styles.modalOverlaySoft} ${styles.modalZ30}`}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcModalOpen(false); }}
-          >
+          <div className={`${styles.modalOverlay} ${styles.modalOverlaySoft} ${styles.modalZ30}`}>
             <div className={`${styles.modalShell} ${styles.modalShellWorld}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle17}>{editingWorldNpcId ? 'Edit World NPC' : 'Add World NPC'}</div>
@@ -2454,11 +2445,8 @@ export default function CharacterBook({
 
 
               {/* WORLD NPC IMAGE CROP */}
-              {worldNpcCropOpen && (
-                <div
-                  className={`${styles.modalOverlay} ${styles.modalZ40}`}
-                  onMouseDown={(e) => { if (e.target === e.currentTarget) setWorldNpcCropOpen(false); }}
-                >
+                {worldNpcCropOpen && (
+                  <div className={`${styles.modalOverlay} ${styles.modalZ40}`}>
                   <div className={`${styles.modalShell} ${styles.modalShellCrop}`}>
                     <div className={styles.modalHeader}>
                       <div className={styles.modalTitle16}>Crop Image</div>

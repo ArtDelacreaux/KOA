@@ -380,6 +380,11 @@ function parseJsonSheet(jsonText) {
 function detectSectionLabel(line) {
   const normalized = normalizeKey(line.split(':')[0]);
   if (['spells', 'spelllist', 'spellbook'].includes(normalized)) return 'spells';
+
+  const headerText = line.replace(/=/g, '').trim();
+  const headerNormalized = headerText.replace(/\s+/g, ' ').toLowerCase();
+  if (/^cantrips?$/i.test(headerNormalized)) return 'spells';
+  if (/^\d+(?:st|nd|rd|th)?\s+level\b/i.test(headerNormalized)) return 'spells';
   if (['abilities', 'features', 'traits', 'specialabilities'].includes(normalized)) return 'abilities';
   if (['equipment', 'inventory', 'gear', 'items'].includes(normalized)) return 'equipment';
   if (['otherpossessions', 'possessions', 'miscitems', 'treasure'].includes(normalized)) return 'otherPossessions';
@@ -900,6 +905,7 @@ function mapPdfFormPairsToParsed(pairs) {
       }
     }
     if (key.startsWith('spells')) spellLines.push(cleanValue);
+    if (/^spellname/i.test(key)) spellLines.push(cleanValue);
   }
 
   const normalizedOtherPossessions = uniqueKeepOrder(otherPossessionsLines);

@@ -763,10 +763,7 @@ export default function CampaignHub(props) {
 
         {/* ========== QUEST MODAL ========== */}
         {questModalOpen && (
-          <div
-            className={styles.modalOverlay}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setQuestModalOpen(false); }}
-          >
+          <div className={styles.modalOverlay}>
             <div className={`${styles.modalCard} ${styles.questModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{editingQuestId ? 'Edit Quest' : 'Add Quest'}</div>
@@ -802,10 +799,7 @@ export default function CampaignHub(props) {
 
         {/* ========== INVENTORY MODAL ========== */}
         {invModalOpen && (
-          <div
-            className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}
-            onMouseDown={(e) => { if (e.target === e.currentTarget) setInvModalOpen(false); }}
-          >
+          <div className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}>
             <div className={`${styles.modalCard} ${styles.inventoryModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{invEditingId ? 'Edit Item' : 'Add Item'}</div>
