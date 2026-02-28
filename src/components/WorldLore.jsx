@@ -679,7 +679,7 @@ function Lightbox({
   onOpenMember = () => { },
   getFactionMembers = () => [],
   editMode = false,
-  onUpdateItem = () => {},
+  onUpdateItem = () => { },
 }) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -898,7 +898,7 @@ function Lightbox({
             <div className={styles.lightboxInfoPanel}>
               <div className={styles.lightboxInfoSummary}>
                 {(item.summary || item.description || '').trim() || 'No summary has been added for this entry yet.'}
-            </div>
+              </div>
 
               <div className={`koa-divider-line ${styles.lightboxInfoDivider}`} />
 
@@ -1099,7 +1099,7 @@ export default function WorldLore({
     const merged = mergeGallery(DEFAULT_GALLERY, stored);
     // persist defaults on first visit so backup has something meaningful
     if (!stored) {
-      try { repository.writeJson(STORAGE_KEYS.worldLore, merged); } catch {}
+      try { repository.writeJson(STORAGE_KEYS.worldLore, merged); } catch { }
     }
     return merged;
   });

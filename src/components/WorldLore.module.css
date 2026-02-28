@@ -898,36 +898,41 @@
 /* editing helpers */
 .lightboxEditPanel {
   padding: 12px;
-  border: 1px solid rgba(255,220,160,0.2);
-  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(0, 0, 0, 0.75);
   margin-bottom: 12px;
   border-radius: 10px;
 }
+
 .editRow {
   display: flex;
   flex-direction: column;
   margin-bottom: 8px;
 }
+
 .editLabel {
   font-size: 11px;
-  color: rgba(255,220,160,0.9);
+  color: rgba(255, 220, 160, 0.9);
   margin-bottom: 2px;
   font-weight: 700;
 }
+
 .editInput,
 .editTextarea {
   width: 100%;
   padding: 4px 6px;
   font-size: 13px;
   color: #fff;
-  background: rgba(10,6,4,0.9);
-  border: 1px solid rgba(255,220,160,0.3);
+  background: rgba(10, 6, 4, 0.9);
+  border: 1px solid rgba(255, 220, 160, 0.3);
   border-radius: 4px;
 }
+
 .editTextarea {
   resize: vertical;
   min-height: 60px;
 }
+
 .editSaveBtn {
   margin-top: 8px;
   font-size: 12px;
