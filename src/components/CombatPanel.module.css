@@ -951,6 +951,13 @@
   border-bottom: 1px solid rgba(255, 220, 160, 0.09);
 }
 
+.modalHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .modalHeaderCrop {
   height: 50px;
 }

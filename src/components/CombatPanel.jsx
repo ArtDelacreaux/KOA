@@ -2450,6 +2450,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <div className={`${styles.editorHeaderActions} ${editorMode === 'sheet' ? styles.sheetHeaderActions : ''}`}>
                   {editorMode === 'sheet' ? (
                     <>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
+                        Edit
+                      </button>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
                       <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>Long Rest</button>
@@ -2767,11 +2770,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     </div>
 
                   </div>
-                  <div className={styles.sheetBottomActions}>
-                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
-                      Edit
-                    </button>
-                  </div>
                 </div>
               )}
 
@@ -3002,9 +3000,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
-                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setFeatureRawEditorOpen(false); setListEditorMode(''); }}>
-                  Close
-                </button>
+                <div className={styles.modalHeaderActions}>
+                  {listEditorMode === 'features' && (
+                    <button
+                      type="button"
+                      className={btnClass('ghost', 'sm')}
+                      onMouseEnter={playHover}
+                      onClick={() => {
+                        playNav();
+                        setFeatureRawSnapshot(listEditorText);
+                        setFeatureRawEditorOpen(true);
+                      }}
+                    >
+                      Edit Raw
+                    </button>
+                  )}
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setFeatureRawEditorOpen(false); setListEditorMode(''); }}>
+                    Close
+                  </button>
+                </div>
               </div>
               <div className={`${styles.managerBody} ${
                 listEditorMode === 'spellbook'
@@ -3116,21 +3130,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </div>
                 ) : (
                   <>
-                    <div className={styles.featureBlocksTop}>
-                      <div className={styles.managerHint}>Feature Groups</div>
-                      <button
-                        type="button"
-                        className={btnClass('ghost', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => {
-                          playNav();
-                          setFeatureRawSnapshot(listEditorText);
-                          setFeatureRawEditorOpen(true);
-                        }}
-                      >
-                        Edit Raw
-                      </button>
-                    </div>
+                    <div className={styles.managerHint}>Feature Groups</div>
                     <div className={`${styles.featureBlocks} koa-scrollbar-thin`}>
                       {featureDraftSections.length === 0 ? (
                         <div className={styles.sheetListFallback}>No class features parsed.</div>
