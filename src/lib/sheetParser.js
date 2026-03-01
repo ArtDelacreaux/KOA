@@ -271,6 +271,11 @@ function parseJsonSheet(jsonText) {
   const abilitiesText = toFreeText(
     findValueByAliases(root, ['abilitiesText', 'features', 'traits', 'specialAbilities'])
   );
+  const featureChargesRaw = findValueByAliases(
+    root,
+    ['featureCharges', 'feature_charges', 'classFeatureCharges', 'traitUses']
+  );
+  const featureCharges = mergeFeatureCharges([], Array.isArray(featureChargesRaw) ? featureChargesRaw : []);
   const equipmentRaw = findValueByAliases(root, ['equipment', 'inventory', 'gear', 'items']);
   const equipment = toFreeText(
     equipmentRaw
@@ -324,6 +329,10 @@ function parseJsonSheet(jsonText) {
       'spell_slots',
       'slotsbylevel',
       'spellslotlevels',
+      'featurecharges',
+      'feature_charges',
+      'classfeaturecharges',
+      'traituses',
       'abilitiestext',
       'features',
       'traits',
@@ -371,6 +380,7 @@ function parseJsonSheet(jsonText) {
       abilities,
       spellList,
       spellSlots: mergeSpellSlots([], Array.isArray(spellSlots) ? spellSlots : []),
+      featureCharges,
       savingThrows,
       skills,
       senses,
@@ -434,6 +444,7 @@ async function parseTextSheet(text, signal, onProgress) {
     skills: [],
     senses: [],
     abilitiesText: '',
+    featureCharges: [],
     equipment: '',
     equipmentItems: [],
     otherPossessions: [],
@@ -567,6 +578,10 @@ async function parseTextSheet(text, signal, onProgress) {
   fields.skills = normalizeStringList([...fields.skills, ...sections.skills]);
   fields.senses = normalizeStringList([...fields.senses, ...sections.senses]);
   fields.abilitiesText = cleanText(sections.abilities.join('\n'));
+  fields.featureCharges = mergeFeatureCharges(
+    extractFeatureChargesFromLines(lines),
+    extractFeatureChargesFromLines(sections.abilities)
+  );
   fields.equipmentItems = normalizeStringList(sections.equipment.join('\n'));
   fields.otherPossessions = normalizeStringList(sections.otherPossessions.join('\n'));
   fields.equipment = cleanText(fields.equipmentItems.join(', '));
@@ -741,6 +756,8 @@ const PDF_SKILL_FIELDS = [
   { name: 'Survival', bonus: ['Survival', 'Survival3'], ability: ['SurvivalMod', 'SurvivalMod3'] },
 ];
 
+const PDF_FORM_FIELD_LOOKAHEAD = 20000;
+
 function looksLikeObjectRefValue(raw) {
   return /^\d+\s+\d+\s+R$/i.test(cleanText(raw));
 }
@@ -770,6 +787,179 @@ function sanitizeSpellEntries(lines) {
   return uniqueKeepOrder(out);
 }
 
+function normalizeFeatureChargeName(raw) {
+  const compact = cleanText(raw).replace(/\s+/g, ' ');
+  if (!compact) return '';
+  let name = compact.replace(/^[-*|•\s]+/, '').trim();
+  if (name.includes('•')) name = cleanText(name.split('•')[0]);
+  // Strip common trailing source references (e.g. "PHB-2024 195", "EFotA 10").
+  name = name.replace(/\s*[•]\s*[^|]+$/g, '').trim();
+  name = name.replace(/\s+[A-Z][A-Za-z0-9]*(?:-\d{4})?\s+\d+\s*$/g, '').trim();
+  name = name.replace(/:\s*\+?\d+\s*\/\s*(?:short|long|other)\s*rest\b.*$/i, '').trim();
+  name = name.replace(/\s+\+?\d+\s*\/\s*(?:short|long|other)\s*rest\b.*$/i, '').trim();
+  name = name.replace(/\|\s*\d+\s*\/.*$/i, '').trim();
+  name = name.replace(/[:\-–]\s*$/g, '').trim();
+  name = name.replace(/\s{2,}/g, ' ').trim();
+  return name;
+}
+
+const IGNORED_FEATURE_CHARGE_NAMES = new Set([
+  'steeldefender',
+]);
+
+const STANDARD_ACTION_NAME_KEYS = new Set([
+  'action',
+  'actions',
+  'bonusaction',
+  'bonusactions',
+  'reaction',
+  'reactions',
+  'standardaction',
+  'standardactions',
+  'longrest',
+  'shortrest',
+  'other',
+  'special',
+  'attack',
+  'castaspell',
+  'dash',
+  'disengage',
+  'dodge',
+  'help',
+  'hide',
+  'ready',
+  'search',
+  'useanobject',
+  'improvise',
+  'grapple',
+  'shove',
+  'opportunityattack',
+  'twoweaponfighting',
+]);
+
+function shouldIgnoreFeatureChargeName(name) {
+  const key = normalizeKey(name);
+  const canonicalKey = key.replace(/^\d+/, '').replace(/\d+$/, '');
+  if (!key) return false;
+  if (IGNORED_FEATURE_CHARGE_NAMES.has(key)) return true;
+  if (key.startsWith('steeldefender')) return true;
+  if (STANDARD_ACTION_NAME_KEYS.has(canonicalKey)) return true;
+  if (/^(?:standard)?(?:bonus)?actions?$/.test(canonicalKey)) return true;
+  return false;
+}
+
+function looksLikeFeatureHeading(line) {
+  const compact = cleanText(line).replace(/\s+/g, ' ');
+  const name = normalizeFeatureChargeName(compact);
+  if (!name) return false;
+  if (shouldIgnoreFeatureChargeName(name)) return false;
+  if (name.length < 3 || name.length > 88) return false;
+  if (/[.!?]$/.test(compact)) return false;
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 10) return false;
+  const hasSentenceCue =
+    /\b(?:you|when|while|if|as|can|gain|take|regain|restore|restoring|target)\b/i.test(compact) &&
+    /[.,;]/.test(compact);
+  if (hasSentenceCue) return false;
+  const hasHeadingMarker = /^[-*]/.test(compact);
+  const hasSourceMarker = /[•]|[A-Z][A-Za-z0-9]*(?:-\d{4})?\s+\d+\b/.test(compact);
+  const titleishCount = words.filter((word) => /^[A-Z][A-Za-z'/-]*$/.test(word)).length;
+  const titleish = titleishCount >= Math.max(1, Math.ceil(words.length * 0.5));
+  return hasHeadingMarker || hasSourceMarker || (titleish && words.length <= 6);
+}
+
+function extractFeatureChargeMax(text) {
+  const compact = cleanText(text).replace(/\s+/g, ' ');
+  if (!compact) return null;
+  const patterns = [
+    /\b\+?\s*([0-9]{1,2})\s*\/\s*(?:short|long|sr|lr)\b/i,
+    /\byou can use this (?:trait|feature|ability|action|energy)\s+\+?\s*([0-9]{1,2})\s*time(?:s|\(s\))?\b/i,
+    /\byou can take this (?:reaction|bonus action)\s+\+?\s*([0-9]{1,2})\s*time(?:s|\(s\))?\b/i,
+    /\b\+?\s*([0-9]{1,2})\s*time(?:s|\(s\))?\s+per\s+(?:short|long)\s+rest\b/i,
+    /\b\+?\s*([0-9]{1,2})\s+uses?\b/i,
+  ];
+  for (let i = 0; i < patterns.length; i += 1) {
+    const match = compact.match(patterns[i]);
+    if (!match) continue;
+    return clamp(toInt(match[1], 0), 0, 20);
+  }
+  return null;
+}
+
+function normalizeFeatureChargeEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry, index) => {
+      const source = entry && typeof entry === 'object' ? entry : {};
+      const rawName = source.name ?? source.label ?? source.title ?? '';
+      const name = normalizeFeatureChargeName(rawName);
+      const max = clamp(toInt(source.max ?? source.charges ?? source.uses, 0), 0, 20);
+      const fallbackCurrent = source.current ?? source.remaining ?? max;
+      const current = clamp(toInt(fallbackCurrent, max), 0, max);
+      const id = cleanText(source.id) || `feature-${index + 1}`;
+      if (!name || max <= 0) return null;
+      if (shouldIgnoreFeatureChargeName(name)) return null;
+      return { id, name, max, current };
+    })
+    .filter(Boolean);
+}
+
+function mergeFeatureCharges(base, overlay) {
+  const byKey = new Map();
+  const read = (items) => {
+    normalizeFeatureChargeEntries(items).forEach((entry, index) => {
+      const key = normalizeKey(entry.name) || entry.id || `feature-${index + 1}`;
+      byKey.set(key, entry);
+    });
+  };
+  read(base);
+  read(overlay);
+  return Array.from(byKey.values());
+}
+
+function extractFeatureChargesFromLines(lines) {
+  const entries = [];
+  const parts = Array.isArray(lines)
+    ? lines
+        .flatMap((line) => String(line == null ? '' : line).split(/\r?\n/g))
+        .map((line) => cleanText(line))
+    : [];
+  let activeName = '';
+  let linesSinceActiveName = Number.POSITIVE_INFINITY;
+
+  parts.forEach((line) => {
+    if (!line) {
+      linesSinceActiveName += 1;
+      if (linesSinceActiveName > 20) activeName = '';
+      return;
+    }
+    if (looksLikeFeatureHeading(line)) {
+      activeName = normalizeFeatureChargeName(line);
+      linesSinceActiveName = 0;
+    } else {
+      linesSinceActiveName += 1;
+      if (linesSinceActiveName > 20) activeName = '';
+    }
+
+    const max = extractFeatureChargeMax(line);
+    if (max == null || max <= 0) return;
+
+    const inlineSource = line.includes('|') ? line.split('|')[0] : line;
+    const inlineName = looksLikeFeatureHeading(inlineSource) ? normalizeFeatureChargeName(inlineSource) : '';
+    const name = inlineName || activeName;
+    if (!name) return;
+    if (shouldIgnoreFeatureChargeName(name)) return;
+    entries.push({ id: `feature-${entries.length + 1}`, name, max, current: max });
+
+    if (inlineName) {
+      activeName = inlineName;
+      linesSinceActiveName = 0;
+    }
+  });
+
+  return mergeFeatureCharges([], entries);
+}
+
 function spellLevelFromText(text) {
   const compact = cleanText(text).replace(/=+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!compact) return null;
@@ -781,7 +971,7 @@ function spellLevelFromText(text) {
 function spellSlotsFromText(text) {
   const compact = cleanText(text).replace(/\s+/g, ' ').trim();
   if (!compact) return null;
-  const match = compact.match(/\b([0-9]{1,2})\s*slots?\b/i);
+  const match = compact.match(/\b([0-9]{1,2})\s*(?:slots?|pact)\b/i);
   return match ? Math.max(0, toInt(match[1], 0)) : null;
 }
 
@@ -844,7 +1034,10 @@ function parsePdfFormFieldPairs(binaryText) {
       continue;
     }
 
-    const tail = binaryText.slice(field.nextIndex, Math.min(binaryText.length, field.nextIndex + 2200));
+    const tail = binaryText.slice(
+      field.nextIndex,
+      Math.min(binaryText.length, field.nextIndex + PDF_FORM_FIELD_LOOKAHEAD)
+    );
     let value = '';
     const vIdx = tail.indexOf('/V');
     const dvIdx = tail.indexOf('/DV');
@@ -873,7 +1066,29 @@ function mapPdfFormPairsToParsed(pairs) {
   pairs.forEach((pair) => {
     const key = cleanText(pair.field);
     if (!key) return;
-    byField.set(key, cleanText(pair.value));
+    const nextValue = cleanText(pair.value);
+    const existingValue = cleanText(byField.get(key));
+    if (!existingValue) {
+      byField.set(key, nextValue);
+      return;
+    }
+    if (!nextValue) {
+      return;
+    }
+
+    const normalizedField = fieldKeyName(key);
+    const shouldMergeMultiChunk =
+      normalizedField.startsWith('featurestraits') ||
+      normalizedField.startsWith('actions') ||
+      normalizedField.startsWith('spells');
+
+    if (!shouldMergeMultiChunk) {
+      return;
+    }
+    if (existingValue === nextValue) {
+      return;
+    }
+    byField.set(key, `${existingValue}\n${nextValue}`);
   });
 
   const findValue = (...aliases) => {
@@ -910,6 +1125,7 @@ function mapPdfFormPairsToParsed(pairs) {
   };
 
   const featureLines = [];
+  const featureChargeHintLines = [];
   const equipmentLines = [];
   const otherPossessionsLines = [];
   const spellLines = [];
@@ -960,6 +1176,12 @@ function mapPdfFormPairsToParsed(pairs) {
     if (looksLikeObjectRefValue(cleanValue)) continue;
     const key = fieldKeyName(field);
     if (key.startsWith('featurestraits')) featureLines.push(cleanValue);
+    if (
+      /(feature|trait|ability|action|classfeature)/i.test(key) &&
+      (extractFeatureChargeMax(cleanValue) != null || /\|\s*\d+\s*\//.test(cleanValue))
+    ) {
+      featureChargeHintLines.push(cleanValue);
+    }
     if (key.startsWith('eqname')) {
       if (
         !['--', '-', '0'].includes(cleanValue) &&
@@ -978,7 +1200,7 @@ function mapPdfFormPairsToParsed(pairs) {
     if (/^spellname/i.test(key)) spellLines.push(cleanValue);
     if (
       /(spell|source)/i.test(key) &&
-      /\b(?:cantrips?|slots?|[1-9](?:st|nd|rd|th)?\s+level)\b/i.test(cleanValue)
+      /\b(?:cantrips?|slots?|pact|[1-9](?:st|nd|rd|th)?\s+level)\b/i.test(cleanValue)
     ) {
       spellSlotHintLines.push(cleanValue);
     }
@@ -994,6 +1216,10 @@ function mapPdfFormPairsToParsed(pairs) {
   const normalizedSpellSlots = mergeSpellSlots(
     extractSpellSlotsFromLines(spellLines),
     extractSpellSlotsFromLines(spellSlotHintLines)
+  );
+  const normalizedFeatureCharges = mergeFeatureCharges(
+    extractFeatureChargesFromLines(featureLines),
+    extractFeatureChargesFromLines(featureChargeHintLines)
   );
 
   return {
@@ -1014,6 +1240,7 @@ function mapPdfFormPairsToParsed(pairs) {
       skills: normalizedSkills,
       senses: normalizedSenses,
       abilitiesText: cleanText(featureLines.join('\n\n')),
+      featureCharges: normalizedFeatureCharges,
       equipment: cleanText(normalizedEquipment.join(', ')),
       equipmentItems: normalizedEquipment,
       otherPossessions: normalizedOtherPossessions,
@@ -1053,6 +1280,7 @@ function mergeParsedData(base, overlay) {
   });
   out.spellList = keepOverlay('spellList') ? overlay.spellList : (base?.spellList || []);
   out.spellSlots = mergeSpellSlots(base?.spellSlots, overlay?.spellSlots);
+  out.featureCharges = mergeFeatureCharges(base?.featureCharges, overlay?.featureCharges);
   out.savingThrows = keepOverlay('savingThrows') ? overlay.savingThrows : (base?.savingThrows || []);
   out.skills = keepOverlay('skills') ? overlay.skills : (base?.skills || []);
   out.senses = keepOverlay('senses') ? overlay.senses : (base?.senses || []);
