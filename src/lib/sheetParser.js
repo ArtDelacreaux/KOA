@@ -260,6 +260,7 @@ function parseJsonSheet(jsonText) {
   const abilities = parseAbilities(abilitySource, root);
 
   const spellList = normalizeStringList(findValueByAliases(root, ['spells', 'spellList', 'spellbook']));
+  const spellSlots = findValueByAliases(root, ['spellSlots', 'spell_slots', 'slotsByLevel', 'spellSlotLevels']);
   const savingThrows = normalizeStringList(
     findValueByAliases(root, ['savingThrows', 'saving_throws', 'saves', 'savingthrows'])
   );
@@ -319,6 +320,10 @@ function parseJsonSheet(jsonText) {
       'spells',
       'spelllist',
       'spellbook',
+      'spellslots',
+      'spell_slots',
+      'slotsbylevel',
+      'spellslotlevels',
       'abilitiestext',
       'features',
       'traits',
@@ -365,6 +370,7 @@ function parseJsonSheet(jsonText) {
       speed,
       abilities,
       spellList,
+      spellSlots: mergeSpellSlots([], Array.isArray(spellSlots) ? spellSlots : []),
       savingThrows,
       skills,
       senses,
@@ -423,6 +429,7 @@ async function parseTextSheet(text, signal, onProgress) {
     speed: null,
     abilities: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     spellList: [],
+    spellSlots: [],
     savingThrows: [],
     skills: [],
     senses: [],
@@ -551,7 +558,11 @@ async function parseTextSheet(text, signal, onProgress) {
     }
   }
 
-  fields.spellList = normalizeStringList(sections.spells.join('\n'));
+  fields.spellList = sanitizeSpellEntries(sections.spells);
+  fields.spellSlots = mergeSpellSlots(
+    extractSpellSlotsFromLines(lines),
+    extractSpellSlotsFromLines(sections.spells)
+  );
   fields.savingThrows = normalizeStringList([...fields.savingThrows, ...sections.savingThrows]);
   fields.skills = normalizeStringList([...fields.skills, ...sections.skills]);
   fields.senses = normalizeStringList([...fields.senses, ...sections.senses]);
@@ -746,6 +757,8 @@ function sanitizeSpellEntries(lines) {
         const low = token.toLowerCase();
         if (token.length < 3) return;
         if (!/[a-z]/i.test(token)) return;
+        if (spellLevelFromText(token) != null) return;
+        if (spellSlotsFromText(token) != null) return;
         if (/^(str|dex|con|int|wis|cha)\s*-?\+?\d*$/i.test(token)) return;
         if (/^\+?-?\d+(?:\s*\/\s*\d+)?$/.test(token)) return;
         if (/^(warlock|paladin|pact|slots?|at will|always prepared)$/i.test(token)) return;
@@ -755,6 +768,62 @@ function sanitizeSpellEntries(lines) {
       });
   });
   return uniqueKeepOrder(out);
+}
+
+function spellLevelFromText(text) {
+  const compact = cleanText(text).replace(/=+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!compact) return null;
+  if (/^cantrips?$/i.test(compact)) return 0;
+  const match = compact.match(/\b([1-9])(?:st|nd|rd|th)?\s+level\b/i);
+  return match ? toInt(match[1], null) : null;
+}
+
+function spellSlotsFromText(text) {
+  const compact = cleanText(text).replace(/\s+/g, ' ').trim();
+  if (!compact) return null;
+  const match = compact.match(/\b([0-9]{1,2})\s*slots?\b/i);
+  return match ? Math.max(0, toInt(match[1], 0)) : null;
+}
+
+function extractSpellSlotsFromLines(lines) {
+  const out = [];
+  let activeLevel = null;
+
+  lines.forEach((line) => {
+    const compact = cleanText(line);
+    if (!compact) return;
+
+    const level = spellLevelFromText(compact);
+    if (level != null) {
+      activeLevel = level;
+    }
+
+    const slots = spellSlotsFromText(compact);
+    if (slots != null && activeLevel != null && activeLevel >= 1 && activeLevel <= 9) {
+      out.push({ level: activeLevel, max: slots, current: slots });
+    }
+  });
+
+  return out;
+}
+
+function mergeSpellSlots(base, overlay) {
+  const byLevel = new Map();
+  const read = (items) => {
+    if (!Array.isArray(items)) return;
+    items.forEach((slot) => {
+      const level = toInt(slot?.level, 0);
+      if (level < 1 || level > 9) return;
+      const max = Math.max(0, toInt(slot?.max ?? slot?.total, 0));
+      const fallbackCurrent = slot?.current ?? slot?.remaining ?? max;
+      const current = clamp(toInt(fallbackCurrent, max), 0, max);
+      byLevel.set(level, { level, max, current });
+    });
+  };
+
+  read(base);
+  read(overlay);
+  return Array.from(byLevel.values()).sort((a, b) => a.level - b.level);
 }
 
 function parsePdfFormFieldPairs(binaryText) {
@@ -844,6 +913,7 @@ function mapPdfFormPairsToParsed(pairs) {
   const equipmentLines = [];
   const otherPossessionsLines = [];
   const spellLines = [];
+  const spellSlotHintLines = [];
   const senses = [];
 
   const savingThrows = PDF_SAVING_THROW_FIELDS
@@ -906,6 +976,12 @@ function mapPdfFormPairsToParsed(pairs) {
     }
     if (key.startsWith('spells')) spellLines.push(cleanValue);
     if (/^spellname/i.test(key)) spellLines.push(cleanValue);
+    if (
+      /(spell|source)/i.test(key) &&
+      /\b(?:cantrips?|slots?|[1-9](?:st|nd|rd|th)?\s+level)\b/i.test(cleanValue)
+    ) {
+      spellSlotHintLines.push(cleanValue);
+    }
   }
 
   const normalizedOtherPossessions = uniqueKeepOrder(otherPossessionsLines);
@@ -915,6 +991,10 @@ function mapPdfFormPairsToParsed(pairs) {
   const normalizedSkills = uniqueKeepOrder(skills);
   const normalizedSenses = uniqueKeepOrder(senses);
   const normalizedSpellList = sanitizeSpellEntries(spellLines);
+  const normalizedSpellSlots = mergeSpellSlots(
+    extractSpellSlotsFromLines(spellLines),
+    extractSpellSlotsFromLines(spellSlotHintLines)
+  );
 
   return {
     parsed: {
@@ -929,6 +1009,7 @@ function mapPdfFormPairsToParsed(pairs) {
       speed,
       abilities,
       spellList: normalizedSpellList,
+      spellSlots: normalizedSpellSlots,
       savingThrows: normalizedSaves,
       skills: normalizedSkills,
       senses: normalizedSenses,
@@ -971,6 +1052,7 @@ function mergeParsedData(base, overlay) {
     out[key] = keepOverlay(key) ? overlay[key] : base[key];
   });
   out.spellList = keepOverlay('spellList') ? overlay.spellList : (base?.spellList || []);
+  out.spellSlots = mergeSpellSlots(base?.spellSlots, overlay?.spellSlots);
   out.savingThrows = keepOverlay('savingThrows') ? overlay.savingThrows : (base?.savingThrows || []);
   out.skills = keepOverlay('skills') ? overlay.skills : (base?.skills || []);
   out.senses = keepOverlay('senses') ? overlay.senses : (base?.senses || []);

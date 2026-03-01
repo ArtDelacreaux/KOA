@@ -564,6 +564,8 @@ function buildSheetPatch(combatant, parsedResult) {
   const hpCurrent = hpMax === '' ? hpCurrentRaw : Math.min(hpCurrentRaw, hpMax);
   const initiativeBonus =
     parsed.initiativeBonus == null ? toInt(combatant.initiativeBonus, 0) : toInt(parsed.initiativeBonus, 0);
+  const importedSpellSlots = normalizeSpellSlots(parsed.spellSlots);
+  const hasImportedSpellSlots = importedSpellSlots.some((slot) => slot.max > 0);
 
   return {
     name: cleanText(parsed.name) || combatant.name,
@@ -581,6 +583,7 @@ function buildSheetPatch(combatant, parsedResult) {
     skills: normalizeStringList(parsed.skills).filter((line) => /[a-z]/i.test(line)),
     senses: normalizeStringList(parsed.senses),
     spellList: normalizeStringList(parsed.spellList),
+    spellSlots: hasImportedSpellSlots ? importedSpellSlots : normalizeSpellSlots(combatant.spellSlots),
     classFeatures: normalizeFeatureList(parsed.classFeatures || parsed.abilitiesText),
     equipmentItems: normalizeStringList(parsed.equipmentItems || parsed.equipment),
     otherPossessions: normalizeStringList(parsed.otherPossessions),
