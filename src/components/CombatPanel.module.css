@@ -920,7 +920,7 @@
 }
 
 .sheetManagerModal {
-  width: min(950px, 92vw);
+  width: min(1200px, 92vw);
   max-height: 82vh;
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
