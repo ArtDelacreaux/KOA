@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import recapVideo from '../assets/recap.mp4';
 import combatVideo from '../assets/CombatVideo.mp4';
-import theaterPreviewVideo from '../assets/theater-preview.mp4';
+import theaterPreviewVideo from '../assets/Theater.mp4';
+import characterBookPreviewVideo from '../assets/CharacterBook.mp4';
+import worldLoreVideo from '../assets/worldlore.mp4';
+import styles from './MenuPanel.module.css';
+import { STORAGE_KEYS, menuNoteKey } from '../lib/storageKeys';
+import { repository } from '../repository';
 
 /*
   Knights of Atria — Main Menu (JRPG vibe, tavern palette)
@@ -34,531 +39,41 @@ export default function MenuPanel({
   onMenuStarted = () => { },
 }) {
   /* ---------- persistence (menu-side, independent of CampaignHub) ---------- */
-  const LS_CAMPAIGN_BRIEF = 'koa:menu:campaignBrief:v2';
-  const LS_NOTE_PREFIX = 'koa:menu:note:v2:'; // characters / video / lore
+  const LS_CAMPAIGN_BRIEF = STORAGE_KEYS.menuCampaignBrief;
 
   const [campaignBrief, setCampaignBrief] = useState(() => {
-    try {
-      const raw = localStorage.getItem(LS_CAMPAIGN_BRIEF);
-      const p = raw ? JSON.parse(raw) : {};
-      return {
-        location: p.location || '',
-        objective: p.objective || '',
-        updatedAt: p.updatedAt || null,
-      };
-    } catch {
-      return { location: '', objective: '', updatedAt: null };
-    }
+    const p = repository.readJson(LS_CAMPAIGN_BRIEF, {});
+    return {
+      location: p.location || '',
+      objective: p.objective || '',
+      updatedAt: p.updatedAt || null,
+    };
   });
 
   const [notes, setNotes] = useState(() => {
-    try {
-      return {
-        characters: localStorage.getItem(`${LS_NOTE_PREFIX}characters`) || '',
-        video: localStorage.getItem(`${LS_NOTE_PREFIX}video`) || '',
-        lore: localStorage.getItem(`${LS_NOTE_PREFIX}lore`) || '',
-      };
-    } catch {
-      return { characters: '', video: '', lore: '' };
-    }
+    return {
+      characters: repository.readText(menuNoteKey('characters')),
+      video: repository.readText(menuNoteKey('video')),
+      lore: repository.readText(menuNoteKey('lore')),
+    };
   });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LS_CAMPAIGN_BRIEF, JSON.stringify(campaignBrief));
-    } catch { }
+    repository.writeJson(LS_CAMPAIGN_BRIEF, campaignBrief);
   }, [campaignBrief]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`${LS_NOTE_PREFIX}characters`, notes.characters || '');
-      localStorage.setItem(`${LS_NOTE_PREFIX}video`, notes.video || '');
-      localStorage.setItem(`${LS_NOTE_PREFIX}lore`, notes.lore || '');
-    } catch { }
+    repository.writeText(menuNoteKey('characters'), notes.characters || '');
+    repository.writeText(menuNoteKey('video'), notes.video || '');
+    repository.writeText(menuNoteKey('lore'), notes.lore || '');
   }, [notes]);
 
   const theaterPreviewRef = useRef(null);
 
-  const stamp = () => new Date().toISOString();
-  const prettyTime = (iso) => {
-    if (!iso) return '—';
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleString();
-    } catch {
-      return '—';
-    }
-  };
-
-  /* ---------- theme (match your existing tavern build) ---------- */
-  const THEME = {
-    goldA: 'rgba(176,101,0,0.90)',
-    goldB: 'rgba(122,55,0,0.92)',
-    dangerA: 'rgba(122,30,30,0.92)',
-    dangerB: 'rgba(90,18,18,0.92)',
-
-    creamText: 'rgba(255,245,220,0.96)',
-    creamSoft: 'rgba(255,245,220,0.72)',
-
-    glassA: 'rgba(255,245,220,0.065)',
-    glassB: 'rgba(255,245,220,0.022)',
-
-    line: 'rgba(255,220,160,0.18)',
-    lineSoft: 'rgba(255,220,160,0.10)',
-
-    inkBgA: 'rgba(28,18,10,0.22)',
-    inkBgB: 'rgba(10,8,6,0.34)',
-
-    emberGlow: 'rgba(255,140,60,0.14)',
-  };
-
-  const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
-
-  /* ---------- layout ---------- */
-  const panelStyle = (active) => ({
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: active ? 1 : 0,
-    transform: active ? 'translateY(0px)' : 'translateY(10px)',
-    transition: 'opacity 220ms ease, transform 220ms ease',
-    pointerEvents: active ? 'auto' : 'none',
-    zIndex: active ? 6 : 4,
-  });
-
-  const menuRoot = {
-    width: '100%',
-    height: '100%',
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    padding: 14,
-    paddingTop: '2vh',
-    position: 'relative',
-    fontFamily: fontStack,
-  };
-
-  const LOGO_CLEAR_H = 18; // px from top for the floating logo // px of clear (non-frosted) area behind the logo
-
-  const menuShell = {
-    width: 'min(1320px, 96vw)',
-    height: 'min(960px, 94vh)',
-    position: 'relative',
-    background: 'transparent',
-    // Layout wrapper only — no visible “outer window”
-    border: 'none',
-    boxShadow: 'none',
-    borderRadius: 0,
-    overflow: 'visible',
-  };
-  const shellGlassBelow = {
-    display: 'none', // backmost frosted window disabled (shell stays for layout)
-  };
-
-
-  const overlayVignette = {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: LOGO_CLEAR_H,      // 👈 add this
-    bottom: 0,
-    // keep the rest the same
-  };
-
-  const grain = {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-    opacity: 0.085,
-    background:
-      'repeating-linear-gradient(180deg, rgba(255,255,255,0.11) 0px, rgba(255,255,255,0.11) 1px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 7px)',
-    mixBlendMode: 'overlay',
-  };
-
-  const topBar = {
-    position: 'absolute',
-    top: LOGO_CLEAR_H,
-    left: 0,
-    right: 0,
-    zIndex: 3,
-    padding: '14px 18px 10px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    background: 'transparent',
-  };
-
-  const chip = {
-    padding: '7px 10px',
-    borderRadius: 999,
-    border: `1px solid ${THEME.line}`,
-    background: 'rgba(255,245,220,0.06)',
-    color: THEME.creamSoft,
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 0.35,
-    userSelect: 'none',
-    boxShadow: '0 10px 28px rgba(0,0,0,0.25)',
-    whiteSpace: 'nowrap',
-    justifySelf: 'start',
-  };
-
-  const logoCenter = {
-
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-  };
-
-  const logoImg = {
-    width: 'min(1180px, 96vw)',
-    height: 'auto',
-    maxHeight: 'clamp(220px, 28vh, 340px)',
-    objectFit: 'contain',
-    userSelect: 'none',
-    pointerEvents: 'none',
-    filter: 'drop-shadow(0 22px 54px rgba(0,0,0,0.85))',
-    animation: 'logoSparkle 4s ease-in-out infinite',
-  };
-
-  const logoSparkleKeyframes = nightMode
-    ? `
-        @keyframes logoSparkle {
-          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.22)) drop-shadow(0 0 24px rgba(220,236,255,0.12)); }
-          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.06) drop-shadow(0 0 18px rgba(248,252,255,0.30)) drop-shadow(0 0 32px rgba(226,240,255,0.16)); }
-          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.03) drop-shadow(0 0 12px rgba(240,248,255,0.20)) drop-shadow(0 0 24px rgba(220,236,255,0.10)); }
-          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-        }
-      `
-    : `
-        @keyframes logoSparkle {
-          0%   { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-          30%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.45)) drop-shadow(0 0 40px rgba(255,200,120,0.20)); }
-          50%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.14) drop-shadow(0 0 28px rgba(255,255,255,0.55)) drop-shadow(0 0 60px rgba(255,220,160,0.28)); }
-          70%  { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1.08) drop-shadow(0 0 18px rgba(255,240,200,0.40)) drop-shadow(0 0 40px rgba(255,200,120,0.18)); }
-          100% { filter: drop-shadow(0 22px 54px rgba(0,0,0,0.85)) brightness(1) drop-shadow(0 0 0px rgba(255,255,255,0)); }
-        }
-      `;
-
-  const logoSub = {
-    color: 'rgba(255,245,220,0.70)',
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
-    textShadow: '0 2px 10px rgba(0,0,0,0.65)',
-    userSelect: 'none',
-    textAlign: 'center',
-    lineHeight: 1.1,
-  };
-
-
-  const leftMenuTitle = {
-    margin: '10px 0 4px 16px',
-    fontSize: 12,
-    letterSpacing: 2.2,
-    fontWeight: 950,
-    color: THEME.creamText,
-    textShadow: '0 2px 12px rgba(0,0,0,0.55)',
-    userSelect: 'none',
-  };
-
-
-  const rightChips = {
-    justifySelf: 'end',
-    display: 'flex',
-    gap: 10,
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  };
-
-  const contentGrid = {
-    position: 'absolute',
-    inset: 0,
-    padding: '0 20px 26px',
-    paddingTop: 'clamp(290px, 36vh, 380px)',
-    display: 'grid',
-    gridTemplateColumns: 'min(520px, 44%) minmax(0, 1fr)',
-    gap: 18,
-  };
-
-  const panelCard = {
-    borderRadius: 22,
-    position: 'relative',
-    overflow: 'hidden',
-    border: `1px solid ${THEME.line}`,
-    background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-    boxShadow: '0 22px 60px rgba(0,0,0,0.52)',
-    backdropFilter: 'blur(10px)',
-  };
-
-  const edgeGlow = {
-    position: 'absolute',
-    inset: -2,
-    borderRadius: 24,
-    pointerEvents: 'none',
-    background: 'linear-gradient(135deg, rgba(176,101,0,0.34), rgba(255,140,60,0.18), rgba(255,80,80,0.14))',
-    filter: 'blur(18px)',
-    opacity: 0.46,
-  };
-
-  const divider = {
-    height: 1,
-    background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.18), transparent)',
-    margin: '8px 0',
-    opacity: 0.9,
-  };
-
-  /* ---------- left: commands ---------- */
-  const commandList = {
-    padding: '16px 14px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  };
-
-  const cmdRow = (active) => ({
-    position: 'relative',
-    borderRadius: 18,
-    border: active ? '1px solid rgba(255,235,205,0.55)' : `1px solid ${THEME.lineSoft}`,
-    background: active
-      ? 'linear-gradient(90deg, rgba(132,78,20,0.36), rgba(255,245,220,0.08))'
-      : 'linear-gradient(90deg, rgba(28,20,14,0.44), rgba(255,245,220,0.05))',
-    boxShadow: active
-      ? '0 18px 46px rgba(0,0,0,0.42), 0 0 36px rgba(255,200,120,0.22)'
-      : '0 16px 40px rgba(0,0,0,0.46)',
-    cursor: 'pointer',
-    padding: '14px 14px 14px 18px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease, border 140ms ease',
-    userSelect: 'none',
-  });
-
-  const selectBar = (active) => ({
-    position: 'absolute',
-    left: 12,
-    top: 12,
-    bottom: 12,
-    width: 6,
-    borderRadius: 999,
-    background: active
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.95), rgba(255,140,60,0.70))'
-      : 'rgba(255,245,220,0.10)',
-    boxShadow: active ? '0 0 18px rgba(255,140,60,0.22)' : 'none',
-  });
-
-  const cursorWrap = {
-    position: 'absolute',
-    left: -6,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    width: 22,
-    height: 22,
-    pointerEvents: 'none',
-    filter: 'drop-shadow(0 10px 18px rgba(0,0,0,0.55))',
-  };
-
-  const cmdLeft = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-  };
-
-  const cmdIconWrap = (active) => ({
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    display: 'grid',
-    placeItems: 'center',
-    background: active
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.38), rgba(255,245,220,0.06))'
-      : 'linear-gradient(180deg, rgba(255,245,220,0.12), rgba(255,245,220,0.04))',
-    border: `1px solid ${THEME.lineSoft}`,
-  });
-
-  const cmdTitle = (active, titleColor) => ({
-    fontSize: 14.5,
-    fontWeight: 950,
-    letterSpacing: 0.6,
-    color: active ? THEME.creamText : (titleColor ?? 'rgba(255,245,220,0.90)'),
-    textShadow: active
-      ? '0 2px 12px rgba(0,0,0,0.80)'
-      : '0 2px 10px rgba(0,0,0,0.78), 0 0 1px rgba(0,0,0,0.60)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  });
-
-  const cmdSub = (active) => ({
-    marginTop: 2,
-    fontSize: 12.5,
-    fontWeight: 900,
-    letterSpacing: 0.3,
-    color: active ? 'rgba(255,245,220,0.90)' : 'rgba(255,245,220,0.82)',
-    textShadow: '0 1px 8px rgba(0,0,0,0.70)',
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  });
-
-  const cmdChevron = (active) => ({
-    fontWeight: 950,
-    letterSpacing: 0.4,
-    color: active ? 'rgba(255,220,160,0.92)' : 'rgba(255,245,220,0.55)',
-    opacity: active ? 1 : 0.82,
-    fontSize: 18,
-  });
-
-  /* ---------- right: content ---------- */
-  const previewWrap = {
-    ...panelCard,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
-    padding: 18,
-    paddingBottom: 22,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-    overflow: 'hidden', // clip the card itself
-    position: 'relative',
-  };
-
-  const leftPanelWrap = {
-    ...panelCard,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(22,16,12,0.74), rgba(10,8,6,0.64))',
-    boxShadow: '0 24px 64px rgba(0,0,0,0.60)',
-    position: 'relative',
-    paddingTop: 6,
-  };
-
-  const previewTitle = {
-    fontSize: 20,
-    fontWeight: 950,
-    letterSpacing: 0.65,
-    color: THEME.creamText,
-    textShadow: '0 2px 14px rgba(0,0,0,0.82)',
-    margin: 0,
-  };
-
-  const previewBody = {
-    color: 'rgba(255,245,220,0.92)',
-    fontSize: 13.5,
-    lineHeight: 1.65,
-    fontWeight: 900,
-    letterSpacing: 0.2,
-    textShadow: '0 2px 10px rgba(0,0,0,0.72)',
-  };
-
-  const cardMini = {
-    borderRadius: 18,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(30,22,16,0.68), rgba(12,10,8,0.56))',
-    padding: 16,
-    boxShadow: '0 20px 50px rgba(0,0,0,0.56)',
-  };
-
-  const label = {
-    color: 'rgba(255,245,220,0.90)',
-    fontSize: 12,
-    fontWeight: 950,
-    letterSpacing: 0.45,
-    textShadow: '0 2px 10px rgba(0,0,0,0.70)',
-  };
-
-  const input = {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '10px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'rgba(6,6,6,0.42)',
-    color: THEME.creamText,
-    outline: 'none',
-    fontWeight: 850,
-    fontSize: 13,
-    fontFamily: fontStack,
-  };
-
-  const textarea = {
-    ...input,
-    minHeight: 96,
-    resize: 'vertical',
-    lineHeight: 1.5,
-  };
-
-  const actionBtn = {
-    padding: '12px 14px',
-    borderRadius: 16,
-    border: '1px solid rgba(255,220,160,0.28)',
-    background: 'linear-gradient(180deg, rgba(72,50,34,0.84), rgba(34,24,16,0.80))',
-    backdropFilter: 'blur(12px)',
-    cursor: 'pointer',
-    color: THEME.creamText,
-    fontWeight: 950,
-    letterSpacing: 0.45,
-    textShadow: '0 2px 10px rgba(0,0,0,0.55)',
-    boxShadow: '0 18px 40px rgba(0,0,0,0.42)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-  };
-
-  const ghostBtn = {
-    padding: '10px 12px',
-    borderRadius: 14,
-    border: '1px solid rgba(255,220,160,0.24)',
-    background: 'linear-gradient(180deg, rgba(58,42,30,0.78), rgba(24,18,14,0.72))',
-    backdropFilter: 'blur(12px)',
-    cursor: 'pointer',
-    color: THEME.creamText,
-    fontWeight: 950,
-    letterSpacing: 0.35,
-    boxShadow: '0 14px 34px rgba(0,0,0,0.35)',
-    transition: 'transform 140ms ease, filter 140ms ease, box-shadow 140ms ease',
-    userSelect: 'none',
-    fontFamily: fontStack,
-  };
-
-  const dangerBtn = {
-    ...ghostBtn,
-    border: '1px solid rgba(255,160,160,0.22)',
-    background: `linear-gradient(180deg, ${THEME.dangerA}, ${THEME.dangerB})`,
-  };
-
-  const btnHover = (e) => {
-    e.currentTarget.style.transform = 'translateY(-1px)';
-    e.currentTarget.style.filter = 'brightness(1.12)';
-    e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)';
-  };
-
-  const btnLeave = (e) => {
-    e.currentTarget.style.transform = 'translateY(0px)';
-    e.currentTarget.style.filter = 'none';
-    e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)';
-  };
-
-  const btnDown = (e) => {
-    e.currentTarget.style.transform = 'translateY(1px) scale(0.99)';
-    e.currentTarget.style.filter = 'brightness(0.98)';
-  };
-
   // Minimal inline SVG icons to avoid extra assets.
   const Icon = ({ name, active }) => {
     const s = 18;
-    const stroke = active ? THEME.creamText : 'rgba(255,245,220,0.82)';
+    const stroke = active ? 'var(--koa-cream)' : 'var(--koa-cream-82)';
     const common = {
       width: s,
       height: s,
@@ -683,7 +198,7 @@ export default function MenuPanel({
         titleColor: 'rgba(246,229,207,0.98)',
         sub: 'Initiative, HP, slots, and statuses.',
         title: 'Combat Tracker',
-        desc: 'Run encounters fast. Add/drop combatants mid-fight and track conditions.',
+        desc: 'Keep track of your battles here.',
         primary: { label: 'Open Combat Tracker', onClick: goCombat },
       },
       {
@@ -692,7 +207,7 @@ export default function MenuPanel({
         titleColor: 'rgba(249,234,214,0.98)',
         sub: 'Profiles, NPCs, and party bonds.',
         title: 'Character Book',
-        desc: 'Quick-jump to Party or World NPCs. Keep post-session updates here.',
+        desc: 'Quick-jump to Party or World NPCs.',
         primary: { label: 'Open Character Book', onClick: () => goCharacters('grid') },
       },
       {
@@ -701,7 +216,7 @@ export default function MenuPanel({
         titleColor: 'rgba(252,239,221,0.98)',
         sub: 'Cinematic scenes & mood setting.',
         title: 'Cinematics',
-        desc: 'Set the stage. Open the Theater to play your intro and outro cinematics.',
+        desc: 'Set the stage. Open the Theater to play your cinematics.',
         primary: { label: 'Open Cinematics', onClick: goVideo },
       },
       {
@@ -709,7 +224,7 @@ export default function MenuPanel({
         label: 'World Lore',
         sub: 'Codex, maps, and setting archive.',
         title: 'World Lore',
-        desc: 'Browse maps, scenes, and locations. Watch the world introduction video.',
+        desc: 'Browse maps, scenes, and locations.',
         primary: { label: 'Open', onClick: goLore },
       },
     ],
@@ -735,6 +250,7 @@ export default function MenuPanel({
 
   const activeItem = items.find((i) => i.key === activeKey) || items[0];
 
+<<<<<<< HEAD
 return (
   <>
     {/* ────────────────────────────────────────────────
@@ -816,8 +332,45 @@ return (
               draggable={false}
               style={logoImg}
             />
+=======
+  return (
+    <>
+      <div
+        className={`${styles.menuPanel} ${panelType === 'menu' ? styles.menuPanelActive : styles.menuPanelInactive}`}
+        onMouseDown={(e) => {
+          // stop accidental drag ghost images
+          if (e.target?.tagName === 'IMG') e.preventDefault();
+        }}
+      >
+        {/* PRESS TO START overlay */}
+        {!menuStarted && (
+          <div
+            className={`${styles.startOverlay} ${startFading ? styles.startOverlayFading : ''}`}
+            onMouseDown={startMenu}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') startMenu();
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label="Press to start"
+          >
+            <div className={styles.startCard}>
+              <div className={styles.startKicker}>
+                Welcome Envoys
+              </div>
+
+              <div className={styles.startTitle}>
+                Press to Start
+              </div>
+
+              <div className={styles.startHint}>
+                Click anywhere
+              </div>
+            </div>
+>>>>>>> origin/main
           </div>
 
+<<<<<<< HEAD
           <div style={contentGrid}>
             {/* LEFT: Command List */}
             <div style={{ ...panelCard, position: 'relative', paddingTop: 6 }}>
@@ -827,6 +380,186 @@ return (
             {/* RIGHT: Preview panel */}
             <div style={previewWrap}>
               {/* ... entire right-side dynamic content remains unchanged ... */}
+=======
+        <div
+          className={`${styles.menuRootBase} ${styles.menuRootTransition} ${menuStarted ? styles.menuRootShown : styles.menuRootHidden}`}
+        >
+          <div className={styles.menuShell}>
+            <div className={styles.shellGlassBelow} />
+
+            {/* Logo (no surrounding panel) */}
+            <div className={styles.logoWrap}>
+              <img
+                src={koaTitle}
+                alt="Knights of Avalon"
+                draggable={false}
+                className={`${styles.logoImg} ${nightMode ? styles.logoImgNight : styles.logoImgDay}`}
+              />
+            </div>
+
+            <div className={styles.contentGrid}>
+              {/* LEFT: Command List */}
+              <div className={styles.leftPanelWrap}>
+                <div className={styles.edgeGlow} />
+                <div className={styles.leftMenuTitle}>CAMPAIGN HUB</div>
+
+                <div className={styles.commandList}>
+                  {items.map((it) => {
+                    const active = it.key === activeKey;
+                    return (
+                      <div
+                        key={it.key}
+                        className={`${styles.jrpgShimmer} ${styles.cmdRow} ${active ? styles.cmdRowActive : styles.cmdRowInactive}`}
+                        onMouseEnter={() => {
+                          if (it.key !== activeKey) playHover();
+                          setActiveKey(it.key);
+                        }}
+                        // IMPORTANT: clicking the row navigates (fixes “links broken”)
+                        onClick={it.primary.onClick}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={it.label}
+                      >
+                        <div className={`${styles.selectBar} ${active ? styles.selectBarActive : styles.selectBarInactive}`} />
+
+                        {active && (
+                          <div className={styles.cursorWrap}>
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M7 5L19 12L7 19V5Z" fill="rgba(255,245,220,0.92)" />
+                              <path d="M7 5L19 12L7 19V5Z" stroke="rgba(255,220,160,0.55)" strokeWidth="1.5" />
+                            </svg>
+                          </div>
+                        )}
+
+                        <div className={styles.cmdLeft}>
+                          <div className={`${styles.cmdIconWrap} ${active ? styles.cmdIconWrapActive : styles.cmdIconWrapInactive}`}>
+                            <Icon name={it.key} active={active} />
+                          </div>
+                          <div className={styles.cmdTextWrap}>
+                            <div className={`${styles.cmdTitle} ${active ? styles.cmdTitleActive : styles.cmdTitleInactive}`}>{it.label}</div>
+                            <div className={`${styles.cmdSub} ${active ? styles.cmdSubActive : styles.cmdSubInactive}`}>{it.sub}</div>
+                          </div>
+                        </div>
+
+                        <div className={`${styles.cmdChevron} ${active ? styles.cmdChevronActive : styles.cmdChevronInactive}`}>›</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* RIGHT: Useful panel (changes by selection) */}
+              <div className={styles.previewWrap}>
+                <div className={styles.edgeGlow} />
+
+                {/* Fixed header — never scrolls */}
+                <div className={styles.previewHeader}>
+                  <h3 className={styles.previewTitle}>{activeItem.title}</h3>
+                  <div className={styles.previewBody}>{activeItem.desc}</div>
+
+                  {/* Move campaign recap into the fixed header so it appears higher */}
+                  {activeKey === 'campaign' && (
+                    <div className={styles.previewSectionGrid}>
+                      <div className={styles.cardMini}>
+                        <video
+                          src={recapVideo}
+                          controls
+                          preload="metadata"
+                          className={styles.previewVideo}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {activeKey === 'combat' && (
+                    <div className={styles.previewSectionGrid}>
+                      <div className={styles.cardMini}>
+                        <video
+                          src={combatVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className={styles.previewVideo}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className={`koa-divider-line ${styles.divider} ${styles.previewDivider}`} />
+
+                {/* Scrollable body */}
+                <div className={`${styles.bodyScroll} koa-scrollbar-thin`}>
+
+                  {/* Campaign brief (moved to header) */}
+
+                  {/* Character book helpers */}
+                  {activeKey === 'characters' && (
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
+                        <video
+                          src={characterBookPreviewVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className={styles.videoFill}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Video preview — Theater hover panel */}
+                  {activeKey === 'video' && (
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
+                        <video
+                          ref={theaterPreviewRef}
+                          src={theaterPreviewVideo}
+                          autoPlay
+                          loop
+                          playsInline
+                          preload="auto"
+                          className={styles.videoFill}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lore preview */}
+                  {activeKey === 'lore' && (
+                    <div className={styles.videoPreviewRow}>
+                      <div className={styles.videoPreviewShell}>
+                        <video
+                          src={worldLoreVideo}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className={styles.videoFill}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                </div>{/* end scrollable body */}
+
+                <div className={styles.footerActions}>
+                  {/* Primary action mirrors row click */}
+                  <button
+                    className={`${styles.actionBtn} koa-glass-btn koa-interactive-lift`}
+                    onMouseEnter={playHover}
+                    onClick={activeItem.primary.onClick}
+                  >
+                    {activeItem.primary.label}
+                  </button>
+                </div>
+              </div>
+>>>>>>> origin/main
             </div>
           </div>
         </div>

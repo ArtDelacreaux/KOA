@@ -1,9 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
+import styles from './WorldLore.module.css';
+import {
+  normalizeRelatedNpc,
+  normalizeText,
+  normalizeWorldNpc,
+  readCharacterNpcStore,
+  readWorldNpcsRaw,
+  setWorldNpcDeepLink,
+} from '../domain/worldNpcs';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import { repository } from '../repository';
 
 /*
   WorldLore — Knights of Atria
   Overworld knowledge center with:
-  - Intro video player
+  - Interactive world map with location pins
   - Tabbed image gallery (Maps, Scenes, Locations)
   - Lightbox on card click
   - Matches existing KOA tavern palette and panel system
@@ -24,15 +35,15 @@ const TABS = [
   Import your images at the top of this file like:
     import worldMapImg from '../assets/lore/world-map.jpg';
 */
-const GALLERY = {
+// initial, default gallery data; users can override via the repository
+const DEFAULT_GALLERY = {
   maps: [
     { id: 1, title: 'The Continent of Atria', src: 'lore/world-map.jpg', description: 'Full overworld map of the campaign setting.' },
     { id: 2, title: 'The Shattered Canyon', src: 'lore/canyon.jpg', description: 'Detailed map of the Shattered Canyon.' },
   ],
   scenes: [
-    { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.' },
-    { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.' },
-    { id: 3, title: "The Oracle's Vision", src: '', description: 'A dream sequence revealing the ancient prophecy.' },
+    { id: 1, title: 'The Well', src: 'lore/Well.jpg', description: 'Where tensions ran high.', summary: '' },
+    { id: 2, title: 'Underground Ryken Church', src: 'lore/rchurch.jpg', description: 'The underground church below Avalon.', summary: '' },
   ],
   locations: [
     {
@@ -40,22 +51,22 @@ const GALLERY = {
       title: 'The City of Qonza',
       src: 'lore/Qonza.webp',
       description: 'Crescent moon city with a cruel justice system.',
-      summary: 'Qonza thrives on strict order, wealth, and carefully guarded status. Most power flows through courts, contracts, and those who can afford both.',
-      region: 'Southern Trade Crescent',
-      governance: 'Magistrate houses and legal guild councils',
-      economy: 'Contract law, caravan tolls, and luxury trade',
-      tensions: 'Class unrest, selective justice, and border corruption',
+      summary: 'Crescent moon city with a cruel justice system.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 2,
       title: 'The City of Williwack',
       src: 'lore/Williwack.jpg',
       description: 'A desert kingdom that borders the World Spear.',
-      summary: 'Williwack stands where scorched routes meet mountain shadow. Survival forged a proud city-state known for discipline and resource control.',
-      region: 'Western Desert Verge',
-      governance: 'Crown-appointed stewards with military oversight',
-      economy: 'Water rights, glasswork, and spear-route caravans',
-      tensions: 'Border skirmishes and drought-year rationing',
+      summary: 'A desert kingdom that borders the World Spear.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 3,
@@ -64,31 +75,31 @@ const GALLERY = {
       description: 'Overview of the Center Kingdom.',
       summary: 'Avalon is a political and religious center where noble influence and temple authority constantly negotiate for control.',
       region: 'Central Kingdom',
-      governance: 'Crown administration with temple arbitration',
-      economy: 'State levies, artisan districts, and temple patronage',
-      tensions: 'Court intrigue, church pressure, and urban crime',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 4,
       title: 'The City of Metlos',
       src: 'lore/Metlos.jpg',
       description: 'Overview of Metlos.',
-      summary: 'Metlos is a fortified industrial city known for foundries, military supply chains, and a ruthless approach to efficiency.',
-      region: 'Ironward Basin',
-      governance: 'Militia council with merchant bloc influence',
-      economy: 'Steelworks, siege craft, and contract labor',
-      tensions: 'Labor strikes and black-market weapons',
+      summary: 'Metlos is a Golden Isles city.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 5,
       title: 'The Village of Orum',
       src: 'lore/orum.png',
       description: 'Overview of Orum.',
-      summary: 'Orum is a small but stubborn settlement that survives by community pacts, hidden trails, and local herbal trade.',
-      region: 'Greenhollow Reach',
-      governance: 'Elder circle and rotating wardens',
-      economy: 'Herbs, timber, and river ferries',
-      tensions: 'Bandit pressure and crop blight seasons',
+      summary: 'Orum is a small but stubborn settlement that holds a very powerful home.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 6,
@@ -96,43 +107,43 @@ const GALLERY = {
       src: 'lore/Buston.jpg',
       description: 'Overview of Buston.',
       summary: 'Buston sits on key roads and acts as a noisy commercial hinge between noble capitals and frontier outposts.',
-      region: 'Northroad Junction',
-      governance: 'Chartered city council',
-      economy: 'Transit tariffs, inns, and warehousing',
-      tensions: 'Guild turf wars and smuggling rings',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
     {
       id: 7,
       title: 'The Village of SkulPol',
       src: 'lore/skolpol.jpg',
       description: 'Overview of SkulPol.',
-      summary: 'SkulPol is remote, weathered, and deeply superstitious, with locals who trust memory more than maps.',
-      region: 'Fogline Hills',
-      governance: 'Clan heads and shrine keepers',
-      economy: 'Hunting, salvage, and seasonal trade',
-      tensions: 'Disappearing travelers and old-feud violence',
+      summary: 'SkulPol is remote, weathered, and in ruins.',
+      region: 'Unknown',
+      governance: 'Unknown',
+      economy: 'Unknown',
+      tensions: 'Unknown',
     },
   ],
   factions: [
     {
       id: 1,
       title: 'The Velvet Rose',
-      src: 'lore/world-map.jpg',
-      description: 'Influence network built through charm, debt, and social leverage.',
-      summary: 'The Velvet Rose moves quietly through salons, courts, and private ledgers. They avoid open war and prefer leverage no one can prove.',
-      influence: 'Courts, noble estates, and merchant finance',
-      doctrine: 'Control what people owe, and they become predictable',
+      src: 'lore/rose.jpg',
+      description: 'Little is known about this group. They have core members, and other mercs for hire.',
+      summary: 'The Velvet Rose moves quietly through their influence throught the continent. They deal in genocide, and assassination to acheive their goals.',
+      influence: 'Courts, noble estates, and other kingdoms',
+      doctrine: 'Destroy the kingdom of Avalon, and balance will be restored.',
       factionKeys: ['velvet rose',],
       memberHints: ['Tarzos Spicer'],
     },
     {
       id: 2,
       title: 'The Red Fang',
-      src: 'lore/canyon.jpg',
-      description: 'Militant front-line brotherhood tied to blood-oaths and conquest.',
-      summary: 'The Red Fang values strength, retaliation, and public fear. They recruit from battle survivors and enforce loyalty through ritual debt.',
-      influence: 'Border forts, mercenary cells, and raider routes',
-      doctrine: 'Mercy is a weakness your enemy exploits',
+      src: 'lore/redfang.jpg',
+      description: 'A mercenary group the Envoy\'s encountered. They deal in human trafficking, and are close with the Von\'Donovons.',
+      summary: 'The Red Fang members have been a force in the world spear. Even recruiting the likes of the tribes to do their bidding',
+      influence: 'Hunting, Trafficking, underworld',
+      doctrine: 'Unknown',
       factionKeys: ['red fang'],
       memberHints: ['Cerci VonDonovon'],
     },
@@ -142,69 +153,481 @@ const GALLERY = {
       src: 'lore/rykenf.webp',
       description: 'Devotional branches loyal to Ryken doctrine and shadow pacts.',
       summary: 'Ryken followers split between public worship and hidden circles. Their theology attracts both desperate believers and ruthless opportunists.',
-      influence: 'Shrines, hidden temples, and oath-brokers',
-      doctrine: 'Faith and consequence are inseparable',
+      influence: 'Underworld, crime, churches',
+      doctrine: 'Misery is just the beginning of worship.',
       factionKeys: ['ryken church', 'church of ryken', 'ryken'],
       memberHints: ['Ryken', 'William Spicer'],
     },
   ],
 };
 
-/*
-  ── HOW TO SET YOUR INTRO VIDEO ──
-  Import your video at the top:
-    import introVideo from '../assets/lore/world-intro.mp4';
-  Then set: const VIDEO_SRC = introVideo;
-*/
-const VIDEO_SRC = '';
-const LS_WORLD_NPCS = 'koa:worldnpcs:v1';
-const LS_WORLD_NPC_DEEPLINK = 'koa:worldnpcs:deeplink:v1';
-const LS_CHAR_NPCS = 'koa:char:npcs:v1';
+const DEFAULT_IDS_BY_TAB = TABS.reduce((acc, tab) => {
+  acc[tab.id] = new Set(
+    (Array.isArray(DEFAULT_GALLERY[tab.id]) ? DEFAULT_GALLERY[tab.id] : [])
+      .map((item) => String(item?.id))
+  );
+  return acc;
+}, {});
 
-// ─── Theme (matches MenuPanel THEME) ──────────────────────────────────────────
-const THEME = {
-  goldA: 'rgba(176,101,0,0.90)',
-  creamText: 'rgba(255,245,220,0.96)',
-  creamSoft: 'rgba(255,245,220,0.72)',
-  glassA: 'rgba(255,245,220,0.065)',
-  glassB: 'rgba(255,245,220,0.022)',
-  line: 'rgba(255,220,160,0.18)',
-  lineSoft: 'rgba(255,220,160,0.10)',
-};
-const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
+const ATRIA_MAP_SRC = 'lore/world-map.jpg';
+const ATRIA_MAP_ASPECT = '4 / 3'; // world-map.jpg is 2048x1536
+const INITIAL_ATRIA_POINTS = [
+  { locationId: 1, x: 43.2, y: 21.0 }, // Qonza
+  { locationId: 2, x: 97.0, y: 32.0 }, // Williwack
+  { locationId: 3, x: 51.6, y: 49.3 }, // Avalon
+  { locationId: 4, x: 16.21, y: 72.59 }, // Metlos
+  { locationId: 5, x: 35.2, y: 55.8 }, // Orum
+  { locationId: 6, x: 87.7, y: 22.0 }, // Buston
+  { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
+];
+
+// helper that merges stored edits with defaults
+function mergeGallery(defaultGallery, storedGallery) {
+  if (!storedGallery || typeof storedGallery !== 'object') return defaultGallery;
+  const out = {};
+  TABS.forEach((tab) => {
+    const defaultList = Array.isArray(defaultGallery[tab.id]) ? defaultGallery[tab.id] : [];
+    const storedList = Array.isArray(storedGallery[tab.id]) ? storedGallery[tab.id] : [];
+    const map = new Map(defaultList.map((item) => [item.id, { ...item }]));
+    storedList.forEach((item) => {
+      if (item && item.id != null) {
+        map.set(item.id, { ...map.get(item.id) || {}, ...item });
+      }
+    });
+    out[tab.id] = Array.from(map.values());
+  });
+  return out;
+}
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 function CornerOrns() {
-  const corners = [
-    { top: 6, left: 6, borderTop: '1px solid rgba(255,220,160,0.45)', borderLeft: '1px solid rgba(255,220,160,0.45)' },
-    { top: 6, right: 6, borderTop: '1px solid rgba(255,220,160,0.45)', borderRight: '1px solid rgba(255,220,160,0.45)' },
-    { bottom: 6, left: 6, borderBottom: '1px solid rgba(255,220,160,0.45)', borderLeft: '1px solid rgba(255,220,160,0.45)' },
-    { bottom: 6, right: 6, borderBottom: '1px solid rgba(255,220,160,0.45)', borderRight: '1px solid rgba(255,220,160,0.45)' },
-  ];
-  return corners.map((s, i) => (
-    <div key={i} style={{ position: 'absolute', width: 14, height: 14, pointerEvents: 'none', zIndex: 2, ...s }} />
-  ));
+  return (
+    <>
+      <div className={`${styles.cornerOrn} ${styles.cornerTopLeft}`} />
+      <div className={`${styles.cornerOrn} ${styles.cornerTopRight}`} />
+      <div className={`${styles.cornerOrn} ${styles.cornerBottomLeft}`} />
+      <div className={`${styles.cornerOrn} ${styles.cornerBottomRight}`} />
+    </>
+  );
 }
 
 function SectionDivider({ label }) {
-  const line = {
-    flex: 1,
-    height: 1,
-    background: 'linear-gradient(to right, transparent, rgba(255,220,160,0.22), transparent)',
-  };
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '0 0 18px' }}>
-      <div style={line} />
-      <span style={{
-        fontFamily: fontStack,
-        fontSize: 11,
-        letterSpacing: '0.22em',
-        color: 'rgba(255,220,160,0.55)',
-        textTransform: 'uppercase',
-        userSelect: 'none',
-        whiteSpace: 'nowrap',
-      }}>◈ &nbsp;{label}&nbsp; ◈</span>
-      <div style={line} />
+    <div className={styles.sectionDividerRow}>
+      <div className={`koa-divider-line ${styles.sectionDividerLine}`} />
+      <span className={styles.sectionDividerLabel}>◈ &nbsp;{label}&nbsp; ◈</span>
+      <div className={`koa-divider-line ${styles.sectionDividerLine}`} />
+    </div>
+  );
+}
+
+function InteractiveAtriaMap({
+  locations = [],
+  onOpenLocation = () => { },
+}) {
+  const stageRef = useRef(null);
+  const dragRef = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    panX: 0,
+    panY: 0,
+    moved: false,
+  });
+
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [copyStatus, setCopyStatus] = useState('');
+
+  const [points, setPoints] = useState(() => {
+    const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
+    return (locations || []).map((location, index) => {
+      const seeded = seededById.get(location.id);
+      if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
+      const fallbackColumn = index % 3;
+      const fallbackRow = Math.floor(index / 3);
+      return {
+        locationId: location.id,
+        x: 34 + fallbackColumn * 16,
+        y: 34 + fallbackRow * 12,
+      };
+    });
+  });
+  const [selectedPointId, setSelectedPointId] = useState(() => (locations[0] ? locations[0].id : null));
+
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  const clampPercent = (value) => clamp(value, 0, 100);
+  const roundCoord = (value) => Math.round(clampPercent(value) * 100) / 100;
+
+  const getLocationById = (locationId) =>
+    (locations || []).find((location) => location.id === locationId) || null;
+
+  const clampPanToStage = (nextPan, nextZoom = zoom) => {
+    const stageEl = stageRef.current;
+    if (!stageEl) return { x: 0, y: 0 };
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
+
+    const scaledWidth = rect.width * nextZoom;
+    const scaledHeight = rect.height * nextZoom;
+    const minX = Math.min(0, rect.width - scaledWidth);
+    const minY = Math.min(0, rect.height - scaledHeight);
+
+    return {
+      x: clamp(nextPan.x, minX, 0),
+      y: clamp(nextPan.y, minY, 0),
+    };
+  };
+
+  const setPointCoords = (locationId, x, y) => {
+    setPoints((prev) =>
+      (prev || []).map((point) =>
+        point.locationId === locationId
+          ? { ...point, x: roundCoord(x), y: roundCoord(y) }
+          : point
+      )
+    );
+  };
+
+  const toMapPercentFromClient = (clientX, clientY) => {
+    const stageEl = stageRef.current;
+    if (!stageEl) return null;
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+
+    const baseX = (clientX - rect.left - pan.x) / zoom;
+    const baseY = (clientY - rect.top - pan.y) / zoom;
+
+    return {
+      x: roundCoord((baseX / rect.width) * 100),
+      y: roundCoord((baseY / rect.height) * 100),
+    };
+  };
+
+  const selectedPoint = (points || []).find((point) => point.locationId === selectedPointId) || null;
+  const selectedLocation = selectedPoint ? getLocationById(selectedPoint.locationId) : null;
+
+  const exportPoints = (points || []).map((point) => ({
+    locationId: point.locationId,
+    title: getLocationById(point.locationId)?.title || `Location ${point.locationId}`,
+    x: Number(point.x.toFixed(2)),
+    y: Number(point.y.toFixed(2)),
+  }));
+
+  useEffect(() => {
+    setPoints((prev) => {
+      const prevById = new Map((prev || []).map((point) => [point.locationId, point]));
+      const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
+
+      return (locations || []).map((location, index) => {
+        const existing = prevById.get(location.id);
+        if (existing) return existing;
+
+        const seeded = seededById.get(location.id);
+        if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
+
+        const fallbackColumn = index % 3;
+        const fallbackRow = Math.floor(index / 3);
+        return {
+          locationId: location.id,
+          x: 34 + fallbackColumn * 16,
+          y: 34 + fallbackRow * 12,
+        };
+      });
+    });
+  }, [locations]);
+
+  useEffect(() => {
+    if ((points || []).some((point) => point.locationId === selectedPointId)) return;
+    setSelectedPointId(points[0]?.locationId || null);
+  }, [points, selectedPointId]);
+
+  useEffect(() => {
+    if (!copyStatus) return;
+    const timer = setTimeout(() => setCopyStatus(''), 1500);
+    return () => clearTimeout(timer);
+  }, [copyStatus]);
+
+  useEffect(() => {
+    const onResize = () => {
+      setPan((prev) => clampPanToStage(prev, zoom));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [zoom]);
+
+  useEffect(() => {
+    if (!editMode || !selectedPointId) return;
+    const onKeyDown = (event) => {
+      const targetTag = (event.target?.tagName || '').toUpperCase();
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') return;
+      const step = event.shiftKey ? 0.02 : 0.1;
+      let nextX = 0;
+      let nextY = 0;
+      if (event.key === 'ArrowUp') nextY = -step;
+      if (event.key === 'ArrowDown') nextY = step;
+      if (event.key === 'ArrowLeft') nextX = -step;
+      if (event.key === 'ArrowRight') nextX = step;
+      if (!nextX && !nextY) return;
+
+      event.preventDefault();
+      setPoints((prev) =>
+        (prev || []).map((point) =>
+          point.locationId === selectedPointId
+            ? {
+              ...point,
+              x: roundCoord(point.x + nextX),
+              y: roundCoord(point.y + nextY),
+            }
+            : point
+        )
+      );
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [editMode, selectedPointId]);
+
+  const applyZoom = (nextZoom) => {
+    const normalizedZoom = clamp(Number(nextZoom) || 1, 1, 4);
+    setZoom(normalizedZoom);
+    setPan((prev) => clampPanToStage(prev, normalizedZoom));
+  };
+
+  const onWheelZoom = (event) => {
+    // Keep regular page scrolling unless user intentionally zooms with Ctrl/Cmd + wheel.
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+
+    const delta = event.deltaY > 0 ? -0.16 : 0.16;
+    const nextZoom = clamp(Number((zoom + delta).toFixed(2)), 1, 4);
+    if (nextZoom === zoom) return;
+
+    const anchorX = event.clientX - rect.left;
+    const anchorY = event.clientY - rect.top;
+    const zoomRatio = nextZoom / zoom;
+    const nextPan = {
+      x: anchorX - (anchorX - pan.x) * zoomRatio,
+      y: anchorY - (anchorY - pan.y) * zoomRatio,
+    };
+
+    setZoom(nextZoom);
+    setPan(clampPanToStage(nextPan, nextZoom));
+  };
+
+  const onStagePointerDown = (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+
+    stageEl.setPointerCapture?.(event.pointerId);
+    dragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: pan.x,
+      panY: pan.y,
+      moved: false,
+    };
+    setDragging(true);
+  };
+
+  const onStagePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      dragRef.current.moved = true;
+    }
+
+    setPan(clampPanToStage({ x: drag.panX + dx, y: drag.panY + dy }, zoom));
+  };
+
+  const onStagePointerEnd = (event) => {
+    const drag = dragRef.current;
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
+    stageRef.current?.releasePointerCapture?.(event.pointerId);
+    dragRef.current.active = false;
+    dragRef.current.pointerId = null;
+    setDragging(false);
+  };
+
+  const onStageClick = (event) => {
+    if (!editMode || !selectedPointId) return;
+    if (dragRef.current.moved) {
+      dragRef.current.moved = false;
+      return;
+    }
+
+    const next = toMapPercentFromClient(event.clientX, event.clientY);
+    if (!next) return;
+    setPointCoords(selectedPointId, next.x, next.y);
+  };
+
+  const onMarkerClick = (event, point) => {
+    event.stopPropagation();
+    setSelectedPointId(point.locationId);
+    if (editMode) return;
+    onOpenLocation(point.locationId);
+  };
+
+  const copyPointJson = async () => {
+    const payload = JSON.stringify(exportPoints, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setCopyStatus('Copied');
+    } catch {
+      setCopyStatus('Copy failed');
+    }
+  };
+
+  return (
+    <div className={styles.atriaMapWrap}>
+      <div className={styles.atriaMapToolbar}>
+        <div className={styles.atriaMapZoomControls}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
+            onClick={() => applyZoom(zoom - 0.2)}
+            disabled={zoom <= 1}
+            title="Zoom out"
+          >
+            −
+          </button>
+          <input
+            type="range"
+            min={1}
+            max={4}
+            step={0.05}
+            value={zoom}
+            onChange={(event) => applyZoom(event.target.value)}
+            className={styles.atriaZoomRange}
+            title="Zoom"
+          />
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
+            onClick={() => applyZoom(zoom + 0.2)}
+            disabled={zoom >= 4}
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
+
+        <div className={styles.atriaMapEditControls}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtnWide}`}
+            onClick={() => setEditMode((prev) => !prev)}
+            title="Toggle map pin edit mode"
+          >
+            {editMode ? 'Done Editing' : 'Edit Pins'}
+          </button>
+
+          {editMode && (
+            <>
+              <label className={styles.atriaPinSelectLabel}>
+                Pin
+                <select
+                  value={selectedPointId || ''}
+                  onChange={(event) => setSelectedPointId(Number(event.target.value))}
+                  className={styles.atriaPinSelect}
+                >
+                  {(locations || []).map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtnWide}`}
+                onClick={copyPointJson}
+                title="Copy location coordinates as JSON"
+              >
+                Copy JSON
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div
+        ref={stageRef}
+        onWheel={onWheelZoom}
+        onPointerDown={onStagePointerDown}
+        onPointerMove={onStagePointerMove}
+        onPointerUp={onStagePointerEnd}
+        onPointerCancel={onStagePointerEnd}
+        onClick={onStageClick}
+        className={styles.atriaMapStage}
+        style={{
+          cursor: dragging ? 'grabbing' : (editMode ? 'crosshair' : (zoom > 1 ? 'grab' : 'grab')),
+          '--atria-map-aspect': ATRIA_MAP_ASPECT,
+        }}
+      >
+        <div
+          className={styles.atriaMapLayer}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          }}
+        >
+          <img
+            src={ATRIA_MAP_SRC}
+            alt="The Continent of Atria"
+            draggable={false}
+            className={styles.atriaMapImage}
+          />
+
+          {(points || []).map((point) => {
+            const location = getLocationById(point.locationId);
+            const label = location?.title || `Location ${point.locationId}`;
+            const isSelected = point.locationId === selectedPointId;
+            return (
+              <button
+                key={point.locationId}
+                type="button"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => onMarkerClick(event, point)}
+                className={`${styles.atriaMarker} ${isSelected ? styles.atriaMarkerSelected : ''}`}
+                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                title={editMode ? `Select ${label}` : `Open ${label}`}
+                aria-label={editMode ? `Select ${label} pin` : `Open ${label}`}
+              >
+                <span className={styles.atriaMarkerDot} />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className={styles.atriaMapHint}>
+          {editMode
+            ? 'Edit mode: select a pin, click map to place it, use arrow keys to nudge (Shift for fine movement).'
+            : 'Use + / − or slider to zoom. Hold Ctrl/Cmd + wheel for mouse-wheel zoom. Drag to pan, click a pin to open its location card.'}
+        </div>
+      </div>
+
+      <div className={styles.atriaMapFooter}>
+        <div className={styles.atriaMapFooterPrimary}>
+          {selectedLocation ? selectedLocation.title : 'No location selected'}
+        </div>
+        <div className={styles.atriaMapFooterSecondary}>
+          {selectedPoint ? `X ${selectedPoint.x.toFixed(2)}% • Y ${selectedPoint.y.toFixed(2)}%` : 'No coordinates'}
+        </div>
+        {copyStatus && (
+          <div className={styles.atriaMapCopyStatus}>{copyStatus}</div>
+        )}
+      </div>
+
+      <CornerOrns />
     </div>
   );
 }
@@ -212,91 +635,46 @@ function SectionDivider({ label }) {
 
 
 function ImageCard({ item, onClick }) {
-  const [hovered, setHovered] = useState(false);
-
   // Allow per-card preview control:
   // item.pos: 'center top' etc
   // item.fit: 'cover' or 'contain'
   const pos = item.pos || 'center';
   const fit = item.fit || 'cover';
+  const mediaVars = item.src
+    ? {
+      '--wl-image-url': `url(${item.src})`,
+      '--wl-image-pos': pos,
+      '--wl-image-fit': fit,
+    }
+    : undefined;
 
   return (
     <div
       onClick={() => onClick(item)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-        border: `1px solid ${hovered ? 'rgba(255,220,160,0.55)' : THEME.lineSoft}`,
-        borderRadius: 18,
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
-        transition: 'border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease',
-        boxShadow: hovered
-          ? '0 22px 60px rgba(0,0,0,0.6), 0 0 24px rgba(255,200,120,0.12)'
-          : '0 14px 40px rgba(0,0,0,0.45)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        backdropFilter: 'blur(10px)',
-      }}
+      className={styles.imageCard}
     >
-      {/* Image area */}
-      <div style={{
-        width: '100%',
-        aspectRatio: '16/9',
-        background: item.src
-          ? `url(${item.src}) ${pos} / ${fit} no-repeat`
-          : 'linear-gradient(135deg, rgba(30,20,8,0.95), rgba(60,38,12,0.7))',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderBottom: `1px solid ${THEME.lineSoft}`,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
+      <div
+        className={`${styles.imageCardMedia} ${!item.src ? styles.imageCardMediaEmpty : ''}`}
+        style={mediaVars}
+      >
         {!item.src && (
-          <div style={{ textAlign: 'center', opacity: 0.35, pointerEvents: 'none' }}>
-            <div style={{ fontSize: '1.8rem', marginBottom: 4 }}>🖼️</div>
-            <div style={{ fontSize: '0.6rem', color: 'rgba(255,220,160,0.7)', fontFamily: fontStack, letterSpacing: '0.15em' }}>
+          <div className={styles.imageCardPlaceholder}>
+            <div className={styles.imageCardPlaceholderIcon}>🖼️</div>
+            <div className={styles.imageCardPlaceholderText}>
               NO IMAGE SET
             </div>
           </div>
         )}
-        {/* Hover shimmer overlay */}
-        {hovered && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(135deg, transparent 40%, rgba(255,220,160,0.06) 60%, transparent 80%)',
-            pointerEvents: 'none',
-          }} />
-        )}
+        <div className={styles.imageCardShimmer} />
         <CornerOrns />
       </div>
 
-      {/* Card info */}
-      <div style={{ padding: '12px 14px 14px' }}>
-        <div style={{
-          fontFamily: fontStack,
-          fontSize: 13,
-          fontWeight: 900,
-          color: hovered ? THEME.creamText : 'rgba(255,235,200,0.88)',
-          letterSpacing: '0.08em',
-          marginBottom: 5,
-          transition: 'color 200ms ease',
-        }}>
-          {item.title}
-        </div>
-        <div style={{
-          fontSize: 11.5,
-          fontWeight: 850,
-          color: 'rgba(255,245,220,0.58)',
-          lineHeight: 1.5,
-          fontStyle: 'italic',
-        }}>
-          {item.description}
-        </div>
+      <div className={styles.imageCardBody}>
+        <div className={styles.imageCardTitle}>{item.title}</div>
+        {item.summary ? (
+          <div className={styles.imageCardSummary}>{item.summary}</div>
+        ) : null}
+        <div className={styles.imageCardDesc}>{item.description}</div>
       </div>
     </div>
   );
@@ -308,11 +686,38 @@ function Lightbox({
   onOpenWorldNpcs = () => { },
   onOpenMember = () => { },
   getFactionMembers = () => [],
+  editMode = false,
+  onUpdateItem = () => { },
+  canDeleteItem = () => false,
+  onDeleteItem = () => { },
 }) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef({ startX: 0, startY: 0, panX: 0, panY: 0 });
+
+  // editing state when editMode is active
+  const [editData, setEditData] = useState(item ? { ...item } : null);
+  useEffect(() => {
+    setEditData(item ? { ...item } : null);
+  }, [item]);
+
+  const handleFieldChange = (field, value) => {
+    setEditData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = () => {
+    if (editData) {
+      onUpdateItem(editData);
+    }
+  };
+  const handleDelete = () => {
+    if (!editData || !canDeleteItem(editData)) return;
+    const title = (editData.title || 'this entry').trim();
+    const confirmed = window.confirm(`Delete "${title}"? This cannot be undone.`);
+    if (!confirmed) return;
+    onDeleteItem(editData);
+  };
 
   useEffect(() => {
     if (!item) return;
@@ -321,12 +726,128 @@ function Lightbox({
     setDragging(false);
   }, [item]);
 
+  useEffect(() => {
+    if (!item) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [item, onClose]);
+
   if (!item) return null;
+
 
   const tab = item._tab || 'maps';
   const isLocation = tab === 'locations';
   const isFaction = tab === 'factions';
   const factionMembers = isFaction ? getFactionMembers(item) : [];
+  const isZoom = !isLocation && !isFaction; // maps & scenes
+
+  const renderEditFields = () => {
+    if (!editMode || !editData) return null;
+    const canDelete = canDeleteItem(editData);
+    return (
+      <div className={styles.lightboxEditPanel} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Title</label>
+          <input
+            className={styles.editInput}
+            value={editData.title || ''}
+            onChange={(e) => handleFieldChange('title', e.target.value)}
+          />
+        </div>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Summary</label>
+          <textarea
+            className={styles.editTextarea}
+            value={editData.summary || ''}
+            onChange={(e) => handleFieldChange('summary', e.target.value)}
+          />
+        </div>
+        <div className={styles.editRow}>
+          <label className={styles.editLabel}>Description</label>
+          <textarea
+            className={styles.editTextarea}
+            value={editData.description || ''}
+            onChange={(e) => handleFieldChange('description', e.target.value)}
+          />
+        </div>
+        {isLocation && (
+          <>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Region</label>
+              <input
+                className={styles.editInput}
+                value={editData.region || ''}
+                onChange={(e) => handleFieldChange('region', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Governance</label>
+              <input
+                className={styles.editInput}
+                value={editData.governance || ''}
+                onChange={(e) => handleFieldChange('governance', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Economy</label>
+              <input
+                className={styles.editInput}
+                value={editData.economy || ''}
+                onChange={(e) => handleFieldChange('economy', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Tensions</label>
+              <input
+                className={styles.editInput}
+                value={editData.tensions || ''}
+                onChange={(e) => handleFieldChange('tensions', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        {isFaction && (
+          <>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Influence</label>
+              <input
+                className={styles.editInput}
+                value={editData.influence || ''}
+                onChange={(e) => handleFieldChange('influence', e.target.value)}
+              />
+            </div>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Doctrine</label>
+              <input
+                className={styles.editInput}
+                value={editData.doctrine || ''}
+                onChange={(e) => handleFieldChange('doctrine', e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        <div className={styles.editActionRow}>
+          <button
+            className={`koa-glass-btn koa-interactive-lift ${styles.editSaveBtn}`}
+            onClick={handleSave}
+          >
+            Save
+          </button>
+          {canDelete && (
+            <button
+              className={`koa-glass-btn koa-interactive-lift ${styles.editDeleteBtn}`}
+              onClick={handleDelete}
+            >
+              Delete
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const setZoomClamped = (val) => setZoom(clamp(val, 1, 5));
@@ -356,202 +877,97 @@ function Lightbox({
 
   if (isLocation || isFaction) {
     return (
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.88)',
-          zIndex: 200,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 22,
-          backdropFilter: 'blur(4px)',
-          WebkitBackdropFilter: 'blur(4px)',
-        }}
-      >
+      <div className={styles.lightboxOverlay}>
         <div
           onClick={(e) => e.stopPropagation()}
-          style={{
-            background: 'linear-gradient(180deg, rgba(22,16,8,0.98), rgba(12,9,4,0.99))',
-            border: `1px solid rgba(255,220,160,0.4)`,
-            borderRadius: 22,
-            maxWidth: 1080,
-            width: '100%',
-            maxHeight: '90vh',
-            overflow: 'hidden',
-            boxShadow: '0 0 80px rgba(0,0,0,0.8), 0 0 40px rgba(176,101,0,0.12)',
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
+          className={`${styles.lightboxCard} ${styles.lightboxInfoCard}`}
         >
-          <div
-            style={{
-              padding: '14px 20px',
-              borderBottom: `1px solid ${THEME.lineSoft}`,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'rgba(255,245,220,0.04)',
-              gap: 12,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <span style={{ fontFamily: fontStack, color: THEME.creamText, fontSize: 15, fontWeight: 900, letterSpacing: '0.1em' }}>
-                {item.title}
-              </span>
-              <span style={{ color: 'rgba(255,220,160,0.56)', fontSize: 10, fontWeight: 900, letterSpacing: '0.16em', textTransform: 'uppercase' }}>
+          <div className={styles.lightboxHeader}>
+            <div className={styles.lightboxTitleStack}>
+              <span className={styles.lightboxTitle}>{item.title}</span>
+              <span className={styles.lightboxSubTag}>
                 {isFaction ? 'Faction Dossier' : 'Settlement Summary'}
               </span>
             </div>
 
             <button
               onClick={onClose}
-              style={{
-                background: 'rgba(255,245,220,0.06)',
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                cursor: 'pointer',
-                borderRadius: 10,
-                width: 32,
-                height: 32,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 14,
-                fontFamily: fontStack,
-              }}
+              className={styles.lightboxIconBtn}
               title="Close"
             >
               ✕
             </button>
           </div>
+          {renderEditFields()}
 
           <div
-            className="wl-scrollbar"
-            style={{
-              overflowY: 'auto',
-              padding: 16,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 14,
-            }}
+            className={`koa-scrollbar-thin ${styles.lightboxInfoGrid}`}
           >
-            <div
-              style={{
-                borderRadius: 16,
-                overflow: 'hidden',
-                border: `1px solid ${THEME.lineSoft}`,
-                background: 'rgba(0,0,0,0.25)',
-                minHeight: 260,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
+            <div className={styles.lightboxImageFrame}>
               {item.src ? (
                 <img
                   src={item.src}
                   alt={item.title}
-                  style={{ width: '100%', height: '100%', maxHeight: 420, objectFit: 'cover' }}
+                  className={styles.lightboxInfoImage}
                 />
               ) : (
-                <div style={{ textAlign: 'center', opacity: 0.28 }}>
-                  <div style={{ fontSize: '3rem' }}>🖼️</div>
-                  <div style={{ color: 'rgba(255,220,160,0.7)', fontSize: '0.7rem', letterSpacing: '0.15em', marginTop: 10, fontFamily: fontStack }}>
+                <div className={styles.lightboxPlaceholder}>
+                  <div className={styles.lightboxPlaceholderIcon}>🖼️</div>
+                  <div className={styles.lightboxPlaceholderText}>
                     IMAGE NOT YET ASSIGNED
                   </div>
                 </div>
               )}
             </div>
 
-            <div
-              style={{
-                borderRadius: 16,
-                border: `1px solid ${THEME.lineSoft}`,
-                background: 'linear-gradient(180deg, rgba(34,24,14,0.74), rgba(16,12,8,0.82))',
-                padding: 14,
-                boxShadow: '0 18px 44px rgba(0,0,0,0.42)',
-              }}
-            >
-              <div style={{ color: 'rgba(255,245,220,0.92)', fontSize: 12.5, lineHeight: 1.72, fontWeight: 850 }}>
+            <div className={styles.lightboxInfoPanel}>
+              <div className={styles.lightboxInfoSummary}>
                 {(item.summary || item.description || '').trim() || 'No summary has been added for this entry yet.'}
               </div>
 
-              <div style={{ height: 1, background: 'linear-gradient(90deg, transparent, rgba(255,220,160,0.18), transparent)', margin: '12px 0' }} />
+              <div className={`koa-divider-line ${styles.lightboxInfoDivider}`} />
 
               {!isFaction ? (
-                <div style={{ display: 'grid', gap: 7, color: 'rgba(255,245,220,0.84)', fontSize: 12.5, fontWeight: 850, lineHeight: 1.6 }}>
-                  <div><strong style={{ color: THEME.creamText }}>Region:</strong> {(item.region || 'Unknown').trim()}</div>
-                  <div><strong style={{ color: THEME.creamText }}>Governance:</strong> {(item.governance || 'Unknown').trim()}</div>
-                  <div><strong style={{ color: THEME.creamText }}>Economy:</strong> {(item.economy || 'Unknown').trim()}</div>
-                  <div><strong style={{ color: THEME.creamText }}>Current Tensions:</strong> {(item.tensions || 'Unknown').trim()}</div>
+                <div className={styles.lightboxFacts}>
+                  <div><strong className={styles.factLabel}>Region:</strong> {(item.region || 'Unknown').trim()}</div>
+                  <div><strong className={styles.factLabel}>Governance:</strong> {(item.governance || 'Unknown').trim()}</div>
+                  <div><strong className={styles.factLabel}>Economy:</strong> {(item.economy || 'Unknown').trim()}</div>
+                  <div><strong className={styles.factLabel}>Current Tensions:</strong> {(item.tensions || 'Unknown').trim()}</div>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gap: 7, color: 'rgba(255,245,220,0.84)', fontSize: 12.5, fontWeight: 850, lineHeight: 1.6 }}>
-                  <div><strong style={{ color: THEME.creamText }}>Influence:</strong> {(item.influence || 'Unknown').trim()}</div>
-                  <div><strong style={{ color: THEME.creamText }}>Doctrine:</strong> {(item.doctrine || 'Unknown').trim()}</div>
+                <div className={styles.lightboxFacts}>
+                  <div><strong className={styles.factLabel}>Influence:</strong> {(item.influence || 'Unknown').trim()}</div>
+                  <div><strong className={styles.factLabel}>Doctrine:</strong> {(item.doctrine || 'Unknown').trim()}</div>
                 </div>
               )}
             </div>
 
             {isFaction && (
-              <div
-                style={{
-                  gridColumn: '1 / -1',
-                  borderRadius: 16,
-                  border: `1px solid ${THEME.lineSoft}`,
-                  background: 'linear-gradient(180deg, rgba(30,20,10,0.78), rgba(14,10,8,0.84))',
-                  padding: 14,
-                }}
-              >
-                <div style={{ fontFamily: fontStack, fontWeight: 900, letterSpacing: '0.08em', color: THEME.creamText, fontSize: 13, marginBottom: 10 }}>
+              <div className={styles.factionMembersPanel}>
+                <div className={styles.factionMembersTitle}>
                   Known Members
                 </div>
 
                 {factionMembers.length === 0 ? (
-                  <div style={{ color: 'rgba(255,245,220,0.72)', fontSize: 12.5, lineHeight: 1.7 }}>
+                  <div className={styles.factionMembersEmpty}>
                     No linked World NPC entries yet. Add or tag members in the World NPC Codex, then they will show up here.
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gap: 8 }}>
+                  <div className={styles.factionMembersList}>
                     {factionMembers.map((member, idx) => (
                       <div
                         key={`${member.id || member.name || 'member'}-${idx}`}
-                        style={{
-                          borderRadius: 12,
-                          border: `1px solid ${THEME.lineSoft}`,
-                          background: 'rgba(0,0,0,0.24)',
-                          padding: '9px 10px',
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1fr) auto',
-                          gap: 10,
-                          alignItems: 'center',
-                        }}
+                        className={styles.factionMemberRow}
                       >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ color: THEME.creamText, fontWeight: 900, fontSize: 13 }}>{member.name || 'Unnamed NPC'}</div>
-                          <div style={{ color: 'rgba(255,245,220,0.72)', fontSize: 11.5, marginTop: 2, lineHeight: 1.55 }}>
+                        <div className={styles.factionMemberBody}>
+                          <div className={styles.factionMemberName}>{member.name || 'Unnamed NPC'}</div>
+                          <div className={styles.factionMemberMeta}>
                             {member.occupation ? `${member.occupation} • ` : ''}{member.location || 'Location unknown'}
                           </div>
                         </div>
                         <button
                           onClick={() => onOpenMember(member)}
-                          style={{
-                            borderRadius: 999,
-                            border: `1px solid ${THEME.line}`,
-                            padding: '7px 10px',
-                            background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-                            color: THEME.creamText,
-                            fontFamily: fontStack,
-                            fontSize: 11,
-                            fontWeight: 900,
-                            letterSpacing: '0.08em',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                          }}
+                          className={`koa-glass-btn koa-interactive-lift ${styles.lightboxPillBtn}`}
                         >
                           Open Profile
                         </button>
@@ -560,21 +976,10 @@ function Lightbox({
                   </div>
                 )}
 
-                <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end' }}>
+                <div className={styles.factionFooter}>
                   <button
                     onClick={() => onOpenWorldNpcs({ faction: '' })}
-                    style={{
-                      borderRadius: 999,
-                      border: `1px solid ${THEME.line}`,
-                      padding: '8px 12px',
-                      background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-                      color: THEME.creamText,
-                      fontFamily: fontStack,
-                      fontSize: 11.5,
-                      fontWeight: 900,
-                      letterSpacing: '0.08em',
-                      cursor: 'pointer',
-                    }}
+                    className={`koa-glass-btn koa-interactive-lift ${styles.lightboxPillBtn}`}
                   >
                     Open Full World NPC Codex
                   </button>
@@ -583,17 +988,10 @@ function Lightbox({
             )}
           </div>
 
-          <div
-            style={{
-              padding: '12px 20px',
-              borderTop: `1px solid ${THEME.lineSoft}`,
-              color: 'rgba(255,245,220,0.68)',
-              fontSize: 12.5,
-              fontStyle: 'italic',
-              lineHeight: 1.6,
-              fontWeight: 850,
-            }}
-          >
+          <div className={styles.lightboxFooterDesc}>
+            {item.summary && isZoom && (
+              <div className={styles.lightboxInfoSummary}>{item.summary}</div>
+            )}
             {item.description}
           </div>
 
@@ -603,62 +1001,27 @@ function Lightbox({
     );
   }
 
-  return (
-    <div
-      onClick={onClose}
-      onMouseMove={moveDrag}
-      onMouseUp={endDrag}
-      onMouseLeave={endDrag}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.88)',
-        zIndex: 200,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 32,
-        backdropFilter: 'blur(4px)',
-        WebkitBackdropFilter: 'blur(4px)',
-      }}
-    >
+    return (
+      <div
+        onMouseMove={moveDrag}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        className={styles.lightboxOverlay}
+      >
       <div
         onClick={e => e.stopPropagation()}
-        style={{
-          background: 'linear-gradient(180deg, rgba(22,16,8,0.98), rgba(12,9,4,0.99))',
-          border: `1px solid rgba(255,220,160,0.4)`,
-          borderRadius: 22,
-          maxWidth: 980,
-          width: '100%',
-          overflow: 'hidden',
-          boxShadow: '0 0 80px rgba(0,0,0,0.8), 0 0 40px rgba(176,101,0,0.12)',
-          position: 'relative',
-        }}
+        className={`${styles.lightboxCard} ${styles.lightboxZoomCard}`}
       >
-        <div style={{
-          padding: '14px 20px',
-          borderBottom: `1px solid ${THEME.lineSoft}`,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          background: 'rgba(255,245,220,0.04)',
-          gap: 12,
-          flexWrap: 'wrap',
-        }}>
-          <span style={{ fontFamily: fontStack, color: THEME.creamText, fontSize: 15, fontWeight: 900, letterSpacing: '0.1em' }}>
+        <div className={styles.lightboxZoomHeader}>
+          <span className={styles.lightboxTitle}>
             {item.title}
           </span>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+          <div className={styles.lightboxControls}>
             <button
               onClick={zoomOut}
               disabled={!item.src || zoom <= 1}
-              style={{
-                opacity: !item.src || zoom <= 1 ? 0.35 : 1,
-                background: 'rgba(255,245,220,0.06)',
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                cursor: !item.src || zoom <= 1 ? 'not-allowed' : 'pointer',
-                borderRadius: 10,
-                width: 32, height: 32,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, fontFamily: fontStack, fontWeight: 900,
-              }}
+              className={styles.lightboxCtrlBtn}
               title="Zoom out"
             >−</button>
 
@@ -670,81 +1033,36 @@ function Lightbox({
               value={zoom}
               disabled={!item.src}
               onChange={(e) => setZoomClamped(parseFloat(e.target.value))}
-              style={{
-                width: 160,
-                accentColor: 'rgba(176,101,0,0.85)',
-                opacity: item.src ? 1 : 0.35,
-              }}
+              className={styles.lightboxRange}
               title="Zoom"
             />
 
             <button
               onClick={zoomIn}
               disabled={!item.src || zoom >= 5}
-              style={{
-                opacity: !item.src || zoom >= 5 ? 0.35 : 1,
-                background: 'rgba(255,245,220,0.06)',
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                cursor: !item.src || zoom >= 5 ? 'not-allowed' : 'pointer',
-                borderRadius: 10,
-                width: 32, height: 32,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, fontFamily: fontStack, fontWeight: 900,
-              }}
+              className={styles.lightboxCtrlBtn}
               title="Zoom in"
             >+</button>
 
             <button
               onClick={resetView}
               disabled={!item.src}
-              style={{
-                opacity: item.src ? 1 : 0.35,
-                background: 'rgba(255,245,220,0.06)',
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                cursor: item.src ? 'pointer' : 'not-allowed',
-                borderRadius: 10,
-                height: 32,
-                padding: '0 10px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontFamily: fontStack, fontWeight: 900,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-              }}
+              className={`${styles.lightboxCtrlBtn} ${styles.lightboxResetBtn}`}
               title="Reset view"
             >Reset</button>
 
             <button
               onClick={onClose}
-              style={{
-                background: 'rgba(255,245,220,0.06)',
-                border: `1px solid ${THEME.line}`,
-                color: 'rgba(255,220,160,0.8)',
-                cursor: 'pointer',
-                borderRadius: 10,
-                width: 32, height: 32,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 14, fontFamily: fontStack,
-              }}
+              className={styles.lightboxIconBtn}
               title="Close"
             >✕</button>
           </div>
         </div>
+        {renderEditFields()}
 
         <div
           onWheel={onWheel}
-          style={{
-            width: '100%',
-            height: 'min(70vh, 560px)',
-            background: '#0a0805',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-            overflow: 'hidden',
-            userSelect: 'none',
-          }}
+          className={styles.lightboxImageStage}
         >
           {item.src ? (
             <img
@@ -753,55 +1071,30 @@ function Lightbox({
               draggable={false}
               onMouseDown={startDrag}
               onDoubleClick={resetView}
+              className={styles.lightboxZoomImage}
               style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                transformOrigin: 'center center',
                 cursor: dragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default'),
                 transition: dragging ? 'none' : 'transform 80ms ease',
-                willChange: 'transform',
-                pointerEvents: 'auto',
               }}
             />
           ) : (
-            <div style={{ textAlign: 'center', opacity: 0.28 }}>
-              <div style={{ fontSize: '3.5rem' }}>🖼️</div>
-              <div style={{ color: 'rgba(255,220,160,0.7)', fontSize: '0.7rem', letterSpacing: '0.15em', marginTop: 10, fontFamily: fontStack }}>
+            <div className={styles.lightboxPlaceholder}>
+              <div className={styles.lightboxPlaceholderIcon}>🖼️</div>
+              <div className={styles.lightboxPlaceholderText}>
                 IMAGE NOT YET ASSIGNED
               </div>
             </div>
           )}
 
           {item.src && (
-            <div style={{
-              position: 'absolute',
-              bottom: 12,
-              right: 14,
-              fontSize: 11,
-              fontFamily: fontStack,
-              letterSpacing: '0.12em',
-              color: 'rgba(255,220,160,0.35)',
-              background: 'rgba(0,0,0,0.35)',
-              border: `1px solid rgba(255,220,160,0.18)`,
-              borderRadius: 12,
-              padding: '6px 10px',
-              backdropFilter: 'blur(6px)',
-            }}>
+            <div className={styles.lightboxHint}>
               Wheel: Zoom • Drag: Pan • Double-click: Reset
             </div>
           )}
         </div>
 
-        <div style={{
-          padding: '14px 20px',
-          borderTop: `1px solid ${THEME.lineSoft}`,
-          color: 'rgba(255,245,220,0.68)',
-          fontSize: 13,
-          fontStyle: 'italic',
-          lineHeight: 1.6,
-          fontWeight: 850,
-        }}>
+        <div className={styles.lightboxFooterDesc}>
           {item.description}
         </div>
 
@@ -824,90 +1117,41 @@ export default function WorldLore({
   const [activeTab, setActiveTab] = useState('maps');
   const [lightboxItem, setLightboxItem] = useState(null);
 
-  // Panel visibility — matches ShellLayout pattern used elsewhere
-  const isActive = panelType === 'worldLore';
-  const panelStyle = {
-    position: 'absolute',
-    inset: 0,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: isActive ? 1 : 0,
-    transform: isActive ? 'translateY(0px)' : 'translateY(10px)',
-    transition: 'opacity 220ms ease, transform 220ms ease',
-    pointerEvents: isActive ? 'auto' : 'none',
-    zIndex: isActive ? 6 : 4,
-    overflowY: 'auto',
+  // important: persistent gallery state with ability to override summary/etc
+  const [gallery, setGallery] = useState(() => {
+    const stored = repository.readJson(STORAGE_KEYS.worldLore, null);
+    const merged = mergeGallery(DEFAULT_GALLERY, stored);
+    // persist defaults on first visit so backup has something meaningful
+    if (!stored) {
+      try { repository.writeJson(STORAGE_KEYS.worldLore, merged); } catch { }
+    }
+    return merged;
+  });
+  const saveGallery = (next) => {
+    setGallery(next);
+    try {
+      repository.writeJson(STORAGE_KEYS.worldLore, next);
+    } catch (e) {
+      // ignore write errors
+      console.warn('failed to save world lore', e);
+    }
   };
+
+  // when the user toggles edit mode for lore entries
+  const [loreEditMode, setLoreEditMode] = useState(false);
+
+  const isActive = panelType === 'worldLore';
 
   useEffect(() => {
     if (!isActive) setLightboxItem(null);
   }, [isActive]);
 
   const goBack = () => {
-    playNav();
     cinematicNav('menu');
   };
 
-  const normalizeText = (value) => (value || '').toString().trim().toLowerCase();
-
-  const normalizeWorldNpc = (npc, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `worldnpc::${idx}::${npc?.name || 'npc'}`,
-    name: (npc?.name || '').trim(),
-    age: (npc?.age || '').trim(),
-    faction: (npc?.faction || '').trim(),
-    occupation: (npc?.occupation || '').trim(),
-    location: (npc?.location || '').trim(),
-    summary: (npc?.summary || npc?.bio || '').trim(),
-    bio: (npc?.bio || '').trim(),
-    image: npc?.image || '',
-    characterLinks: Array.isArray(npc?.characterLinks)
-      ? npc.characterLinks
-        .map((l, linkIndex) => ({
-          characterName: (l?.characterName || '').trim(),
-          relation: (l?.relation || '').trim(),
-          linkIndex,
-        }))
-        .filter((l) => l.characterName)
-      : [],
-  });
-
-  const normalizeRelatedNpc = (npc, charName, idx = 0) => ({
-    id: (npc?.id && String(npc.id)) || `${charName}::${npc?.name || 'npc'}::${idx}`,
-    name: (npc?.name || '').trim(),
-    relation: (npc?.relation || '').trim(),
-    age: (npc?.age || '').trim(),
-    faction: (npc?.faction || '').trim(),
-    occupation: (npc?.occupation || '').trim(),
-    summary: (npc?.summary || npc?.bio || '').trim(),
-    bio: (npc?.bio || '').trim(),
-    image: npc?.image || '',
-    source: npc?.source || 'character',
-    worldNpcId: npc?.worldNpcId || null,
-  });
-
-  const readWorldNpcs = () => {
-    try {
-      const raw = localStorage.getItem(LS_WORLD_NPCS);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
-  };
-
-  const readCharacterNpcStore = () => {
-    try {
-      const raw = localStorage.getItem(LS_CHAR_NPCS);
-      const parsed = raw ? JSON.parse(raw) : {};
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch {
-      return {};
-    }
-  };
-
   const getFactionMembers = (factionItem) => {
-    const worldNpcs = readWorldNpcs();
+    const worldNpcs = readWorldNpcsRaw();
     const aliases = new Set(
       [factionItem?.title, ...(Array.isArray(factionItem?.factionKeys) ? factionItem.factionKeys : [])]
         .map(normalizeText)
@@ -968,18 +1212,22 @@ export default function WorldLore({
     return out.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   };
 
+  const handleUpdateItem = (updated) => {
+    if (!updated || updated.id == null) return;
+    const tab = updated._tab || activeTab;
+    const list = (gallery[tab] || []).map((it) => (it.id === updated.id ? { ...updated } : it));
+    const next = { ...gallery, [tab]: list };
+    saveGallery(next);
+    setLightboxItem({ ...updated, _tab: tab });
+  };
+
   const openWorldNpcCodex = ({ search = '', faction = '' } = {}) => {
     setLightboxItem(null);
-    try {
-      localStorage.setItem(
-        LS_WORLD_NPC_DEEPLINK,
-        JSON.stringify({
-          search: (search || '').trim(),
-          faction: (faction || '').trim(),
-          ts: Date.now(),
-        })
-      );
-    } catch { }
+    setWorldNpcDeepLink({
+      search: (search || '').trim(),
+      faction: (faction || '').trim(),
+      ts: Date.now(),
+    });
 
     if (typeof setSelectedChar === 'function') setSelectedChar(null);
     if (typeof setSelectedNpc === 'function') setSelectedNpc(null);
@@ -1094,266 +1342,145 @@ export default function WorldLore({
     locations: 'Places of interest, wonder, and danger throughout the realm.',
     factions: 'Power blocs, sects, and alliances that shape the realm.',
   };
-
-  const tabBarWrap = {
-    display: 'flex',
-    gap: 8,
-    marginBottom: 22,
-    padding: 8,
-    borderRadius: 22,
-    border: `1px solid ${THEME.line}`,
-    background: 'linear-gradient(180deg, rgba(24,16,10,0.88), rgba(10,8,6,0.86))',
-    backdropFilter: 'blur(12px)',
-    WebkitBackdropFilter: 'blur(12px)',
-    boxShadow: '0 18px 44px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,245,220,0.06)',
+  const tabSingularLabels = {
+    maps: 'Map',
+    scenes: 'Scene',
+    locations: 'Location',
+    factions: 'Faction',
   };
 
-  const loreTabButton = (active) => ({
-    flex: 1,
-    minWidth: 0,
-    padding: '11px 16px',
-    borderRadius: 999,
-    border: active
-      ? '1px solid rgba(255,220,160,0.45)'
-      : '1px solid rgba(255,220,160,0.20)',
-    background: active
-      ? 'linear-gradient(180deg, rgba(176,101,0,0.34), rgba(92,55,12,0.30))'
-      : 'linear-gradient(180deg, rgba(58,40,24,0.86), rgba(24,16,10,0.90))',
-    color: active ? THEME.creamText : 'rgba(255,245,220,0.88)',
-    cursor: 'pointer',
-    fontFamily: fontStack,
-    fontSize: 12,
-    fontWeight: 900,
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    transition: 'all 160ms ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    boxShadow: active
-      ? '0 14px 34px rgba(0,0,0,0.52), 0 0 18px rgba(176,101,0,0.24)'
-      : '0 10px 24px rgba(0,0,0,0.34)',
-    userSelect: 'none',
-    textShadow: '0 1px 10px rgba(0,0,0,0.78)',
-    whiteSpace: 'nowrap',
-  });
+  const isUserAddedItem = (tab, item) => {
+    if (!item || item.id == null) return false;
+    if (item.userAdded === true) return true;
+    const defaults = DEFAULT_IDS_BY_TAB[tab] || new Set();
+    return !defaults.has(String(item.id));
+  };
+
+  const buildNewItem = (tab, id) => {
+    const base = {
+      id,
+      title: `New ${tabSingularLabels[tab] || 'Entry'}`,
+      src: '',
+      summary: '',
+      description: '',
+      userAdded: true,
+    };
+    if (tab === 'locations') {
+      return {
+        ...base,
+        region: 'Unknown',
+        governance: 'Unknown',
+        economy: 'Unknown',
+        tensions: 'Unknown',
+      };
+    }
+    if (tab === 'factions') {
+      return {
+        ...base,
+        influence: 'Unknown',
+        doctrine: 'Unknown',
+        factionKeys: [],
+        memberHints: [],
+      };
+    }
+    return base;
+  };
+
+  const handleAddItem = () => {
+    const tab = activeTab;
+    const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
+    const nextId = currentList.reduce((maxId, item) => {
+      const numericId = Number(item?.id);
+      return Number.isFinite(numericId) ? Math.max(maxId, numericId) : maxId;
+    }, 0) + 1;
+
+    const nextItem = buildNewItem(tab, nextId);
+    const nextGallery = {
+      ...gallery,
+      [tab]: [...currentList, nextItem],
+    };
+
+    saveGallery(nextGallery);
+    setLightboxItem({ ...nextItem, _tab: tab });
+  };
+
+  const handleDeleteItem = (candidate) => {
+    if (!candidate || candidate.id == null) return;
+    const tab = candidate._tab || activeTab;
+    if (!isUserAddedItem(tab, candidate)) return;
+
+    const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
+    const nextList = currentList.filter((item) => String(item?.id) !== String(candidate.id));
+    if (nextList.length === currentList.length) return;
+
+    saveGallery({ ...gallery, [tab]: nextList });
+    setLightboxItem((prev) => {
+      if (!prev) return prev;
+      const prevTab = prev._tab || tab;
+      if (prevTab !== tab) return prev;
+      return String(prev.id) === String(candidate.id) ? null : prev;
+    });
+  };
+
+  const openLocationFromMap = (locationId) => {
+    const picked = gallery.locations.find((location) => location.id === locationId);
+    if (!picked) return;
+    setLightboxItem({ ...picked, _tab: 'locations' });
+  };
 
   return (
-    <div style={panelStyle}>
-      <style>{`
-        .wl-scrollbar::-webkit-scrollbar { width: 6px; }
-        .wl-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .wl-scrollbar::-webkit-scrollbar-thumb { background: rgba(176,101,0,0.4); border-radius: 999px; }
-      `}</style>
-
-      <div
-        className="wl-scrollbar"
-        style={{
-          width: '100%',
-          height: '100%',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: '0 0 40px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(176,101,0,0.4) transparent',
-        }}
-      >
-        {/* ── PAGE HEADER ── */}
-        <div style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-          padding: '44px 36px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          background: 'linear-gradient(180deg, rgba(8,5,2,0.96) 80%, transparent)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          borderBottom: `1px solid ${THEME.lineSoft}`,
-        }}>
-          {/* Back button */}
-          <button
-            onClick={goBack}
-            style={{
-              background: `linear-gradient(180deg, ${THEME.glassA}, ${THEME.glassB})`,
-              border: `1px solid ${THEME.line}`,
-              color: 'rgba(255,220,160,0.8)',
-              padding: '9px 18px',
-              borderRadius: 14,
-              cursor: 'pointer',
-              fontSize: 12,
-              letterSpacing: '0.14em',
-              fontFamily: fontStack,
-              fontWeight: 900,
-              backdropFilter: 'blur(10px)',
-              transition: 'all 150ms ease',
-              boxShadow: '0 10px 28px rgba(0,0,0,0.3)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
-              e.currentTarget.style.color = THEME.creamText;
-              e.currentTarget.style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = THEME.line;
-              e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            ← RETURN
-          </button>
-
-          {/* Title */}
-          <div style={{ textAlign: 'center', position: 'relative' }}>
-            <div style={{
-              fontSize: 10,
-              letterSpacing: '0.38em',
-              color: 'rgba(255,220,160,0.45)',
-              marginBottom: 14,
-              marginTop: -12,
-              fontFamily: fontStack,
-              textTransform: 'uppercase',
-            }}>
-              ✦ &nbsp; COMPENDIUM OF THE REALM &nbsp; ✦
-            </div>
-            <h1 style={{
-              margin: 0,
-              fontFamily: fontStack,
-              fontSize: 'clamp(1.4rem, 3vw, 2.2rem)',
-              fontWeight: 900,
-              color: THEME.creamText,
-              letterSpacing: '0.18em',
-              textShadow: '0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
-            }}>
-              WORLD LORE
-            </h1>
+    <div className={`${styles.panel} ${isActive ? styles.panelActive : styles.panelInactive}`}>
+      <div className={`koa-scrollbar-thin ${styles.worldLoreScrollWrap}`}>
+        <div className={styles.worldLoreHeader}>
+          <div className={styles.worldLoreHeaderLeft}>
+            <button
+              onClick={goBack}
+              className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreReturnBtn}`}
+            >
+              ← RETURN
+            </button>
           </div>
 
-          {/* Spacer to balance */}
-          <div style={{ width: 120 }} />
+          <div className={styles.worldLoreTitleWrap}>
+            <div className={styles.worldLoreKicker}>
+              ✦ &nbsp; COMPENDIUM OF THE REALM &nbsp; ✦
+            </div>
+            <h1 className={styles.worldLoreTitle}>WORLD LORE</h1>
+          </div>
+
+          <div className={styles.worldLoreHeaderSpacer} />
         </div>
 
-        {/* ── CONTENT ── */}
-        <div style={{ padding: '28px 36px 0', display: 'flex', flexDirection: 'column', gap: 32 }}>
-
-          {/* ── VIDEO SECTION ── */}
+        <div className={styles.worldLoreContent}>
           <section>
-            <SectionDivider label="Introduction" />
-            {/* Centered, constrained video wrapper */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{
-                position: 'relative',
-                width: '100%',
-                maxWidth: 680,
-                background: 'rgba(6,4,2,0.92)',
-                border: `1px solid ${THEME.line}`,
-                borderRadius: 18,
-                overflow: 'hidden',
-                boxShadow: '0 18px 50px rgba(0,0,0,0.7), inset 0 0 60px rgba(0,0,0,0.5)',
-              }}>
-                <CornerOrns />
-
-                {VIDEO_SRC ? (
-                  <video
-                    controls
-                    style={{
-                      width: '100%',
-                      display: 'block',
-                      maxHeight: 340,
-                      objectFit: 'contain',
-                      background: '#000',
-                    }}
-                    src={VIDEO_SRC}
-                  />
-                ) : (
-                  <div style={{
-                    aspectRatio: '16/9',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 14,
-                    background: 'linear-gradient(135deg, rgba(18,12,4,0.98), rgba(38,26,8,0.9))',
-                  }}>
-                    <div style={{
-                      width: 60, height: 60,
-                      borderRadius: '50%',
-                      border: `1px solid ${THEME.line}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '1.5rem',
-                      color: 'rgba(255,220,160,0.35)',
-                      background: 'rgba(0,0,0,0.3)',
-                    }}>▶</div>
-                    <div style={{
-                      fontFamily: fontStack,
-                      color: 'rgba(255,220,160,0.35)',
-                      fontSize: 12,
-                      letterSpacing: '0.22em',
-                      textTransform: 'uppercase',
-                      fontWeight: 900,
-                    }}>
-                      Introduction Video
-                    </div>
-                    <div style={{
-                      color: 'rgba(255,220,160,0.22)',
-                      fontSize: 11,
-                      fontStyle: 'italic',
-                      fontWeight: 850,
-                    }}>
-                      Set <code style={{ fontFamily: 'monospace', fontSize: 10 }}>VIDEO_SRC</code> at the top of WorldLore.jsx
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <SectionDivider label="World Map" />
+            <InteractiveAtriaMap
+              locations={gallery.locations}
+              onOpenLocation={openLocationFromMap}
+            />
           </section>
 
-          {/* ── GALLERY SECTION ── */}
           <section>
             <SectionDivider label="Archives" />
 
-            {/* Tab Bar */}
-            <div style={tabBarWrap}>
-              {TABS.map(tab => {
+            <div className={styles.loreTabBar}>
+              {TABS.map((tab) => {
                 const active = activeTab === tab.id;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    style={loreTabButton(active)}
-                    onMouseEnter={e => {
-                      if (!active) {
-                        e.currentTarget.style.color = THEME.creamText;
-                        e.currentTarget.style.borderColor = 'rgba(255,220,160,0.36)';
-                        e.currentTarget.style.background = 'linear-gradient(180deg, rgba(78,52,28,0.92), rgba(30,20,12,0.92))';
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!active) {
-                        e.currentTarget.style.color = 'rgba(255,245,220,0.88)';
-                        e.currentTarget.style.borderColor = 'rgba(255,220,160,0.20)';
-                        e.currentTarget.style.background = 'linear-gradient(180deg, rgba(58,40,24,0.86), rgba(24,16,10,0.90))';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }
-                    }}
+                    className={`${styles.loreTabBtn} ${active ? styles.loreTabBtnActive : ''}`}
                   >
-                    <span style={{ fontSize: '1rem', opacity: active ? 1 : 0.9 }}>{tab.icon}</span>
+                    <span className={`${styles.loreTabIcon} ${active ? styles.loreTabIconActive : ''}`}>{tab.icon}</span>
                     <span>{tab.label}</span>
                   </button>
                 );
               })}
             </div>
 
-            {/* Gallery Grid */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 16,
-            }}>
-              {GALLERY[activeTab].map(item => (
+            <div className={styles.galleryGrid}>
+              {(gallery[activeTab] || []).map((item) => (
                 <ImageCard
                   key={item.id}
                   item={item}
@@ -1362,27 +1489,37 @@ export default function WorldLore({
               ))}
             </div>
 
-            {/* Tab caption */}
-            <div style={{
-              marginTop: 14,
-              textAlign: 'center',
-              color: 'rgba(255,220,160,0.28)',
-              fontSize: 11,
-              letterSpacing: '0.14em',
-              fontStyle: 'italic',
-              fontWeight: 850,
-              fontFamily: fontStack,
-            }}>
+            <div className={styles.tabCaption}>
               {tabDescriptions[activeTab]}
             </div>
-          </section>
 
-        </div>{/* end content */}
+            <div className={styles.worldLoreBottomActions}>
+              {loreEditMode && (
+                <button
+                  onClick={handleAddItem}
+                  className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
+                >
+                  {`ADD ${tabSingularLabels[activeTab].toUpperCase()}`}
+                </button>
+              )}
+              <button
+                onClick={() => setLoreEditMode((prev) => !prev)}
+                className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
+              >
+                {loreEditMode ? 'DONE EDITING' : 'EDIT LORE'}
+              </button>
+            </div>
+          </section>
+        </div>
       </div>
 
       {/* Lightbox */}
       <Lightbox
         item={lightboxItem}
+        editMode={loreEditMode}
+        onUpdateItem={handleUpdateItem}
+        canDeleteItem={(entry) => isUserAddedItem(entry?._tab || activeTab, entry)}
+        onDeleteItem={handleDeleteItem}
         onClose={() => setLightboxItem(null)}
         onOpenWorldNpcs={openWorldNpcCodex}
         onOpenMember={openFactionMemberProfile}

@@ -1,6 +1,11 @@
-// ===== COMBAT PANEL — with Battle Background Selector =====
+﻿// ===== COMBAT PANEL — with Battle Background Selector =====
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
+import styles from './CombatPanel.module.css';
+import { createId } from '../domain/ids';
+import { repository } from '../repository';
+import { STORAGE_KEYS } from '../lib/storageKeys';
+import { parseCharacterSheetFile } from '../lib/sheetParser';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
 import battleback1  from '../assets/Backgrounds/battleback1.png';
@@ -27,9 +32,8 @@ const BATTLE_BACKGROUNDS = [
   { label: 'Pasture',         src: battleback10 },
 ];
 
-const LS_KEY = 'koa:combat:v4';
-const fontStack = "Cinzel, 'Trajan Pro', Georgia, serif";
-const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+const LS_KEY = STORAGE_KEYS.combat;
+const uid = () => createId('combat');
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
@@ -201,37 +205,533 @@ const ENEMY_TYPES = [
 ];
 
 const PC_COLORS = ['#a0c4ff','#c0a8ff','#ffd6a0','#a0ffcc','#ffb3b3','#ffe4a0','#b3e0ff'];
+const SPELL_SLOT_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const TOKEN_IMAGE_BY_ID = {
+  arlis: '/Token/arlis.png',
+  castor: '/Token/castor.png',
+  cerci: '/Token/cerci.png',
+  fen: '/Token/fen.png',
+  jasper: '/Token/jasper.png',
+  thryvaris: '/Token/thryvaris.png',
+  vonghul: '/Token/vonghul.png',
+  william: '/Token/will.png',
+};
+const TOKEN_IMAGE_BY_NAME_KEY = {
+  arlisghoth: '/Token/arlis.png',
+  castor: '/Token/castor.png',
+  cercivondonovon: '/Token/cerci.png',
+  fen: '/Token/fen.png',
+  jasperdelancey: '/Token/jasper.png',
+  thryvarisbria: '/Token/thryvaris.png',
+  vonghul: '/Token/vonghul.png',
+  williamspicer: '/Token/will.png',
+};
+
+const ABILITY_META = [
+  { key: 'str', short: 'STR', label: 'Strength' },
+  { key: 'dex', short: 'DEX', label: 'Dexterity' },
+  { key: 'con', short: 'CON', label: 'Constitution' },
+  { key: 'int', short: 'INT', label: 'Intelligence' },
+  { key: 'wis', short: 'WIS', label: 'Wisdom' },
+  { key: 'cha', short: 'CHA', label: 'Charisma' },
+];
+
+const ABILITY_SHORT_BY_WORD = {
+  str: 'STR',
+  strength: 'STR',
+  dex: 'DEX',
+  dexterity: 'DEX',
+  con: 'CON',
+  constitution: 'CON',
+  int: 'INT',
+  intelligence: 'INT',
+  wis: 'WIS',
+  wisdom: 'WIS',
+  cha: 'CHA',
+  charisma: 'CHA',
+};
+
+const SKILL_TO_ABILITY = {
+  acrobatics: 'DEX',
+  'animal handling': 'WIS',
+  arcana: 'INT',
+  athletics: 'STR',
+  deception: 'CHA',
+  history: 'INT',
+  insight: 'WIS',
+  intimidation: 'CHA',
+  investigation: 'INT',
+  medicine: 'WIS',
+  nature: 'INT',
+  perception: 'WIS',
+  performance: 'CHA',
+  persuasion: 'CHA',
+  religion: 'INT',
+  'sleight of hand': 'DEX',
+  stealth: 'DEX',
+  survival: 'WIS',
+};
+
+function tokenKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function tokenImageForCharacter(id, name) {
+  const fromId = TOKEN_IMAGE_BY_ID[tokenKey(id)];
+  if (fromId) return fromId;
+  return TOKEN_IMAGE_BY_NAME_KEY[tokenKey(name)] || '';
+}
+
+function defaultSpellSlots() {
+  return SPELL_SLOT_LEVELS.map((level) => ({ level, max: 0, current: 0 }));
+}
+
+function normalizeSpellSlots(raw) {
+  const byLevel = new Map();
+  if (Array.isArray(raw)) {
+    raw.forEach((slot, i) => {
+      const level = toInt(slot?.level, i + 1);
+      if (level >= 1 && level <= 9) byLevel.set(level, slot || {});
+    });
+  } else if (raw && typeof raw === 'object') {
+    Object.entries(raw).forEach(([levelKey, slot]) => {
+      const level = toInt(levelKey, 0);
+      if (level >= 1 && level <= 9) byLevel.set(level, slot || {});
+    });
+  }
+
+  return defaultSpellSlots().map((slot) => {
+    const src = byLevel.get(slot.level);
+    if (!src) return slot;
+    const max = Math.max(0, toInt(src.max ?? src.total, 0));
+    const fallbackCurrent = src.current ?? src.remaining ?? max;
+    const current = clamp(toInt(fallbackCurrent, max), 0, max);
+    return { level: slot.level, max, current };
+  });
+}
+
+function normalizeFeatureCharges(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((entry, index) => {
+    const fallbackName = `Feature ${index + 1}`;
+    const source = entry && typeof entry === 'object' ? entry : {};
+    const id = cleanText(source.id) || `feature-${index + 1}`;
+    const hasCustomName = Object.prototype.hasOwnProperty.call(source, 'name') || Object.prototype.hasOwnProperty.call(source, 'label');
+    const name = hasCustomName ? String(source.name ?? source.label ?? '') : fallbackName;
+    const max = clamp(toInt(source.max ?? source.charges, 0), 0, 20);
+    const fallbackCurrent = source.current ?? source.remaining ?? max;
+    const current = clamp(toInt(fallbackCurrent, max), 0, max);
+    return { id, name, max, current };
+  });
+}
+
+function spellLevelLabel(level) {
+  const n = clamp(toInt(level, 1), 1, 9);
+  if (n === 1) return '1ST';
+  if (n === 2) return '2ND';
+  if (n === 3) return '3RD';
+  return `${n}TH`;
+}
+
+function parseStatusText(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function normalizeStringList(raw) {
+  if (Array.isArray(raw)) {
+    return raw.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  const text = String(raw || '').trim();
+  if (!text) return [];
+  return text
+    .split(/[\r\n,;]+/g)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function cleanText(value) {
+  return String(value ?? '').trim();
+}
+
+function defaultAbilities() {
+  return { str: null, dex: null, con: null, int: null, wis: null, cha: null };
+}
+
+function normalizeAbilities(raw) {
+  const out = defaultAbilities();
+  if (!raw || typeof raw !== 'object') return out;
+  ABILITY_META.forEach(({ key }) => {
+    const value = raw[key];
+    if (value == null || value === '') {
+      out[key] = null;
+      return;
+    }
+    const parsed = toInt(value, null);
+    out[key] = parsed == null ? null : parsed;
+  });
+  return out;
+}
+
+function formatSigned(value, empty = '—') {
+  if (value == null || value === '') return empty;
+  const n = toInt(value, null);
+  if (n == null) return empty;
+  return n >= 0 ? `+${n}` : `${n}`;
+}
+
+function abilityModifier(score) {
+  if (score == null || score === '') return null;
+  return Math.floor((toInt(score, 10) - 10) / 2);
+}
+
+function proficiencyBonusFromLevel(level) {
+  const n = toInt(level, 0);
+  if (!n || n < 1) return 0;
+  const clamped = clamp(n, 1, 20);
+  return 2 + Math.floor((clamped - 1) / 4);
+}
+
+function abilityKeyFromShort(short) {
+  const match = ABILITY_META.find((meta) => meta.short === short);
+  return match ? match.key : '';
+}
+
+function inferProficiencyTier(totalBonus, baseBonus, proficiencyBonus, allowExpertise = true) {
+  if (totalBonus == null || baseBonus == null) return 0;
+  const delta = toInt(totalBonus, 0) - toInt(baseBonus, 0);
+  if (delta <= 0) return 0;
+  if (proficiencyBonus > 0) {
+    if (allowExpertise && delta >= (proficiencyBonus * 2) - 1) return 2;
+    if (delta >= Math.max(1, proficiencyBonus - 1)) return 1;
+    return 0;
+  }
+  return 1;
+}
+
+function extractBonusValue(text) {
+  const source = String(text || '');
+  const signedMatch = source.match(/[-+]\s*\d+/);
+  if (signedMatch) {
+    return toInt(signedMatch[0].replace(/\s+/g, ''), null);
+  }
+  const unsignedMatch = source.match(/\b\d+\b/);
+  if (unsignedMatch) return toInt(unsignedMatch[0], null);
+  return null;
+}
+
+function inferAbilityShort(text, fallback = '') {
+  const lowered = String(text || '').toLowerCase();
+  if (!lowered) return fallback;
+  const keys = Object.keys(ABILITY_SHORT_BY_WORD);
+  for (let i = 0; i < keys.length; i += 1) {
+    const key = keys[i];
+    const pattern = new RegExp(`\\b${key}\\b`, 'i');
+    if (pattern.test(lowered)) return ABILITY_SHORT_BY_WORD[key];
+  }
+  return fallback;
+}
+
+function normalizeFeatureList(raw) {
+  if (Array.isArray(raw)) return normalizeStringList(raw);
+  const text = cleanText(raw);
+  if (!text) return [];
+  if (text.includes('\n')) return normalizeStringList(text.split(/\r?\n/g));
+  return normalizeStringList(text.split(/[;]+/g));
+}
+
+function normalizeSavingThrowRows(rawSavingThrows, abilityScores, level) {
+  const fallbackByAbility = {};
+  ABILITY_META.forEach(({ key, short }) => {
+    fallbackByAbility[short] = abilityModifier(abilityScores?.[key]);
+  });
+  const proficiencyBonus = proficiencyBonusFromLevel(level);
+
+  const parsedByAbility = {};
+  normalizeStringList(rawSavingThrows).forEach((line) => {
+    const ability = inferAbilityShort(line, '');
+    if (!ability) return;
+    const value = extractBonusValue(line);
+    if (value == null) return;
+    parsedByAbility[ability] = value;
+  });
+
+  return ABILITY_META.map(({ short }) => ({
+    tag: short,
+    value: parsedByAbility[short] ?? fallbackByAbility[short],
+    proficiencyTier: inferProficiencyTier(
+      parsedByAbility[short] ?? fallbackByAbility[short],
+      fallbackByAbility[short],
+      proficiencyBonus,
+      false
+    ),
+  }));
+}
+
+function normalizeSkillRows(rawSkills, abilityScores, level) {
+  const rows = [];
+  const proficiencyBonus = proficiencyBonusFromLevel(level);
+  normalizeStringList(rawSkills).forEach((line, index) => {
+    if (!/[a-z]/i.test(line)) return;
+    const compact = line.replace(/\s+/g, ' ').trim();
+    if (!compact) return;
+
+    const bonus = extractBonusValue(compact);
+    const abilityInParens = compact.match(/\(([A-Za-z]{3,})\)/);
+    let ability = inferAbilityShort(abilityInParens ? abilityInParens[1] : compact, '');
+
+    let skillName = '';
+    const lowered = compact.toLowerCase();
+    const knownNames = Object.keys(SKILL_TO_ABILITY);
+    for (let i = 0; i < knownNames.length; i += 1) {
+      const known = knownNames[i];
+      if (lowered.includes(known)) {
+        skillName = known
+          .split(' ')
+          .map((token) => token[0].toUpperCase() + token.slice(1))
+          .join(' ');
+        if (!ability) ability = SKILL_TO_ABILITY[known];
+        break;
+      }
+    }
+
+    if (!skillName) {
+      skillName = compact
+        .replace(/\([^)]*\)/g, '')
+        .replace(/[-+]\s*\d+/g, '')
+        .replace(/\b(?:str|dex|con|int|wis|cha)\b/gi, '')
+        .replace(/\b(?:strength|dexterity|constitution|intelligence|wisdom|charisma)\b/gi, '')
+        .replace(/[,:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    if (!skillName || !/[a-z]/i.test(skillName)) return;
+
+    if (!ability) {
+      const fallbackAbility = Object.entries(SKILL_TO_ABILITY).find(([name]) => name === skillName.toLowerCase());
+      ability = fallbackAbility?.[1] || '';
+    }
+
+    const abilityKey = abilityKeyFromShort(ability);
+    const baseBonus = abilityKey ? abilityModifier(abilityScores?.[abilityKey]) : null;
+    let resolvedBonus = bonus;
+    if (resolvedBonus == null && ability) {
+      const meta = ABILITY_META.find((item) => item.short === ability);
+      resolvedBonus = meta ? abilityModifier(abilityScores?.[meta.key]) : null;
+    }
+
+    rows.push({
+      id: `${skillName}-${index}`,
+      skill: skillName,
+      ability: ability || '—',
+      bonus: resolvedBonus,
+      proficiencyTier: inferProficiencyTier(resolvedBonus, baseBonus, proficiencyBonus, true),
+    });
+  });
+  return rows;
+}
+
+function normalizeSenseRows(rawSenses) {
+  return normalizeStringList(rawSenses)
+    .filter((line) => /[a-z]/i.test(line))
+    .map((line, index) => {
+      const compact = line.replace(/\s+/g, ' ').trim();
+      const trailingValue = compact.match(/(-?\d+)\s*$/);
+      if (trailingValue) {
+        const value = toInt(trailingValue[1], null);
+        const label = compact.slice(0, trailingValue.index).trim() || compact;
+        return { id: `${label}-${index}`, label, value };
+      }
+      return { id: `${compact}-${index}`, label: compact, value: null };
+    });
+}
+
+function buildSheetPatch(combatant, parsedResult) {
+  const parsed = parsedResult?.parsed || {};
+  const mergedAbilities = normalizeAbilities(parsed.abilities || combatant.abilities);
+  const className = cleanText(parsed.className || combatant.className || combatant.role);
+  const level = parsed.level == null ? combatant.level : toInt(parsed.level, '');
+  const hpMax =
+    parsed.hpMax == null
+      ? combatant.maxHP
+      : Math.max(0, toInt(parsed.hpMax, combatant.maxHP === '' ? 0 : combatant.maxHP || 0));
+  const hpCurrentRaw =
+    parsed.hpCurrent == null
+      ? combatant.hp
+      : Math.max(0, toInt(parsed.hpCurrent, combatant.hp === '' ? 0 : combatant.hp || 0));
+  const hpCurrent = hpMax === '' ? hpCurrentRaw : Math.min(hpCurrentRaw, hpMax);
+  const initiativeBonus =
+    parsed.initiativeBonus == null ? toInt(combatant.initiativeBonus, 0) : toInt(parsed.initiativeBonus, 0);
+  const importedSpellSlots = normalizeSpellSlots(parsed.spellSlots);
+  const hasImportedSpellSlots = importedSpellSlots.some((slot) => slot.max > 0);
+  const importedFeatureCharges = normalizeFeatureCharges(parsed.featureCharges);
+  const hasParsedFeatureCharges = Array.isArray(parsed.featureCharges);
+
+  return {
+    name: cleanText(parsed.name) || combatant.name,
+    race: cleanText(parsed.race) || cleanText(combatant.race),
+    className,
+    role: className || combatant.role,
+    level: level === '' ? '' : level,
+    hp: hpCurrent,
+    maxHP: hpMax,
+    ac: parsed.ac == null ? combatant.ac : Math.max(0, toInt(parsed.ac, 0)),
+    speed: parsed.speed == null ? combatant.speed : Math.max(0, toInt(parsed.speed, 0)),
+    initiativeBonus,
+    abilities: mergedAbilities,
+    savingThrows: normalizeStringList(parsed.savingThrows),
+    skills: normalizeStringList(parsed.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(parsed.senses),
+    spellList: normalizeStringList(parsed.spellList),
+    spellSlots: hasImportedSpellSlots ? importedSpellSlots : normalizeSpellSlots(combatant.spellSlots),
+    classFeatures: normalizeFeatureList(parsed.classFeatures || parsed.abilitiesText),
+    featureCharges: hasParsedFeatureCharges ? importedFeatureCharges : normalizeFeatureCharges(combatant.featureCharges),
+    equipmentItems: normalizeStringList(parsed.equipmentItems || parsed.equipment),
+    otherPossessions: normalizeStringList(parsed.otherPossessions),
+    sourceSheet: true,
+    sourceSheetFileName: cleanText(parsedResult?.sourceFileName) || cleanText(combatant.sourceSheetFileName),
+    sourceSheetFormat: cleanText(parsedResult?.format) || cleanText(combatant.sourceSheetFormat),
+    sheetWarnings: normalizeStringList(parsedResult?.validation?.warnings),
+    sheetMissingFields: normalizeStringList(parsedResult?.validation?.missingFields),
+    sheetUnknownFields: normalizeStringList(parsedResult?.validation?.unknownFields),
+    sheetImportedAt: Date.now(),
+  };
+}
+
+function sheetProfileKey(sourceCharacterId, name) {
+  const sourceKey = tokenKey(sourceCharacterId);
+  if (sourceKey) return `char:${sourceKey}`;
+  const nameKey = tokenKey(name);
+  if (nameKey) return `name:${nameKey}`;
+  return '';
+}
+
+function normalizeSheetProfile(raw) {
+  const className = cleanText(raw?.className || raw?.role);
+  return {
+    race: cleanText(raw?.race),
+    className,
+    role: className,
+    level: raw?.level === '' || raw?.level == null ? '' : toInt(raw.level, ''),
+    hp: raw?.hp === '' || raw?.hp == null ? '' : toInt(raw.hp, 0),
+    maxHP: raw?.maxHP === '' || raw?.maxHP == null ? '' : toInt(raw.maxHP, 0),
+    ac: raw?.ac === '' || raw?.ac == null ? '' : toInt(raw.ac, 0),
+    speed: raw?.speed === '' || raw?.speed == null ? '' : toInt(raw.speed, 0),
+    initiativeBonus: raw?.initiativeBonus == null || raw?.initiativeBonus === '' ? 0 : toInt(raw.initiativeBonus, 0),
+    abilities: normalizeAbilities(raw?.abilities),
+    savingThrows: normalizeStringList(raw?.savingThrows),
+    skills: normalizeStringList(raw?.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(raw?.senses),
+    spellList: normalizeStringList(raw?.spellList),
+    classFeatures: normalizeFeatureList(raw?.classFeatures),
+    spellSlots: normalizeSpellSlots(raw?.spellSlots),
+    featureCharges: normalizeFeatureCharges(raw?.featureCharges),
+    equipmentItems: normalizeStringList(raw?.equipmentItems),
+    otherPossessions: normalizeStringList(raw?.otherPossessions),
+    sourceSheet: !!raw?.sourceSheet,
+    sourceSheetFileName: cleanText(raw?.sourceSheetFileName),
+    sourceSheetFormat: cleanText(raw?.sourceSheetFormat),
+    sheetWarnings: normalizeStringList(raw?.sheetWarnings),
+    sheetMissingFields: normalizeStringList(raw?.sheetMissingFields),
+    sheetUnknownFields: normalizeStringList(raw?.sheetUnknownFields),
+    sheetImportedAt: toInt(raw?.sheetImportedAt, 0),
+  };
+}
+
+function buildSheetProfileFromCombatant(combatant) {
+  return normalizeSheetProfile(combatant);
+}
+
+function applySheetProfileToCombatant(combatant, profile) {
+  if (!profile || typeof profile !== 'object') return combatant;
+  const normalized = normalizeSheetProfile(profile);
+  return {
+    ...combatant,
+    ...normalized,
+    name: combatant.name,
+    sourceCharacterId: combatant.sourceCharacterId || '',
+    side: combatant.side || 'Enemy',
+    init: toInt(combatant.init, 10),
+    tempHP: toInt(combatant.tempHP, 0),
+    status: Array.isArray(combatant.status) ? combatant.status : [],
+    concentration: combatant.concentration || '',
+    notes: combatant.notes || '',
+    dead: !!combatant.dead,
+    enemyType: combatant.enemyType || 'goblin',
+    customImage: combatant.customImage || '',
+    pcColorIndex: combatant.pcColorIndex != null ? combatant.pcColorIndex : 0,
+  };
+}
 
 function loadState() {
-  try { const raw = localStorage.getItem(LS_KEY); if (!raw) return null; return JSON.parse(raw); }
-  catch { return null; }
+  return repository.readJson(LS_KEY, null);
 }
-function saveState(state) { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch {} }
+function saveState(state) { repository.writeJson(LS_KEY, state); }
 
 function defaultEncounter() {
-  return { id: uid(), name: 'Encounter', round: 1, activeIndex: 0, combatants: [], updatedAt: Date.now() };
+  return {
+    id: uid(),
+    name: 'Encounter',
+    round: 1,
+    activeIndex: 0,
+    combatants: [],
+    sheetProfiles: {},
+    updatedAt: Date.now(),
+  };
 }
 
 function normalize(enc) {
   const base = defaultEncounter();
   const e = { ...base, ...(enc || {}) };
   if (!Array.isArray(e.combatants)) e.combatants = [];
+  const rawProfiles = e.sheetProfiles && typeof e.sheetProfiles === 'object' ? e.sheetProfiles : {};
+  e.sheetProfiles = Object.entries(rawProfiles).reduce((acc, [key, value]) => {
+    const normalizedKey = cleanText(key);
+    if (!normalizedKey) return acc;
+    acc[normalizedKey] = normalizeSheetProfile(value);
+    return acc;
+  }, {});
   e.combatants = e.combatants.map((c, i) => ({
+    sourceCharacterId: c.sourceCharacterId || '',
     id: c.id || uid(),
     name: c.name || 'Unknown',
     role: c.role || '',
+    race: c.race || '',
+    className: c.className || c.role || '',
+    level: c.level === '' || c.level == null ? '' : toInt(c.level, ''),
     side: c.side || 'Enemy',
     init: toInt(c.init, 10),
+    initiativeBonus: c.initiativeBonus == null || c.initiativeBonus === '' ? 0 : toInt(c.initiativeBonus, 0),
     maxHP: c.maxHP === '' || c.maxHP == null ? '' : toInt(c.maxHP, 0),
     hp: c.hp === '' || c.hp == null ? '' : toInt(c.hp, 0),
     tempHP: toInt(c.tempHP, 0),
     ac: c.ac === '' || c.ac == null ? '' : toInt(c.ac, 0),
+    speed: c.speed === '' || c.speed == null ? '' : toInt(c.speed, 0),
+    abilities: normalizeAbilities(c.abilities),
+    savingThrows: normalizeStringList(c.savingThrows),
+    skills: normalizeStringList(c.skills).filter((line) => /[a-z]/i.test(line)),
+    senses: normalizeStringList(c.senses),
+    spellList: normalizeStringList(c.spellList),
+    classFeatures: normalizeFeatureList(c.classFeatures),
     status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
     concentration: c.concentration || '',
     notes: c.notes || '',
+    spellSlots: normalizeSpellSlots(c.spellSlots),
+    featureCharges: normalizeFeatureCharges(c.featureCharges),
+    equipmentItems: normalizeStringList(c.equipmentItems),
+    otherPossessions: normalizeStringList(c.otherPossessions),
+    sourceSheet: !!c.sourceSheet,
+    sourceSheetFileName: c.sourceSheetFileName || '',
+    sourceSheetFormat: c.sourceSheetFormat || '',
+    sheetWarnings: normalizeStringList(c.sheetWarnings),
+    sheetMissingFields: normalizeStringList(c.sheetMissingFields),
+    sheetUnknownFields: normalizeStringList(c.sheetUnknownFields),
+    sheetImportedAt: toInt(c.sheetImportedAt, 0),
     dead: !!c.dead,
     enemyType: c.enemyType || 'goblin',
-    customImage: c.customImage || '',
+    customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
     pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
   }));
   e.round = toInt(e.round, 1);
@@ -291,8 +791,14 @@ function CropImage({ src, imgRef, cropBox, zoom, offset, onLoad }) {
   const left = (cropBox / 2) - (rw / 2) + offset.x;
   const top  = (cropBox / 2) - (rh / 2) + offset.y;
   return (
-    <img ref={imgRef} src={src} alt="crop" onLoad={onLoad} draggable={false}
-      style={{ position:'absolute', left, top, width:rw, height:rh, pointerEvents:'none', userSelect:'none' }} />
+    <img
+      ref={imgRef}
+      src={src}
+      alt="crop"
+      onLoad={onLoad}
+      draggable={false}
+      style={{ position: 'absolute', left, top, width: rw, height: rh, pointerEvents: 'none', userSelect: 'none' }}
+    />
   );
 }
 
@@ -304,58 +810,59 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
 
   const EnemyRender = ENEMY_TYPES.find(e => e.key === c.enemyType)?.Render || GoblinSVG;
   const pcColor = PC_COLORS[c.pcColorIndex % PC_COLORS.length];
+  const rootClass = `${styles.tokenRoot} ${c.dead ? styles.tokenDead : ''}`;
+  const ringShadow = c.side === 'Enemy'
+    ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
+    : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)';
+  const circleBorder = isSelected
+    ? '3px solid rgba(255,210,80,0.95)'
+    : isActive
+    ? '3px solid rgba(255,255,255,0.55)'
+    : `2px solid ${c.side === 'Enemy' ? 'rgba(200,60,60,0.45)' : 'rgba(80,160,120,0.45)'}`;
+  const circleBg = c.side === 'Enemy'
+    ? 'radial-gradient(circle at 40% 35%, rgba(60,20,20,0.95), rgba(20,8,8,0.98))'
+    : 'radial-gradient(circle at 40% 35%, rgba(20,30,50,0.95), rgba(8,12,22,0.98))';
+  const circleShadow = c.side === 'Enemy'
+    ? '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(180,40,40,0.15)'
+    : '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(60,120,200,0.12)';
+  const labelBg = isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)';
+  const labelBorder = `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`;
+  const nameColor = c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)';
 
   return (
     <div
       onClick={onClick}
       onMouseEnter={onHover}
       title={`${c.name} — Click to edit`}
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-        cursor: 'pointer', userSelect: 'none',
-        opacity: c.dead ? 0.30 : 1,
-        filter: c.dead ? 'grayscale(0.9)' : 'none',
-        transition: 'opacity 300ms, filter 300ms',
-        position: 'relative',
-      }}
+      className={rootClass}
     >
       {/* Active turn glow ring */}
       {isActive && (
-        <div style={{
-          position: 'absolute', top: -6, left: '50%', transform: 'translateX(-50%)',
-          width: size + 16, height: size + 16, borderRadius: '50%',
-          background: 'transparent',
-          boxShadow: c.side === 'Enemy'
-            ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
-            : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)',
-          animation: 'pulse 1.6s ease-in-out infinite',
-          zIndex: 1,
-        }} />
+        <div
+          className={styles.tokenActiveRing}
+          style={{ width: size + 16, height: size + 16, boxShadow: ringShadow }}
+        />
       )}
 
       {/* Token circle / image */}
-      <div style={{
-        width: size, height: size, borderRadius: '50%', overflow: 'hidden',
-        border: isSelected
-          ? '3px solid rgba(255,210,80,0.95)'
-          : isActive
-          ? '3px solid rgba(255,255,255,0.55)'
-          : `2px solid ${c.side === 'Enemy' ? 'rgba(200,60,60,0.45)' : 'rgba(80,160,120,0.45)'}`,
-        background: c.side === 'Enemy'
-          ? 'radial-gradient(circle at 40% 35%, rgba(60,20,20,0.95), rgba(20,8,8,0.98))'
-          : 'radial-gradient(circle at 40% 35%, rgba(20,30,50,0.95), rgba(8,12,22,0.98))',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: c.side === 'Enemy'
-          ? '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(180,40,40,0.15)'
-          : '0 6px 20px rgba(0,0,0,0.75), inset 0 0 20px rgba(60,120,200,0.12)',
-        position: 'relative', zIndex: 2,
-        transform: flipped ? 'scaleX(-1)' : 'none',
-        flexShrink: 0,
-      }}>
+      <div
+        className={styles.tokenCircle}
+        style={{
+          width: size,
+          height: size,
+          border: circleBorder,
+          background: circleBg,
+          boxShadow: circleShadow,
+          transform: flipped ? 'scaleX(-1)' : 'none',
+        }}
+      >
         {c.customImage ? (
-          <img src={c.customImage} alt={c.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover',
-              transform: flipped ? 'scaleX(-1)' : 'none' }} />
+          <img
+            src={c.customImage}
+            alt={c.name}
+            className={styles.tokenImage}
+            style={{ transform: flipped ? 'scaleX(-1)' : 'none' }}
+          />
         ) : c.side === 'Enemy' ? (
           <EnemyRender size={size * 0.72} />
         ) : (
@@ -364,58 +871,42 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
       </div>
 
       {/* Name tag + status */}
-      <div style={{
-        background: isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)',
-        border: `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`,
-        backdropFilter: 'blur(10px)',
-        borderRadius: 8, padding: '3px 8px 4px', zIndex: 3,
-        maxWidth: size + 30, textAlign: 'center',
-      }}>
-        <div style={{
-          color: c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)',
-          fontWeight: 950, fontSize: 10, whiteSpace: 'nowrap',
-          overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: size + 20,
-          textDecoration: c.dead ? 'line-through' : 'none',
-        }}>{c.name}</div>
+      <div
+        className={styles.tokenLabelBox}
+        style={{ background: labelBg, border: labelBorder, maxWidth: size + 30 }}
+      >
+        <div
+          className={styles.tokenName}
+          style={{ color: nameColor, maxWidth: size + 20, textDecoration: c.dead ? 'line-through' : 'none' }}
+        >
+          {c.name}
+        </div>
         {/* HP bar */}
-        <div style={{ height: 2, borderRadius: 999, background: 'rgba(255,255,255,0.10)', marginTop: 2, overflow: 'hidden', width: '100%' }}>
-          <div style={{ height: '100%', width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct), borderRadius: 999 }} />
+        <div className={styles.tokenHpTrack}>
+          <div className={styles.tokenHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
         </div>
         {/* Status badges */}
         {c.status && c.status.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, justifyContent: 'center', marginTop: 3 }}>
+          <div className={styles.tokenStatusRow}>
             {c.status.slice(0, 4).map(s => (
-              <span key={s} style={{
-                fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
-                padding: '1px 4px', borderRadius: 4,
-                background: 'rgba(180,120,20,0.35)',
-                border: '1px solid rgba(255,200,80,0.30)',
-                color: 'rgba(255,220,120,0.92)',
-                whiteSpace: 'nowrap',
-              }}>{s}</span>
+              <span key={s} className={styles.tokenStatusBadge}>{s}</span>
             ))}
             {c.status.length > 4 && (
-              <span style={{ fontSize: 8, color: 'rgba(255,220,120,0.60)', fontWeight: 900 }}>+{c.status.length - 4}</span>
+              <span className={styles.tokenStatusMore}>+{c.status.length - 4}</span>
             )}
           </div>
         )}
         {/* Concentration indicator */}
         {c.concentration && (
-          <div style={{
-            marginTop: 2, fontSize: 8, fontWeight: 950, letterSpacing: '0.06em',
-            color: 'rgba(160,200,255,0.85)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: size + 20,
-          }}>⚬ {c.concentration}</div>
+          <div className={styles.tokenConcentration} style={{ maxWidth: size + 20 }}>
+            ⚬ {c.concentration}
+          </div>
         )}
       </div>
 
       {/* Dead skull */}
       {c.dead && (
-        <div style={{
-          position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%,-50%)',
-          fontSize: size * 0.35, zIndex: 5, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.80))',
-        }}>💀</div>
+        <div className={styles.tokenDeadSkull} style={{ fontSize: size * 0.35 }}>💀</div>
       )}
     </div>
   );
@@ -425,27 +916,24 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
 function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEditorFor, playHover, playNav, battleBg }) {
   const pcs    = combatants.filter(c => c.side === 'PC' || c.side === 'Ally');
   const enemies = combatants.filter(c => c.side === 'Enemy');
+  const bgStyle = {
+    background: battleBg
+      ? `url(${battleBg}) center/cover no-repeat`
+      : 'linear-gradient(180deg, rgba(8,6,4,0.30) 0%, rgba(0,0,0,0) 40%)',
+  };
+  const enemyGap = Math.max(6, 48 - enemies.length * 4);
+  const pcGap = Math.max(8, 52 - pcs.length * 5);
 
   return (
-    <div style={{
-      position: 'relative', width: '100%', height: '100%', overflow: 'hidden', borderRadius: 14,
-      background: battleBg
-        ? `url(${battleBg}) center/cover no-repeat`
-        : 'linear-gradient(180deg, rgba(8,6,4,0.30) 0%, rgba(0,0,0,0) 40%)',
-      transition: 'background-image 300ms ease',
-    }}>
+    <div className={styles.sceneRoot} style={bgStyle}>
 
       {/* Dark overlay to keep tokens readable over bright backgrounds */}
       {battleBg && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 0, borderRadius: 14,
-          background: 'linear-gradient(180deg, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0.10) 50%, rgba(0,0,0,0.44) 100%)',
-          pointerEvents: 'none',
-        }} />
+        <div className={styles.sceneOverlay} />
       )}
 
       {/* Ground plane perspective lines */}
-      <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }} viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
+      <svg className={styles.sceneSvg} viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
         {/* Horizon fog */}
         <defs>
           <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
@@ -495,24 +983,15 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 
       {/* Empty state */}
       {combatants.length === 0 && (
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 2, flexDirection: 'column', gap: 10,
-          color: 'rgba(255,245,220,0.40)', fontWeight: 900, textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 44, opacity: 0.3 }}>⚔️</div>
-          <div style={{ fontSize: 13 }}>Add combatants to see the battlefield</div>
+        <div className={styles.sceneEmpty}>
+          <div className={styles.sceneEmptyIcon}>⚔️</div>
+          <div className={styles.sceneEmptyText}>Add combatants to see the battlefield</div>
         </div>
       )}
 
       {/* ENEMIES — upper half, facing toward us, spread horizontally */}
       {enemies.length > 0 && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, top: '19%',
-          display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(6, 48 - enemies.length * 4),
-          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
-        }}>
+        <div className={styles.sceneEnemiesRow} style={{ gap: enemyGap }}>
           {enemies.map((c, i) => {
             const scale = 0.68 + (enemies.length <= 2 ? 0.18 : enemies.length <= 4 ? 0.08 : 0);
             const tokenSize = Math.round(108 * scale);
@@ -533,21 +1012,12 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 
       {/* VS divider label */}
       {pcs.length > 0 && enemies.length > 0 && (
-        <div style={{
-          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)',
-          zIndex: 4, color: 'rgba(255,210,80,0.22)', fontWeight: 950, fontSize: 28, letterSpacing: 6,
-          textShadow: '0 0 20px rgba(255,180,40,0.30)', userSelect: 'none', pointerEvents: 'none',
-        }}>VS</div>
+        <div className={styles.sceneVs}>VS</div>
       )}
 
       {/* PCs — lower half, facing away (backs shown), larger (closer) */}
       {pcs.length > 0 && (
-        <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: '12%',
-          display: 'flex', justifyContent: 'center', alignItems: 'flex-end',
-          gap: Math.max(8, 52 - pcs.length * 5),
-          flexWrap: 'wrap', padding: '0 28px', zIndex: 3,
-        }}>
+        <div className={styles.scenePcsRow} style={{ gap: pcGap }}>
           {pcs.map((c, i) => {
             const scale = 0.80 + (pcs.length <= 2 ? 0.22 : pcs.length <= 4 ? 0.10 : 0);
             const tokenSize = Math.round(132 * scale);
@@ -565,14 +1035,6 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
           })}
         </div>
       )}
-
-      {/* Pulse keyframe injected once */}
-      <style>{`
-        @keyframes pulse {
-          0%,100% { opacity: 1; }
-          50% { opacity: 0.45; }
-        }
-      `}</style>
     </div>
   );
 }
@@ -585,6 +1047,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     return (characters || [])
       .filter((c) => c && c.combat)
       .map((c) => ({
+        id: c.id || '',
         name: c.name,
         role: c.role || c.class || '',
         ac: typeof c.ac === 'number' ? c.ac : 0,
@@ -598,9 +1061,24 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
   const [selectedId, setSelectedId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorMode, setEditorMode] = useState('edit');
+  const [listEditorMode, setListEditorMode] = useState('');
+  const [listEditorText, setListEditorText] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
-  const [draft, setDraft] = useState({ name:'', role:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
+  const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
+  const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
+  const [statusDraft, setStatusDraft] = useState('');
+  const [sheetImportState, setSheetImportState] = useState({
+    running: false,
+    progress: 0,
+    stage: '',
+    targetId: '',
+    message: '',
+    error: '',
+  });
+  const [initSlideDirection, setInitSlideDirection] = useState('next');
+  const [initSlideTick, setInitSlideTick] = useState(0);
 
   // ── Battle Background state ─────────────────────────────────────────────
   const [battleBg, setBattleBg] = useState(null);
@@ -613,6 +1091,35 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const sheetFileInputRef = useRef(null);
+  const sheetImportAbortRef = useRef(null);
+
+  useEffect(() => {
+    const anyModalOpen = cropOpen || addModalOpen || editorOpen || !!listEditorMode;
+    if (!anyModalOpen) return;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (listEditorMode) {
+        setListEditorMode('');
+        return;
+      }
+      if (cropOpen) {
+        setCropOpen(false);
+        return;
+      }
+      if (addModalOpen) {
+        setAddModalOpen(false);
+        return;
+      }
+      if (editorOpen) {
+        setEditorOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cropOpen, addModalOpen, editorOpen, listEditorMode]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -669,12 +1176,77 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
+  const selectedSavingThrowRows = useMemo(
+    () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
+    [selected]
+  );
+  const selectedSkillRows = useMemo(
+    () => normalizeSkillRows(selected?.skills, selected?.abilities, selected?.level),
+    [selected]
+  );
+  const selectedSenseRows = useMemo(
+    () => normalizeSenseRows(selected?.senses),
+    [selected]
+  );
+  const allSpellSlots = useMemo(
+    () => normalizeSpellSlots(selected?.spellSlots),
+    [selected]
+  );
+  const visibleSheetSpellSlots = useMemo(
+    () => allSpellSlots.filter((slot) => Number(slot.max) > 0),
+    [allSpellSlots]
+  );
+  const allFeatureCharges = useMemo(
+    () => normalizeFeatureCharges(selected?.featureCharges),
+    [selected]
+  );
+  const visibleSheetFeatureCharges = useMemo(
+    () => allFeatureCharges.filter((feature) => Number(feature.max) > 0),
+    [allFeatureCharges]
+  );
+  const initiativeSlots = useMemo(() => {
+    if (!combatants.length) return [null, null, null];
+    const safeActive = clamp(encounter.activeIndex, 0, combatants.length - 1);
+    const getByOffset = (offset) => {
+      const idx = (safeActive + offset + combatants.length) % combatants.length;
+      return combatants[idx];
+    };
+    if (combatants.length === 1) return [null, getByOffset(0), null];
+    if (combatants.length === 2) return [getByOffset(-1), getByOffset(0), null];
+    return [getByOffset(-1), getByOffset(0), getByOffset(1)];
+  }, [combatants, encounter.activeIndex]);
+
+  useEffect(() => {
+    if (!editorOpen || !selectedId) return;
+    setHpAdjustAmount('0');
+    setStatusDraft(selected ? selected.status.join(', ') : '');
+  }, [editorOpen, selectedId]);
+
+  useEffect(() => {
+    if (!listEditorMode || !selected) return;
+    if (listEditorMode === 'spellbook') {
+      setListEditorText(normalizeStringList(selected.spellList).join('\n'));
+      return;
+    }
+    if (listEditorMode === 'features') {
+      setListEditorText(normalizeStringList(selected.classFeatures).join('\n'));
+    }
+  }, [listEditorMode, selected]);
+
+  useEffect(() => {
+    return () => {
+      if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+    };
+  }, []);
 
   const addCombatant = (c) => {
     setEncounter(prev => {
       const next = normalize(prev);
+      const profileKey = sheetProfileKey(c.sourceCharacterId, c.name);
+      const profile = profileKey ? next.sheetProfiles?.[profileKey] : null;
+      const nextCombatant = profile ? applySheetProfileToCombatant(c, profile) : c;
       const activeId = next.combatants[next.activeIndex]?.id || null;
-      next.combatants = sortCombatants([...next.combatants, c]);
+      next.combatants = sortCombatants([...next.combatants, nextCombatant]);
       if (next.combatants.length === 0) next.activeIndex = 0;
       else if (activeId) {
         const idx = next.combatants.findIndex(x => x.id === activeId);
@@ -691,16 +1263,36 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     const name = String(draft.name || '').trim();
     if (!name) return;
     addCombatant({
-      id: uid(), name, role: String(draft.role||'').trim(), side: draft.side||'Enemy',
+      id: uid(), name, role: '', side: draft.side||'Enemy',
       init: toInt(draft.init,10),
+      initiativeBonus: 0,
       hp: draft.hp==='' ? '' : toInt(draft.hp,0),
       maxHP: draft.maxHP==='' ? '' : toInt(draft.maxHP,0),
       ac: draft.ac==='' ? '' : toInt(draft.ac,0),
-      tempHP:0, status:[], concentration:'', notes:'', dead:false,
+      speed: '',
+      race: '',
+      className: '',
+      level: '',
+      abilities: defaultAbilities(),
+      savingThrows: [],
+      skills: [],
+      senses: [],
+      spellList: [],
+      classFeatures: [],
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
+      equipmentItems:[], otherPossessions:[],
+      sourceSheet: false,
+      sourceSheetFileName: '',
+      sourceSheetFormat: '',
+      sheetWarnings: [],
+      sheetMissingFields: [],
+      sheetUnknownFields: [],
+      sheetImportedAt: 0,
       enemyType: draft.enemyType || 'goblin', customImage:'',
+      sourceCharacterId:'',
       pcColorIndex: combatants.length % PC_COLORS.length,
     });
-    setDraft(d => ({ ...d, name:'', role:'' }));
+    setDraft(d => ({ ...d, name:'' }));
   };
 
   const addAdventurer = () => {
@@ -710,8 +1302,28 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     addCombatant({
       id: uid(), name: uniqueName(existingNames, adv.name), role: adv.role,
       side: adventurerSide, init:10, hp: adv.hp, maxHP: adv.maxHP, ac: adv.ac,
-      tempHP:0, status:[], concentration:'', notes:'', dead:false,
-      enemyType:'goblin', customImage:'',
+      initiativeBonus: 0,
+      speed: '',
+      race: '',
+      className: adv.role || '',
+      level: '',
+      abilities: defaultAbilities(),
+      savingThrows: [],
+      skills: [],
+      senses: [],
+      spellList: [],
+      classFeatures: [],
+      tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
+      equipmentItems:[], otherPossessions:[],
+      sourceSheet: false,
+      sourceSheetFileName: '',
+      sourceSheetFormat: '',
+      sheetWarnings: [],
+      sheetMissingFields: [],
+      sheetUnknownFields: [],
+      sheetImportedAt: 0,
+      enemyType:'goblin', customImage: tokenImageForCharacter(adv.id, adv.name),
+      sourceCharacterId: adv.id || '',
       pcColorIndex: combatants.length % PC_COLORS.length,
     });
   };
@@ -737,6 +1349,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoNext = () => {
+    setInitSlideDirection('next');
+    setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
       const next = normalize(prev);
       if (next.combatants.length === 0) return next;
@@ -748,6 +1362,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoPrev = () => {
+    setInitSlideDirection('prev');
+    setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
       const next = normalize(prev);
       if (next.combatants.length === 0) return next;
@@ -762,8 +1378,19 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     if (!selected) return;
     setEncounter(prev => {
       const next = normalize(prev);
+      const previousProfileKey = sheetProfileKey(selected.sourceCharacterId, selected.name);
       const activeId = next.combatants[next.activeIndex]?.id || null;
       next.combatants = next.combatants.map(x => x.id === selected.id ? { ...x, ...patch } : x);
+      const updatedSelected = next.combatants.find((x) => x.id === selected.id);
+      if (updatedSelected) {
+        const nextProfileKey = sheetProfileKey(updatedSelected.sourceCharacterId, updatedSelected.name);
+        if (nextProfileKey && (updatedSelected.sourceSheet || next.sheetProfiles?.[nextProfileKey] || next.sheetProfiles?.[previousProfileKey])) {
+          const nextProfiles = { ...(next.sheetProfiles || {}) };
+          if (previousProfileKey && previousProfileKey !== nextProfileKey) delete nextProfiles[previousProfileKey];
+          nextProfiles[nextProfileKey] = buildSheetProfileFromCombatant(updatedSelected);
+          next.sheetProfiles = nextProfiles;
+        }
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'init') || Object.prototype.hasOwnProperty.call(patch, 'side') || Object.prototype.hasOwnProperty.call(patch, 'name')) {
         next.combatants = sortCombatants(next.combatants);
         if (next.combatants.length === 0) next.activeIndex = 0;
@@ -778,6 +1405,144 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     });
   };
 
+  const adjustSelectedTempHp = (delta) => {
+    if (!selected) return;
+    const current = Math.max(0, toInt(selected.tempHP, 0));
+    setSelectedField({ tempHP: Math.max(0, current + delta) });
+  };
+
+  const updateSelectedTempHp = (raw) => {
+    if (!selected) return;
+    const text = String(raw ?? '').trim();
+    if (!text) {
+      setSelectedField({ tempHP: 0 });
+      return;
+    }
+    setSelectedField({ tempHP: Math.max(0, toInt(text, 0)) });
+  };
+
+  const applyHpAdjustment = (kind) => {
+    if (!selected) return;
+    const amount = Math.abs(toInt(hpAdjustAmount, 0));
+    if (amount <= 0) return;
+
+    const hp = selected.hp === '' ? 0 : toInt(selected.hp, 0);
+    const maxHP = selected.maxHP === '' ? null : toInt(selected.maxHP, 0);
+    const tempHP = toInt(selected.tempHP, 0);
+
+    if (kind === 'damage') {
+      let remaining = amount;
+      const absorbedByTemp = Math.min(tempHP, remaining);
+      remaining -= absorbedByTemp;
+      const nextTempHP = tempHP - absorbedByTemp;
+      const nextHP = Math.max(0, hp - remaining);
+      setSelectedField({ hp: nextHP, tempHP: nextTempHP });
+      return;
+    }
+
+    const healed = hp + amount;
+    const nextHP = maxHP != null && maxHP > 0 ? Math.min(maxHP, healed) : healed;
+    setSelectedField({ hp: nextHP });
+  };
+
+  const setSpellSlotField = (level, patch) => {
+    if (!selected) return;
+    const slots = normalizeSpellSlots(selected.spellSlots);
+    const nextSlots = slots.map((slot) => {
+      if (slot.level !== level) return slot;
+      const merged = typeof patch === 'function' ? patch(slot) : { ...slot, ...patch };
+      const max = clamp(toInt(merged.max, 0), 0, 20);
+      const current = clamp(toInt(merged.current, max), 0, max);
+      return { level, max, current };
+    });
+    setSelectedField({ spellSlots: nextSlots });
+  };
+
+  const nudgeSpellSlotMax = (level, delta) => {
+    setSpellSlotField(level, (slot) => ({ ...slot, max: slot.max + delta }));
+  };
+
+  const setSpellSlotsFromBox = (level, boxIndex) => {
+    setSpellSlotField(level, (slot) => {
+      const clickedValue = boxIndex + 1;
+      const nextCurrent = clickedValue === slot.current ? clickedValue - 1 : clickedValue;
+      return { ...slot, current: nextCurrent };
+    });
+  };
+
+  const setFeatureChargeField = (id, patch) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const nextCharges = charges.map((charge) => {
+      if (charge.id !== id) return charge;
+      const merged = typeof patch === 'function' ? patch(charge) : { ...charge, ...patch };
+      return {
+        id: charge.id,
+        name: cleanText(merged.name) || charge.name,
+        max: clamp(toInt(merged.max, charge.max), 0, 20),
+        current: clamp(toInt(merged.current, charge.current), 0, clamp(toInt(merged.max, charge.max), 0, 20)),
+      };
+    });
+    setSelectedField({ featureCharges: nextCharges });
+  };
+
+  const addFeatureCharge = () => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const id = createId('feature');
+    const next = [...charges, { id, name: `Feature ${charges.length + 1}`, max: 0, current: 0 }];
+    setSelectedField({ featureCharges: next });
+  };
+
+  const removeFeatureCharge = (id) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    setSelectedField({ featureCharges: charges.filter((charge) => charge.id !== id) });
+  };
+
+  const nudgeFeatureChargeMax = (id, delta) => {
+    setFeatureChargeField(id, (charge) => ({ ...charge, max: charge.max + delta }));
+  };
+
+  const setFeatureChargesFromBox = (id, boxIndex) => {
+    setFeatureChargeField(id, (charge) => {
+      const clickedValue = boxIndex + 1;
+      const nextCurrent = clickedValue === charge.current ? clickedValue - 1 : clickedValue;
+      return { ...charge, current: nextCurrent };
+    });
+  };
+
+  const updateFeatureChargeName = (id, rawName) => {
+    if (!selected) return;
+    const charges = normalizeFeatureCharges(selected.featureCharges);
+    const next = charges.map((charge) => (charge.id === id ? { ...charge, name: String(rawName || '') } : charge));
+    setSelectedField({ featureCharges: next });
+  };
+
+  const longRestSelected = () => {
+    if (!selected) return;
+    const maxHP = selected.maxHP === '' ? '' : toInt(selected.maxHP, 0);
+    const nextHP = maxHP === '' ? selected.hp : maxHP;
+    const nextSpellSlots = normalizeSpellSlots(selected.spellSlots).map((slot) => ({
+      ...slot,
+      current: slot.max,
+    }));
+    const nextFeatureCharges = normalizeFeatureCharges(selected.featureCharges).map((feature) => ({
+      ...feature,
+      current: feature.max,
+    }));
+
+    setStatusDraft('');
+    setSelectedField({
+      hp: nextHP,
+      tempHP: 0,
+      status: [],
+      concentration: '',
+      spellSlots: nextSpellSlots,
+      featureCharges: nextFeatureCharges,
+    });
+  };
+
   const resetEncounter = () => {
     setEncounter(prev => {
       const next = normalize(prev);
@@ -787,8 +1552,144 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     });
   };
 
-  const clearEncounter = () => { setEncounter(defaultEncounter()); setSelectedId(null); setEditorOpen(false); };
-  const openEditorFor = (id) => { setSelectedId(id); setEditorOpen(true); };
+  const clearEncounter = () => {
+    setEncounter((prev) => {
+      const next = defaultEncounter();
+      const prior = normalize(prev);
+      next.sheetProfiles = prior.sheetProfiles || {};
+      return next;
+    });
+    setSelectedId(null);
+    setEditorOpen(false);
+  };
+  const openEditorFor = (id, forceMode = '') => {
+    const target = combatants.find((c) => c.id === id);
+    setSelectedId(id);
+    setEditorMode(forceMode || (target?.sourceSheet ? 'sheet' : 'edit'));
+    setEditorOpen(true);
+  };
+
+  const triggerSheetImport = (targetId, replacing = false) => {
+    const target = combatants.find((c) => c.id === targetId);
+    if (!target) return;
+    if (replacing && target.sourceSheet) {
+      const ok = window.confirm(`Replace imported sheet for ${target.name}?`);
+      if (!ok) return;
+    }
+    setSheetImportState({
+      running: false,
+      progress: 0,
+      stage: '',
+      targetId: target.id,
+      message: '',
+      error: '',
+    });
+    if (sheetFileInputRef.current) {
+      sheetFileInputRef.current.value = '';
+      sheetFileInputRef.current.click();
+    }
+  };
+
+  const cancelSheetImport = () => {
+    if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+  };
+
+  const handleSheetFilePick = async (event) => {
+    const file = event.target.files?.[0];
+    const targetId = sheetImportState.targetId || selectedId;
+    if (!file || !targetId) return;
+
+    const target = combatants.find((c) => c.id === targetId);
+    if (!target) return;
+
+    if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+    const controller = new AbortController();
+    sheetImportAbortRef.current = controller;
+    setSheetImportState((prev) => ({
+      ...prev,
+      running: true,
+      progress: 5,
+      stage: 'starting',
+      message: '',
+      error: '',
+      targetId,
+    }));
+
+    try {
+      const parsedResult = await parseCharacterSheetFile(file, {
+        signal: controller.signal,
+        onProgress: ({ progress, stage }) => {
+          setSheetImportState((prev) => ({
+            ...prev,
+            running: true,
+            progress: Number.isFinite(progress) ? progress : prev.progress,
+            stage: stage || prev.stage,
+          }));
+        },
+      });
+
+      setEncounter((prev) => {
+        const next = normalize(prev);
+        let updatedCombatant = null;
+        next.combatants = next.combatants.map((combatant) => {
+          if (combatant.id !== targetId) return combatant;
+          updatedCombatant = { ...combatant, ...buildSheetPatch(combatant, parsedResult) };
+          return updatedCombatant;
+        });
+        if (updatedCombatant) {
+          const key = sheetProfileKey(updatedCombatant.sourceCharacterId, updatedCombatant.name);
+          if (key) {
+            next.sheetProfiles = {
+              ...(next.sheetProfiles || {}),
+              [key]: buildSheetProfileFromCombatant(updatedCombatant),
+            };
+          }
+        }
+        return next;
+      });
+
+      setSelectedId(targetId);
+      setEditorOpen(true);
+      setEditorMode('sheet');
+      setSheetImportState((prev) => ({
+        ...prev,
+        running: false,
+        progress: 100,
+        stage: 'complete',
+        message: `Imported sheet for ${parsedResult.parsed?.name || target.name}.`,
+        error: '',
+      }));
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        setSheetImportState((prev) => ({
+          ...prev,
+          running: false,
+          message: '',
+          error: 'Import cancelled.',
+        }));
+      } else {
+        setSheetImportState((prev) => ({
+          ...prev,
+          running: false,
+          message: '',
+          error: error?.message || 'Import failed.',
+        }));
+      }
+    } finally {
+      sheetImportAbortRef.current = null;
+      event.target.value = '';
+    }
+  };
+
+  const saveListEditor = () => {
+    if (!selected || !listEditorMode) return;
+    if (listEditorMode === 'spellbook') {
+      setSelectedField({ spellList: normalizeStringList(listEditorText) });
+    } else if (listEditorMode === 'features') {
+      setSelectedField({ classFeatures: normalizeStringList(listEditorText) });
+    }
+    setListEditorMode('');
+  };
 
   // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
@@ -855,312 +1756,113 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const WINDOW_BAR_H = 40;
   const PAD    = 14;
   const WINDOW_MAX_W = 1560;
-  const BATTLEFIELD_MAX_W = 1220;
-  const BATTLEFIELD_MAX_H = 640;
 
-  // ── Shared micro-styles ────────────────────────────────────────────────────
-  const inp = {
-    width:'100%', boxSizing:'border-box', padding:'8px 10px', borderRadius:10,
-    border:'1px solid rgba(255,220,160,0.14)', background:'rgba(0,0,0,0.42)',
-    color:'var(--koa-cream)', outline:'none', fontFamily:fontStack, fontSize:13,
+  // ── Shared class helpers ────────────────────────────────────────────────────
+  const btnClass = (variant = 'gold', size = 'md', extra = '') => {
+    const variantClass = variant === 'danger' ? styles.btnDanger : variant === 'ghost' ? styles.btnGhost : styles.btnGold;
+    const sizeClass = size === 'sm' ? styles.btnSmall : '';
+    return [styles.btnBase, variantClass, sizeClass, extra].filter(Boolean).join(' ');
   };
-  const lbl = {
-    color:'rgba(255,220,160,0.60)', fontSize:10, fontWeight:950,
-    letterSpacing:'0.18em', textTransform:'uppercase', marginBottom:5, userSelect:'none',
-  };
-  const compactInp = {
-    ...inp,
-    height:34,
-    padding:'6px 9px',
-    fontSize:12,
-  };
-  const compactStatField = { width:108, flex:'0 0 auto' };
-  const compactSideField = { width:146, flex:'0 0 auto' };
-  const btn = (v='gold') => ({
-    height:34,
-    padding:'0 12px',
-    borderRadius:12,
-    border:
-      v === 'danger'
-        ? '1px solid rgba(255,160,160,0.26)'
-        : v === 'ghost'
-        ? '1px solid rgba(255,220,160,0.20)'
-        : '1px solid rgba(255,220,160,0.26)',
-    background:
-      v === 'danger'
-        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
-        : v === 'ghost'
-        ? 'linear-gradient(180deg, rgba(82,60,42,0.62), rgba(30,22,16,0.54))'
-        : 'linear-gradient(180deg, rgba(74,52,36,0.88), rgba(34,24,16,0.84))',
-    color:'var(--koa-cream)',
-    fontWeight:950,
-    cursor:'pointer',
-    boxShadow:'0 14px 34px rgba(0,0,0,0.38)',
-    textShadow:'0 1px 8px rgba(0,0,0,0.75)',
-    userSelect:'none',
-    whiteSpace:'nowrap',
-    fontFamily:fontStack,
-    fontSize:11,
-    letterSpacing:'0.10em',
-    transition:'transform 150ms ease, filter 150ms ease, box-shadow 150ms ease',
-    backdropFilter:'blur(8px)',
-  });
-  const sBtn = (v='gold') => ({
-    ...btn(v),
-    height:28,
-    padding:'0 9px',
-    borderRadius:9,
-    fontSize:11,
-    letterSpacing:'0.10em',
-  });
-  const iconMiniBtn = (v='ghost') => ({
-    width:20,
-    height:20,
-    borderRadius:6,
-    border: v === 'danger' ? '1px solid rgba(255,160,160,0.26)' : '1px solid rgba(255,220,160,0.18)',
-    padding:0,
-    background:
-      v === 'danger'
-        ? 'linear-gradient(180deg, rgba(96,44,44,0.88), rgba(44,20,20,0.84))'
-        : 'linear-gradient(180deg, rgba(80,58,40,0.72), rgba(30,22,16,0.60))',
-    color: v === 'danger' ? 'rgba(255,210,210,0.88)' : 'rgba(255,220,160,0.82)',
-    cursor:'pointer',
-    fontSize:10,
-    display:'flex',
-    alignItems:'center',
-    justifyContent:'center',
-    boxShadow:'0 8px 18px rgba(0,0,0,0.38)',
-    textShadow:'0 1px 6px rgba(0,0,0,0.65)',
-    transition:'transform 140ms ease, filter 140ms ease',
-  });
-  const enemyTypeBtn = (activeType) => ({
-    padding:'3px 9px',
-    borderRadius:8,
-    cursor:'pointer',
-    fontFamily:fontStack,
-    fontSize:11,
-    fontWeight:950,
-    border:`1px solid ${activeType ? 'rgba(255,220,150,0.44)' : 'rgba(255,220,160,0.20)'}`,
-    background: activeType
-      ? 'linear-gradient(180deg, rgba(92,66,40,0.88), rgba(40,28,18,0.84))'
-      : 'linear-gradient(180deg, rgba(80,58,40,0.68), rgba(28,20,14,0.56))',
-    color: activeType ? 'rgba(255,235,205,0.96)' : 'rgba(255,245,220,0.78)',
-    boxShadow: activeType ? '0 10px 22px rgba(0,0,0,0.42)' : '0 8px 18px rgba(0,0,0,0.30)',
-    transition:'all 140ms ease',
-    backdropFilter:'blur(10px)',
-  });
-  const btnHover = (e) => {
-    playHover();
-    e.currentTarget.style.transform = 'translateY(-1px)';
-    e.currentTarget.style.filter = 'brightness(1.08)';
-    e.currentTarget.style.boxShadow = '0 22px 60px rgba(0,0,0,0.55)';
-  };
-  const btnLeave = (e) => {
-    e.currentTarget.style.transform = 'translateY(0px)';
-    e.currentTarget.style.filter = 'none';
-    e.currentTarget.style.boxShadow = '0 14px 34px rgba(0,0,0,0.38)';
-  };
-  const glass = {
-    borderRadius:16, border:'1px solid rgba(255,220,160,0.11)',
-    background:'linear-gradient(180deg,rgba(8,6,4,0.74),rgba(4,3,2,0.56))',
-    backdropFilter:'blur(12px)', boxShadow:'0 16px 40px rgba(0,0,0,0.52)',
-  };
-  const modalBack = {
-    position:'absolute', inset:0, background:'rgba(0,0,0,0.68)',
-    display:'flex', alignItems:'center', justifyContent:'center', padding:14, zIndex:20,
-  };
-  const divider = {
-    height:1, background:'linear-gradient(to right,transparent,rgba(255,220,160,0.13),transparent)',
-    margin:'12px 0',
-  };
+  const iconMiniBtnClass = (variant = 'ghost') => [styles.btnIconMini, variant === 'danger' ? styles.btnIconDanger : styles.btnIconGhost].join(' ');
+  const enemyTypeBtnClass = (activeType) => [styles.enemyTypeBtn, activeType ? styles.enemyTypeBtnActive : ''].filter(Boolean).join(' ');
+  const sheetImportStageLabel = sheetImportState.stage
+    ? sheetImportState.stage.replace(/[-_]/g, ' ').toUpperCase()
+    : 'IMPORTING';
+  const selectedSheetIssues = useMemo(() => {
+    if (!selected) return [];
+    return [
+      ...normalizeStringList(selected.sheetMissingFields).map((line) => ({ kind: 'Missing Fields', text: line })),
+      ...normalizeStringList(selected.sheetWarnings).map((line) => ({ kind: 'Warning', text: line })),
+    ];
+  }, [selected]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <ShellLayout
       active={active}
-      style={{ alignItems:'stretch', justifyContent:'stretch', fontFamily:fontStack }}
+      style={{ alignItems: 'stretch', justifyContent: 'stretch', fontFamily: 'var(--koa-font-display)' }}
     >
-      <div style={{
-        position:'relative',
-        width:'100%',
-        height:'100%',
-        overflow:'hidden',
-        fontFamily:fontStack,
-      }}>
+      <div className={styles.root}>
 
         {/* ── HEADER ── */}
-        <div ref={headerRef} style={{
-          position:'absolute',
-          left:0,
-          right:0,
-          top:0,
-          padding:'26px 36px 14px',
-          background:'linear-gradient(180deg, rgba(8,5,2,0.92), rgba(8,5,2,0.78))',
-          backdropFilter:'blur(14px)',
-          WebkitBackdropFilter:'blur(14px)',
-          borderBottom:'1px solid rgba(255,220,160,0.10)',
-          boxShadow:'0 14px 30px rgba(0,0,0,0.35)',
-          zIndex:8,
-        }}>
-          <div style={{
-            display:'flex',
-            alignItems:'center',
-            justifyContent:'space-between',
-            gap:10,
-            flexWrap:'wrap',
-            position:'relative',
-            zIndex:1,
-          }}>
+        <div ref={headerRef} className={styles.header}>
+          <div className={styles.headerRow}>
             <button
-              onClick={() => { playNav(); cinematicNav('menu'); }}
-              onMouseEnter={(e) => {
-                playHover();
-                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.45)';
-                e.currentTarget.style.color = 'var(--koa-cream)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,220,160,0.24)';
-                e.currentTarget.style.color = 'rgba(255,220,160,0.8)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-              style={{
-                ...btn('ghost'),
-                height:36,
-                padding:'9px 18px',
-                borderRadius:14,
-                color:'rgba(255,220,160,0.8)',
-                fontSize:12,
-                letterSpacing:'0.14em',
-                boxShadow:'0 10px 28px rgba(0,0,0,0.3)',
-              }}
+              onClick={() => { cinematicNav('menu'); }}
+              onMouseEnter={playHover}
+              className={styles.returnBtn}
             >
               ← RETURN
             </button>
 
-            <div style={{ textAlign:'center', flex:1, minWidth:240, userSelect:'none' }}>
-              <div style={{
-                fontSize:10,
-                letterSpacing:'0.38em',
-                color:'rgba(255,220,160,0.45)',
-                marginBottom:8,
-                marginTop:-6,
-                fontFamily:fontStack,
-                textTransform:'uppercase',
-                fontWeight:900,
-              }}>
+            <div className={styles.titleWrap}>
+              <div className={styles.titleKicker}>
                 ✦ &nbsp; BATTLEFIELD COMMAND &nbsp; ✦
               </div>
-              <div style={{
-                margin:0,
-                fontFamily:fontStack,
-                fontSize:'clamp(1.35rem, 2.6vw, 2.05rem)',
-                fontWeight:950,
-                color:'var(--koa-cream)',
-                letterSpacing:'0.18em',
-                textShadow:'0 0 40px rgba(176,101,0,0.5), 0 2px 18px rgba(0,0,0,0.7)',
-                lineHeight:1.05,
-              }}>
+              <div className={styles.titleMain}>
                 COMBAT TRACKER
               </div>
             </div>
 
-            <div style={{ width:120 }} />
+            <div className={styles.headerSpacer} />
           </div>
         </div>
 
         {/* ── COMBAT WINDOW (separate from header) ── */}
-        <div style={{
-          position:'absolute',
-          left:'50%',
-          width:`min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
-          transform:'translateX(-50%)',
-          top:headerH + HUD_GAP,
-          bottom:PAD,
-          borderRadius:18,
-          overflow:'hidden',
-          border:'1px solid var(--koa-line-strong)',
-          boxShadow:'0 26px 70px rgba(0,0,0,0.64)',
-          background:'var(--koa-shell-bg)',
-          zIndex:4,
-        }}>
+        <div
+          className={styles.combatWindow}
+          style={{
+            width: `min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
+            top: headerH + HUD_GAP,
+            bottom: PAD,
+          }}
+        >
           {/* Vignette overlay */}
-          <div style={{
-            position:'absolute', inset:0, pointerEvents:'none',
-            background:'radial-gradient(1000px 580px at 32% 20%,rgba(255,245,220,0.05),transparent 60%),linear-gradient(180deg,rgba(0,0,0,0.45),rgba(0,0,0,0.78))',
-          }}/>
+          <div className={styles.windowVignette} />
 
           {/* ── WINDOW CONTROLS (moved out of top header) ── */}
-          <div style={{
-            position:'absolute',
-            left:PAD,
-            right:PAD,
-            top:PAD,
-            height:WINDOW_BAR_H,
-            borderRadius:10,
-            border:'1px solid rgba(255,220,160,0.10)',
-            background:'linear-gradient(180deg, rgba(10,8,6,0.84), rgba(10,8,6,0.68))',
-            backdropFilter:'blur(10px)',
-            WebkitBackdropFilter:'blur(10px)',
-            boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
-            zIndex:3,
-            display:'grid',
-            gridTemplateColumns:'minmax(0,1fr) auto minmax(0,1fr)',
-            alignItems:'center',
-            gap:10,
-            padding:'0 8px',
-          }}>
+          <div
+            className={styles.windowControls}
+            style={{
+              left: PAD,
+              right: PAD,
+              top: PAD,
+              height: WINDOW_BAR_H,
+            }}
+          >
             <div />
 
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
-                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoPrev(); }}>◀ Prev</button>
-                <div style={{
-                  height:34, padding:'0 14px', borderRadius:999, border:'1px solid rgba(255,220,160,0.18)',
-                  background:'linear-gradient(180deg,rgba(255,245,220,0.08),rgba(255,245,220,0.02))', color:'var(--koa-cream)',
-                  display:'inline-flex', alignItems:'center', gap:10, userSelect:'none',
-                  boxShadow:'0 10px 24px rgba(0,0,0,0.30)',
-                }}>
-                  <span style={{ color:'rgba(255,220,160,0.72)', fontSize:10, textTransform:'uppercase', letterSpacing:'0.16em', fontWeight:900 }}>Round</span>
-                  <span style={{ fontSize:17, fontWeight:950 }}>{encounter.round}</span>
+            <div className={styles.windowControlsCenter}>
+                <button
+                  className={btnClass('gold')}
+                  onMouseEnter={playHover}
+                  onClick={() => { playNav(); gotoPrev(); }}
+                >
+                  ◀ Prev
+                </button>
+                <div className={styles.roundBadge}>
+                  <span className={styles.roundLabel}>Round</span>
+                  <span className={styles.roundValue}>{encounter.round}</span>
                 </div>
-                <button style={btn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); gotoNext(); }}>Next ▶</button>
+                <button
+                  className={btnClass('gold')}
+                  onMouseEnter={playHover}
+                  onClick={() => { playNav(); gotoNext(); }}
+                >
+                  Next ▶
+                </button>
               </div>
 
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:8, minWidth:0 }}>
-              <label style={{
-                color:'rgba(255,220,160,0.58)',
-                fontSize:10,
-                textTransform:'uppercase',
-                letterSpacing:'0.16em',
-                userSelect:'none',
-                whiteSpace:'nowrap',
-                fontFamily:fontStack,
-                fontWeight:900,
-              }}>
-                Scene
-              </label>
+            <div className={styles.controlsRight}>
+              <label className={styles.sceneLabel}>Scene</label>
               <select
                 value={battleBg || ''}
                 onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
                 onMouseEnter={playHover}
-                style={{
-                  height:31,
-                  padding:'0 10px',
-                  borderRadius:10,
-                  border:'1px solid rgba(255,220,160,0.22)',
-                  background:'linear-gradient(180deg, rgba(255,245,220,0.08), rgba(255,245,220,0.03))',
-                  color:'var(--koa-cream)',
-                  fontSize:11,
-                  fontWeight:900,
-                  letterSpacing:'0.08em',
-                  cursor:'pointer',
-                  outline:'none',
-                  maxWidth:170,
-                  fontFamily:fontStack,
-                }}
+                className={styles.sceneSelect}
               >
                 {BATTLE_BACKGROUNDS.map((b, i) => (
-                  <option key={i} value={b.src || ''} style={{ background:'#1a1208', fontFamily:'sans-serif' }}>
+                  <option key={i} value={b.src || ''}>
                     {b.label}
                   </option>
                 ))}
@@ -1168,267 +1870,240 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             </div>
           </div>
 
-        {/* ── MAIN LAYOUT — initiative bar above battlefield ── */}
-        <div style={{
-          position:'absolute',
-          left:PAD,
-          right:PAD,
-          top: PAD + WINDOW_BAR_H + 8,
-          bottom: PAD,
-          zIndex:2,
-          minHeight:0,
-        }}>
-          <div style={{
-            ...glass,
-            overflow:'hidden',
-            position:'relative',
-            height:'100%',
-            display:'flex',
-            flexDirection:'column',
-          }}>
-            {/* ── INITIATIVE STRIP ── */}
-            <div style={{
-              padding:'7px 8px',
-              borderBottom:'1px solid rgba(255,220,160,0.08)',
-              background:'linear-gradient(180deg,rgba(10,8,6,0.54),rgba(10,8,6,0.30))',
-              display:'flex',
-              flexDirection:'column',
-              gap:4,
-              minWidth:0,
-              flexShrink:0,
-            }}>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', minWidth:0 }}>
-                <div />
-                <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:4 }}>
-                  <div style={{
-                    color:'rgba(255,245,220,0.78)',
-                    fontWeight:950,
-                    fontSize:11,
-                    letterSpacing:'0.10em',
-                    textTransform:'uppercase',
-                    userSelect:'none',
-                    whiteSpace:'nowrap',
-                  }}>
-                    Initiative
+        {/* ── MAIN LAYOUT ── */}
+        <div
+          className={styles.mainLayout}
+          style={{
+            left: PAD,
+            right: PAD,
+            top: PAD + WINDOW_BAR_H + 8,
+            bottom: PAD,
+          }}
+        >
+          <div className={styles.battlefieldWrap}>
+            <div className={styles.battlefieldInner}>
+              <BattlefieldScene
+                combatants={combatants}
+                activeCombatantId={activeCombatantId}
+                selectedId={selectedId}
+                openEditorFor={openEditorFor}
+                playHover={playHover}
+                playNav={playNav}
+                battleBg={battleBg}
+              />
+
+              <div className={styles.initOverlay}>
+                <div className={styles.initStrip}>
+                  <div className={styles.initHeaderGrid}>
+                    <div />
+                    <div className={styles.initHeaderCenter}>
+                      <div className={styles.initHeading}>Initiative</div>
+                      <div className={styles.initButtons}>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
+                        <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                      </div>
+                    </div>
+                    <div />
                   </div>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
-                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                    <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                    <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+
+                  <div className={styles.initScroll}>
+                    {combatants.length === 0 ? (
+                      <div className={styles.initEmpty}>
+                        Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
+                      </div>
+                    ) : (
+                      <div className={styles.initCardsViewport}>
+                        <div
+                          key={`${activeCombatantId || 'none'}-${initSlideTick}`}
+                          className={`${styles.initCardsRow} ${
+                            initSlideDirection === 'next' ? styles.initCardsRowNext : styles.initCardsRowPrev
+                          }`}
+                        >
+                          {initiativeSlots.map((c, slotIndex) => {
+                            if (!c) {
+                              return <div key={`slot-empty-${slotIndex}`} className={styles.initCardGhost} />;
+                            }
+                            const isActive = c.id === activeCombatantId;
+                            const isSelected = c.id === selectedId;
+                            const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
+                            const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
+                            const pct = max > 0 ? (hp / max) * 100 : 100;
+                            const hpColor =
+                              pct > 50
+                                ? 'rgba(80,200,120,0.80)'
+                                : pct > 20
+                                  ? 'rgba(230,170,40,0.80)'
+                                  : 'rgba(220,70,70,0.80)';
+                            const cardClass = [
+                              styles.initCard,
+                              isActive ? styles.initCardActive : '',
+                              !isActive && isSelected ? styles.initCardSelected : '',
+                              c.dead ? styles.initCardDead : '',
+                            ].filter(Boolean).join(' ');
+                            const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
+
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => openEditorFor(c.id)}
+                                onMouseEnter={playHover}
+                                className={cardClass}
+                              >
+                                <div className={styles.initCardTop}>
+                                  <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
+                                  <div className={initClass}>{toInt(c.init, 0)}</div>
+                                  <div className={styles.initNameWrap}>
+                                    <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
+                                      {c.name}
+                                    </div>
+                                    {c.role && <div className={styles.initRole}>{c.role}</div>}
+                                  </div>
+                                  <div className={styles.initHp} style={{ color: hpColor }}>
+                                    {c.hp === '' ? '—' : c.hp}
+                                  </div>
+                                  <div className={styles.initActions}>
+                                    <button
+                                      title={c.dead ? 'Revive' : 'Mark dead'}
+                                      onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
+                                      onMouseEnter={playHover}
+                                      className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
+                                    >
+                                      ☠
+                                    </button>
+                                    <button
+                                      title="Remove"
+                                      onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
+                                      onMouseEnter={playHover}
+                                      className={iconMiniBtnClass('danger')}
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className={styles.initHpTrack}>
+                                  <div className={styles.initHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
+                                </div>
+
+                                {isActive && <div className={styles.activeTurnTag}>▶ ACTIVE TURN</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div />
-              </div>
-
-              <div style={{ flex:1, minWidth:0, overflowX:'auto', overflowY:'hidden', paddingBottom:2 }}>
-                {combatants.length === 0 ? (
-                  <div style={{
-                    minHeight:26,
-                    display:'flex',
-                    alignItems:'center',
-                    justifyContent:'center',
-                    color:'rgba(255,245,220,0.40)',
-                    fontWeight:900,
-                    fontSize:12,
-                    lineHeight:1.35,
-                    padding:'0 4px',
-                    whiteSpace:'nowrap',
-                  }}>
-                    Click <b style={{ color:'rgba(255,220,160,0.72)', margin:'0 4px' }}>+ Add</b> to begin.
-                  </div>
-                ) : (
-                  <div style={{ display:'flex', gap:6, width:'max-content', minWidth:'100%', justifyContent:'center' }}>
-                    {combatants.map(c => {
-                      const isActive   = c.id === activeCombatantId;
-                      const isSelected = c.id === selectedId;
-                      const hp  = c.hp   === '' ? 0 : toInt(c.hp, 0);
-                      const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
-                      const pct = max > 0 ? (hp / max) * 100 : 100;
-
-                      return (
-                        <div key={c.id}
-                          onClick={() => openEditorFor(c.id)}
-                          onMouseEnter={playHover}
-                          style={{
-                            borderRadius:10,
-                            border:`1px solid ${isActive ? 'rgba(255,210,130,0.38)' : isSelected ? 'rgba(255,210,130,0.16)' : 'rgba(255,255,255,0.05)'}`,
-                            background: isActive ? 'rgba(176,101,0,0.12)' : 'rgba(255,255,255,0.022)',
-                            padding:'5px 7px',
-                            cursor:'pointer',
-                            opacity: c.dead ? 0.45 : 1,
-                            transition:'background 150ms',
-                            minWidth:186,
-                            maxWidth:232,
-                            flex:'0 0 auto',
-                          }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                            <div style={{
-                              width:7,
-                              height:7,
-                              borderRadius:'50%',
-                              flexShrink:0,
-                              background: sideAccent(c.side),
-                              boxShadow:`0 0 6px ${sideAccent(c.side)}`,
-                            }}/>
-                            <div style={{
-                              width:22,
-                              textAlign:'center',
-                              fontWeight:950,
-                              fontSize:11,
-                              color: isActive ? 'rgba(255,220,100,0.95)' : 'rgba(255,245,220,0.65)',
-                              flexShrink:0,
-                            }}>
-                              {toInt(c.init,0)}
-                            </div>
-                            <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{
-                                fontWeight:950,
-                                fontSize:11,
-                                color:'var(--koa-cream)',
-                                whiteSpace:'nowrap',
-                                overflow:'hidden',
-                                textOverflow:'ellipsis',
-                                textDecoration: c.dead ? 'line-through' : 'none',
-                              }}>
-                                {c.name}
-                              </div>
-                              {c.role && <div style={{ fontSize:9, color:'rgba(255,220,160,0.45)', fontWeight:900 }}>{c.role}</div>}
-                            </div>
-                            <div style={{
-                              fontSize:10,
-                              fontWeight:950,
-                              color: pct > 50 ? 'rgba(80,200,120,0.80)' : pct > 20 ? 'rgba(230,170,40,0.80)' : 'rgba(220,70,70,0.80)',
-                              flexShrink:0,
-                            }}>
-                              {c.hp===''?'—':c.hp}
-                            </div>
-                            <div style={{ display:'flex', gap:3, flexShrink:0 }}>
-                              <button title={c.dead ? 'Revive' : 'Mark dead'}
-                                onClick={e => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                                onMouseEnter={playHover}
-                                style={iconMiniBtn(c.dead ? 'danger' : 'ghost')}>☠</button>
-                              <button title="Remove"
-                                onClick={e => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                                onMouseEnter={playHover}
-                                style={iconMiniBtn('danger')}>✕</button>
-                            </div>
-                          </div>
-
-                          <div style={{ height:2, borderRadius:999, background:'rgba(255,255,255,0.07)', marginTop:5, overflow:'hidden' }}>
-                            <div style={{ height:'100%', width:`${clamp(pct,0,100)}%`, background:hpGradient(pct), borderRadius:999 }}/>
-                          </div>
-
-                          {isActive && (
-                            <div style={{ marginTop:4, fontSize:9, fontWeight:950, color:'rgba(255,220,100,0.80)', letterSpacing:'0.12em' }}>
-                              ▶ ACTIVE TURN
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── BATTLEFIELD ── */}
-            <div style={{ flex:1, minHeight:0, padding:'5px 12px 14px', display:'flex', justifyContent:'center', alignItems:'stretch' }}>
-              <div style={{ width:`min(100%, ${BATTLEFIELD_MAX_W}px)`, height:'100%', maxHeight:BATTLEFIELD_MAX_H }}>
-                <BattlefieldScene
-                  combatants={combatants}
-                  activeCombatantId={activeCombatantId}
-                  selectedId={selectedId}
-                  openEditorFor={openEditorFor}
-                  playHover={playHover}
-                  playNav={playNav}
-                  battleBg={battleBg}
-                />
               </div>
             </div>
           </div>
         </div>
 
+        <input
+          ref={sheetFileInputRef}
+          type="file"
+          accept=".pdf,.json,.txt"
+          className={styles.hiddenInput}
+          onChange={handleSheetFilePick}
+          aria-label="Import character sheet"
+        />
+
         {/* ── ADD MODAL ── */}
         {addModalOpen && (
-          <div style={modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setAddModalOpen(false); }}>
-            <div style={{
-              width:'min(840px,96vw)', maxHeight:'90vh', borderRadius:18, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.15)',
-              background:'linear-gradient(180deg,rgba(10,8,6,0.97),rgba(4,3,2,0.90))',
-              backdropFilter:'blur(18px)', boxShadow:'0 28px 72px rgba(0,0,0,0.78)',
-              display:'flex', flexDirection:'column',
-            }}>
-              <div style={{ padding:'0 16px', height:52, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, letterSpacing:0.4, userSelect:'none' }}>Add Combatants</div>
-                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
+          <div className={styles.modalBack}>
+            <div className={`${styles.modalCard} ${styles.addModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Add Combatants</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
               </div>
 
-              <div style={{ padding:20, overflowY:'auto', display:'grid', gridTemplateColumns:'1fr 1fr', gap:26 }}>
+              <div className={`${styles.addModalBody} koa-scrollbar-thin`}>
                 {/* Add Adventurer */}
                 <div>
-                  <div style={{ color:'rgba(255,245,220,0.84)', fontWeight:950, fontSize:13, marginBottom:14, paddingBottom:8, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>Add Adventurer</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 85px', gap:10, marginBottom:12 }}>
-                    <div><div style={lbl}>Adventurer</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
+                  <div className={styles.addSectionTitle}>Add Adventurer</div>
+                  <div className={styles.twoCol}>
+                    <div><div className={styles.label}>Adventurer</div>
+                      <select className={`${styles.input} ${styles.selectInput}`} value={adventurerPick} onChange={e => setAdventurerPick(e.target.value)}>
                         {adventurers.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}
                       </select>
                     </div>
-                    <div><div style={lbl}>Side</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={adventurerSide} onChange={e => setAdventurerSide(e.target.value)}>
+                    <div><div className={styles.label}>Side</div>
+                      <select className={`${styles.input} ${styles.selectInput}`} value={adventurerSide} onChange={e => setAdventurerSide(e.target.value)}>
                         <option value="PC">PC</option><option value="Ally">Ally</option>
                       </select>
                     </div>
                   </div>
-                  {(() => { const adv = adventurers.find(a => a.name===adventurerPick); return adv ? (
-                    <div style={{ padding:'9px 12px', borderRadius:10, border:'1px solid rgba(255,220,160,0.10)', background:'rgba(0,0,0,0.28)', marginBottom:14, fontSize:12, color:'rgba(255,245,220,0.68)', fontWeight:900, lineHeight:1.7 }}>
-                      <div style={{ color:'var(--koa-cream)', fontWeight:950 }}>{adv.name}</div>
-                      <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
-                    </div>
-                  ) : null; })()}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addAdventurer(); }}>+ Add Adventurer</button>
+                  {(() => {
+                    const adv = adventurers.find(a => a.name === adventurerPick);
+                    if (!adv) return null;
+                    const tokenSrc = tokenImageForCharacter(adv.id, adv.name);
+                    return (
+                      <div className={styles.previewCard}>
+                        <div className={styles.previewName}>{adv.name}</div>
+                        <div>{adv.role} · HP {adv.hp}/{adv.maxHP} · AC {adv.ac}</div>
+                        {tokenSrc && (
+                          <div className={styles.sectionTopGap}>
+                            <div className={styles.label}>Token</div>
+                            <div className={styles.tokenPreview}>
+                              <img src={tokenSrc} alt={`${adv.name} token`} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  <button
+                    className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); addAdventurer(); }}
+                  >
+                    + Add Adventurer
+                  </button>
                 </div>
 
                 {/* Add Custom */}
                 <div>
-                  <div style={{ color:'rgba(255,245,220,0.84)', fontWeight:950, fontSize:13, marginBottom:14, paddingBottom:8, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>Add Custom (Enemies / Extras)</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 65px', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>Name</div>
-                      <input style={inp} value={draft.name} placeholder="Goblin / Skeleton #2"
+                  <div className={styles.addSectionTitle}>Add Custom (Enemies / Extras)</div>
+                  <div className={styles.nameInitGrid}>
+                    <div><div className={styles.label}>Name</div>
+                      <input className={styles.input} value={draft.name} placeholder="Goblin / Skeleton #2"
                         onChange={e => setDraft(d => ({ ...d, name:e.target.value }))}/>
                     </div>
-                    <div><div style={lbl}>Init</div>
-                      <input style={inp} value={draft.init} onChange={e => setDraft(d => ({ ...d, init:e.target.value }))}/>
+                    <div><div className={styles.label}>Init</div>
+                      <input className={styles.input} value={draft.init} onChange={e => setDraft(d => ({ ...d, init:e.target.value }))}/>
                     </div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>HP</div><input style={inp} value={draft.hp} onChange={e => setDraft(d => ({ ...d, hp:e.target.value }))}/></div>
-                    <div><div style={lbl}>Max HP</div><input style={inp} value={draft.maxHP} onChange={e => setDraft(d => ({ ...d, maxHP:e.target.value }))}/></div>
-                    <div><div style={lbl}>AC</div><input style={inp} value={draft.ac} onChange={e => setDraft(d => ({ ...d, ac:e.target.value }))}/></div>
+                  <div className={styles.threeCol}>
+                    <div><div className={styles.label}>HP</div><input className={styles.input} value={draft.hp} onChange={e => setDraft(d => ({ ...d, hp:e.target.value }))}/></div>
+                    <div><div className={styles.label}>Max HP</div><input className={styles.input} value={draft.maxHP} onChange={e => setDraft(d => ({ ...d, maxHP:e.target.value }))}/></div>
+                    <div><div className={styles.label}>AC</div><input className={styles.input} value={draft.ac} onChange={e => setDraft(d => ({ ...d, ac:e.target.value }))}/></div>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                    <div><div style={lbl}>Side</div>
-                      <select style={{ ...inp, cursor:'pointer' }} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
-                        <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
-                      </select>
-                    </div>
-                    <div><div style={lbl}>Role</div>
-                      <input style={inp} value={draft.role} placeholder="Soldier / Mage" onChange={e => setDraft(d => ({ ...d, role:e.target.value }))}/>
-                    </div>
+                  <div className={styles.sideOnlyRow}><div className={styles.label}>Side</div>
+                    <select className={`${styles.input} ${styles.selectInput}`} value={draft.side} onChange={e => setDraft(d => ({ ...d, side:e.target.value }))}>
+                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
+                    </select>
                   </div>
                   {draft.side === 'Enemy' && (
-                    <div style={{ marginBottom:12 }}>
-                      <div style={lbl}>Enemy Type</div>
-                      <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                    <div className={`${styles.sectionTopGap} ${styles.addCustomEnemyTypeSection}`}>
+                      <div className={styles.label}>Enemy Type</div>
+                      <div className={styles.enemyTypeRow}>
                         {ENEMY_TYPES.map(et => (
                           <button key={et.key}
                             onClick={() => setDraft(d => ({ ...d, enemyType:et.key }))}
                             onMouseEnter={playHover}
-                            style={enemyTypeBtn(draft.enemyType===et.key)}>{et.label}</button>
+                            className={enemyTypeBtnClass(draft.enemyType===et.key)}>{et.label}</button>
                         ))}
                       </div>
                     </div>
                   )}
-                  <button style={{ ...btn('gold'), width:'100%' }} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); addFromDraft(); }}>+ Add Custom</button>
+                  <button
+                    className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); addFromDraft(); }}
+                  >
+                    + Add Custom
+                  </button>
                 </div>
               </div>
             </div>
@@ -1437,119 +2112,543 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── EDITOR MODAL ── */}
         {editorOpen && selected && (
-          <div style={modalBack} onMouseDown={e => { if (e.target===e.currentTarget) setEditorOpen(false); }}>
-            <div style={{
-              width:'min(780px,92vw)', maxHeight:'82vh', borderRadius:16, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.15)',
-              background:'linear-gradient(180deg,rgba(8,6,4,0.97),rgba(4,3,2,0.88))',
-              backdropFilter:'blur(14px)', boxShadow:'0 26px 70px rgba(0,0,0,0.76)',
-              display:'grid', gridTemplateRows:'46px 1fr',
-            }}>
-              <div style={{ padding:'0 12px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, userSelect:'none' }}>
-                  Editing: <span style={{ color:'rgba(255,220,160,0.88)' }}>{selected.name}</span>
+          <div className={styles.modalBack}>
+            <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal}`}>
+              <div className={styles.editorHeader}>
+                <div className={styles.editorTitle}>
+                  {editorMode === 'sheet' ? 'Character Sheet:' : 'Editing:'} <span className={styles.editorNameAccent}>{selected.name}</span>
                 </div>
-                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                <div className={`${styles.editorHeaderActions} ${editorMode === 'sheet' ? styles.sheetHeaderActions : ''}`}>
+                  {editorMode === 'sheet' ? (
+                    <>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
+                      <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>Long Rest</button>
+                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      {selected.sourceSheet && (
+                        <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('sheet'); }}>
+                          Character Sheet
+                        </button>
+                      )}
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}>
+                        {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
+                      </button>
+                      <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
+                    </>
+                  )}
                 </div>
               </div>
 
-              <div style={{ padding:12, overflowY:'auto' }}>
-                {/* Appearance section */}
-                <div style={{ marginBottom:10 }}>
-                  <div style={{ color:'rgba(255,245,220,0.80)', fontWeight:950, fontSize:12, marginBottom:10, letterSpacing:0.3 }}>Appearance</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                    <div>
-                      <div style={lbl}>Custom Image</div>
-                      <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
-                        {/* Preview circle */}
-                        {selected.customImage && (
-                          <div style={{
-                            width:48, height:48, borderRadius:'50%', overflow:'hidden', flexShrink:0,
-                            border:'2px solid rgba(255,220,160,0.30)',
-                            background:'rgba(0,0,0,0.40)',
-                          }}>
-                            <img src={selected.customImage} alt="token preview"
-                              style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+              {editorMode === 'sheet' && (
+                <div className={`${styles.sheetView} koa-scrollbar-thin`}>
+                  <div className={styles.sheetTopRow}>
+                    <div className={styles.sheetHero}>
+                      <div className={styles.sheetIdentity}>
+                        <div className={styles.sheetName}>{selected.name}</div>
+                        <div className={styles.sheetMeta}>
+                          {[cleanText(selected.race) || 'Unknown', cleanText(selected.className || selected.role) || 'Unclassified', selected.level === '' || selected.level == null ? 'Level —' : `Level ${selected.level}`].join(' • ')}
+                        </div>
+                        {selected.sourceSheetFileName && (
+                          <div className={styles.sheetImportMeta}>
+                            {selected.sourceSheetFileName}
+                            {selected.sourceSheetFormat ? ` (${selected.sourceSheetFormat.toUpperCase()})` : ''}
                           </div>
                         )}
-                        <label style={{
-                          display:'inline-block', padding:'5px 12px', borderRadius:8,
-                          background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,220,160,0.14)',
-                          color:'rgba(255,245,220,0.75)', fontSize:11, fontWeight:950, cursor:'pointer',
-                          fontFamily:fontStack, userSelect:'none',
-                        }}>
+                      </div>
+                      <div className={styles.sheetHeroTools}>
+                        <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
+                          <div className={styles.sheetToolsTopRow}>
+                            <div className={styles.sheetToolsAdjustRow}>
+                              <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
+                              <div className={styles.sheetToolsAdjustInputWrap}>
+                                <input
+                                  className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
+                                  inputMode="numeric"
+                                  maxLength={4}
+                                  value={hpAdjustAmount}
+                                  onChange={(e) => setHpAdjustAmount(e.target.value)}
+                                />
+                              </div>
+                              <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className={styles.sheetHeroVitals}>
+                        <div className={styles.sheetHeroVitalsRow}>
+                          <div className={styles.sheetHeroHpGroup}>
+                            <span className={styles.sheetHeroVitalsLabel}>HP</span>
+                            <span className={`${styles.sheetHeroVitalsValue} ${styles.sheetHeroVitalsValueMain}`}>
+                              {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP}
+                            </span>
+                          </div>
+                          <div className={styles.sheetHeroTempGroup}>
+                            <span className={styles.sheetHeroVitalsLabel}>Temp HP</span>
+                            <div className={styles.sheetHeroTempControls}>
+                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(-1); }}>-</button>
+                              <input className={`${styles.input} ${styles.tempAdjustInput}`} inputMode="numeric" maxLength={4} value={selected.tempHP} onChange={(e) => updateSelectedTempHp(e.target.value)} />
+                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(1); }}>+</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {(selectedSheetIssues.length > 0 || sheetImportState.error) && (
+                    <div className={styles.sheetIssues}>
+                      {sheetImportState.error && sheetImportState.targetId === selected.id && (
+                        <div className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>Import Error</div>
+                          <div className={styles.sheetIssueText}>{sheetImportState.error}</div>
+                        </div>
+                      )}
+                      {selectedSheetIssues.slice(0, 6).map((issue, idx) => (
+                        <div key={`${issue.kind}-${idx}`} className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>{issue.kind}</div>
+                          <div className={styles.sheetIssueText}>{issue.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={styles.sheetSectionGrid}>
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Core Stats</div>
+                      <div className={styles.sheetAbilityChipGrid}>
+                        {ABILITY_META.map((ability) => {
+                          const score = selected.abilities?.[ability.key];
+                          const mod = abilityModifier(score);
+                          return (
+                            <div key={ability.key} className={styles.sheetAbilityChip}>
+                              <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
+                              <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
+                              <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Combat Stats</div>
+                      <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
+                        <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
+                        <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
+                        <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sectionTopGap} ${styles.sheetCardFull}`}>
+                      <div className={styles.combatToolsCard}>
+                        <div className={styles.toolsTitle}>Combat Tools</div>
+                        <div className={styles.sheetToolsResourceGrid}>
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>Feature Charges</div>
+                            <div className={styles.spellSlotsReadGrid}>
+                              {visibleSheetFeatureCharges.length === 0 ? (
+                                <div className={styles.sheetListFallback}>No feature charges set.</div>
+                              ) : (
+                                visibleSheetFeatureCharges.map((feature) => {
+                                  const shownBoxes = Math.max(feature.max, 0);
+                                  return (
+                                    <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
+                                      <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
+                                      <div className={styles.spellSlotsReadBoxes}>
+                                        {Array.from({ length: shownBoxes }).map((_, i) => (
+                                          <button
+                                            type="button"
+                                            key={`sheet-feature-box-${feature.id}-${i}`}
+                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                              i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                            }`}
+                                            onMouseEnter={playHover}
+                                            onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
+                                            aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                            title={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          <div className={styles.combatToolGroup}>
+                            <div className={styles.label}>Spell Slots</div>
+                            <div className={styles.spellSlotsReadGrid}>
+                              {visibleSheetSpellSlots.length === 0 ? (
+                                <div className={styles.sheetListFallback}>No spell slots set.</div>
+                              ) : (
+                                visibleSheetSpellSlots.map((slot) => {
+                                  const shownBoxes = Math.max(slot.max, 0);
+                                  return (
+                                    <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
+                                      <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
+                                      <div className={styles.spellSlotsReadBoxes}>
+                                        {Array.from({ length: shownBoxes }).map((_, i) => (
+                                          <button
+                                            type="button"
+                                            key={`sheet-slot-box-${slot.level}-${i}`}
+                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                              i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                            }`}
+                                            onMouseEnter={playHover}
+                                            onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
+                                            aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                            title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                          />
+                                        ))}
+                                      </div>
+                                      <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetCard}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
+                      <div className={styles.sheetStatRows}>
+                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
+                          <div
+                            key={skillRow.id}
+                            className={`${styles.sheetStatRow} ${
+                              skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                            }`}
+                          >
+                            <div className={styles.sheetStatMain}>
+                              <span
+                                className={`${styles.sheetStatTag} ${
+                                  skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                }`}
+                              >
+                                {skillRow.ability}
+                              </span>
+                              <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
+                            </div>
+                            <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
+                          </div>
+                        )) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetCard}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Saving Throws & Senses</div>
+                      <div className={styles.sheetSaveSenseGrid}>
+                        <div>
+                          <div className={styles.sheetSavingThrowGrid}>
+                            {selectedSavingThrowRows.map((row) => (
+                              <div
+                                key={row.tag}
+                                className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow} ${
+                                  row.proficiencyTier === 2 ? styles.sheetStatRowExpert : row.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                                }`}
+                              >
+                                <div className={styles.sheetStatMain}>
+                                  <span
+                                    className={`${styles.sheetStatTag} ${
+                                      row.proficiencyTier === 2 ? styles.sheetStatTagExpert : row.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                    }`}
+                                  >
+                                    {row.tag}
+                                  </span>
+                                </div>
+                                <span className={styles.sheetStatValue}>{formatSigned(row.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={styles.sheetStatRows}>
+                            {selectedSenseRows.length ? selectedSenseRows.map((sense) => (
+                              <div key={sense.id} className={styles.sheetStatRow}>
+                                <div className={styles.sheetStatMain}><span className={styles.sheetStatLabel}>{sense.label}</span></div>
+                                <span className={styles.sheetStatValue}>{sense.value == null ? '—' : sense.value}</span>
+                              </div>
+                            )) : <div className={styles.sheetListFallback}>No senses parsed.</div>}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={styles.sheetSubTitle}>Equipment</div>
+                          <div className={styles.sheetListBlock}>
+                            {normalizeStringList(selected.equipmentItems).length ? normalizeStringList(selected.equipmentItems).join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
+                          </div>
+                          <div className={styles.sheetSubTitle}>Other Possessions</div>
+                          <div className={styles.sheetListBlock}>
+                            {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                  <div className={styles.sheetBottomActions}>
+                    <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {editorMode !== 'sheet' && (
+              <div className={`${styles.editorBody} koa-scrollbar-thin`}>
+                
+                {/* Appearance section */}
+                <div className={styles.sectionTopGap}>
+                  <div className={styles.appearanceHeaderRow}>
+                    <div className={styles.appearanceTitle}>Appearance</div>
+                  </div>
+                  
+                  <div className={styles.appearanceGrid}>
+                    <div className={styles.appearanceCol}>
+                      <div className={styles.uploadRow}>
+                        {/* Preview circle */}
+                        {selected.customImage && (
+                          <div className={styles.tokenPreview}>
+                            <img src={selected.customImage} alt="token preview" />
+                          </div>
+                        )}
+                        <label className={styles.uploadLabel}>
                           {selected.customImage ? 'Replace Image' : 'Upload & Crop'}
-                          <input type="file" accept="image/*" style={{ display:'none' }} onChange={handleImageUpload}/>
+                          <input type="file" accept="image/*" className={styles.hiddenInput} onChange={handleImageUpload}/>
                         </label>
                         {selected.customImage && (
                           <button onClick={() => setSelectedField({ customImage:'' })}
-                            onMouseEnter={btnHover}
-                            onMouseLeave={btnLeave}
-                            style={{ ...sBtn('danger'), height:26, padding:'0 10px', borderRadius:8, fontSize:11, letterSpacing:'0.08em' }}>
+                            onMouseEnter={playHover}
+                            className={btnClass('danger', 'sm', styles.btnTiny)}>
                             Remove
                           </button>
                         )}
                       </div>
-                    </div>
-                    {selected.side === 'Enemy' && (
-                      <div>
-                        <div style={lbl}>Enemy Type</div>
-                        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                          {ENEMY_TYPES.map(et => (
-                            <button key={et.key}
-                              onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
-                              onMouseEnter={playHover}
-                              style={enemyTypeBtn(selected.enemyType===et.key)}>{et.label}</button>
-                          ))}
+                      {selected.side === 'Enemy' && (
+                        <div className={styles.sectionTopGap}>
+                          <div className={styles.label}>Enemy Type</div>
+                          <div className={styles.enemyTypeRow}>
+                            {ENEMY_TYPES.map(et => (
+                              <button key={et.key}
+                                onClick={() => setSelectedField({ enemyType:et.key, customImage:'' })}
+                                onMouseEnter={playHover}
+                                className={enemyTypeBtnClass(selected.enemyType===et.key)}>{et.label}</button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div style={divider}/>
+                <div className={`${styles.sectionTopGap} ${styles.editToolsGrid}`}>
+                  <div className={`${styles.combatToolsCard} ${styles.featureChargesCard}`}>
+                    <div className={styles.toolsTitle}>Feature Charges</div>
+                    <div className={`${styles.featureChargesGrid} koa-scrollbar-thin`}>
+                      {allFeatureCharges.length === 0 ? (
+                        <div className={styles.sheetListFallback}>No feature charges added.</div>
+                      ) : (
+                        allFeatureCharges.map((feature) => (
+                          <div key={feature.id} className={styles.featureChargeRow}>
+                            <input
+                              className={`${styles.input} ${styles.featureChargeNameInput}`}
+                              value={feature.name}
+                              placeholder="Feature name"
+                              onChange={(e) => updateFeatureChargeName(feature.id, e.target.value)}
+                            />
+                            <div className={styles.featureChargeControls}>
+                              <button
+                                type="button"
+                                className={btnClass('ghost', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); nudgeFeatureChargeMax(feature.id, -1); }}
+                              >
+                                -
+                              </button>
+                              <button
+                                type="button"
+                                className={btnClass('gold', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); nudgeFeatureChargeMax(feature.id, 1); }}
+                              >
+                                +
+                              </button>
+                              <span className={styles.spellSlotsEditCount}>{feature.max}</span>
+                              <button
+                                type="button"
+                                className={btnClass('danger', 'sm', styles.toolMiniBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); removeFeatureCharge(feature.id); }}
+                                title="Delete feature"
+                              >
+                                X
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className={btnClass('ghost', 'sm', styles.featureChargeAddBtn)}
+                      onMouseEnter={playHover}
+                      onClick={() => { playNav(); addFeatureCharge(); }}
+                    >
+                      + Add Feature
+                    </button>
+                  </div>
 
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-                  <div><div style={lbl}>Name</div><input style={inp} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
-                  <div><div style={lbl}>Role / Class</div><input style={inp} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
+                  <div className={`${styles.combatToolsCard} ${styles.spellSlotsEditCard}`}>
+                    <div className={styles.toolsTitle}>Spell Slots</div>
+                    <div className={`${styles.spellSlotsEditGrid} koa-scrollbar-thin`}>
+                      {SPELL_SLOT_LEVELS.map((level) => {
+                        const slot = allSpellSlots.find((entry) => entry.level === level) || { level, max: 0, current: 0 };
+                        return (
+                          <div key={`edit-slot-${level}`} className={styles.spellSlotsEditRow}>
+                            <div className={styles.spellSlotsEditLevel} title={`${spellLevelLabel(level)} Level`}>{level}</div>
+                            <div className={styles.spellSlotsTrack}>
+                              <div className={styles.spellSlotsEditActions}>
+                                <button type="button" className={btnClass('ghost', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, -1); }}>
+                                  -
+                                </button>
+                                <button type="button" className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); nudgeSpellSlotMax(level, 1); }}>
+                                  +
+                                </button>
+                              </div>
+                              <span className={styles.spellSlotsEditCount}>{slot.max}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'end' }}>
-                  <div style={compactSideField}><div style={lbl}>Side</div>
-                    <select style={{ ...compactInp, cursor:'pointer' }} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
+
+                <div className={styles.sectionTopGap}>
+                  <div className={styles.label}>Equipment (one per line)</div>
+                  <textarea
+                    className={`${styles.input} ${styles.textareaInput}`}
+                    value={normalizeStringList(selected.equipmentItems).join('\n')}
+                    onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
+                  />
+                </div>
+
+                <div className={styles.divider}/>
+
+                <div className={styles.fieldGrid2}>
+                  <div><div className={styles.label}>Name</div><input className={styles.input} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
+                  <div><div className={styles.label}>Role / Class</div><input className={styles.input} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
+                </div>
+                <div className={styles.compactFields}>
+                  <div className={styles.compactSideField}><div className={styles.label}>Side</div>
+                    <select className={`${styles.input} ${styles.compactInput} ${styles.selectInput}`} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
                       <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
                     </select>
                   </div>
-                  <div style={compactStatField}><div style={lbl}>Initiative</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>Max HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>Temp HP</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
-                  <div style={compactStatField}><div style={lbl}>AC</div><input style={compactInp} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Initiative</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Max HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Temp HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>AC</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
                 </div>
 
-                <div style={divider}/>
+                <div className={styles.divider}/>
 
-                <div><div style={lbl}>Status (comma separated)</div>
-                  <input style={inp} value={selected.status.join(', ')} placeholder="Poisoned, Grappled, Bless"
-                    onChange={e => setSelectedField({ status: String(e.target.value||'').split(',').map(s=>s.trim()).filter(Boolean) })}/>
+                <div><div className={styles.label}>Status (comma separated)</div>
+                  <input
+                    className={styles.input}
+                    value={statusDraft}
+                    placeholder="Poisoned, Grappled, Bless"
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setStatusDraft(nextValue);
+                      setSelectedField({ status: parseStatusText(nextValue) });
+                    }}
+                  />
                 </div>
-                <div style={{ marginTop:10 }}><div style={lbl}>Concentration</div>
-                  <input style={inp} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>
+                <div className={styles.sectionTopGap}><div className={styles.label}>Concentration</div>
+                  <input className={styles.input} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>
                 </div>
-                <div style={{ marginTop:10 }}><div style={lbl}>Notes</div>
-                  <textarea style={{ ...inp, minHeight:130, resize:'vertical' }} value={selected.notes}
+                <div className={styles.sectionTopGap}><div className={styles.label}>Notes</div>
+                  <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notes}
                     placeholder="Tactics, resistances, legendary uses..." onChange={e => setSelectedField({ notes:e.target.value })}/>
                 </div>
 
-                <div style={divider}/>
-                <div style={{ display:'flex', gap:10 }}>
-                  <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); removeCombatant(selected.id); }}>
+                <div className={styles.sectionTopGap}><div className={styles.label}>Other Possessions (one per line)</div>
+                  <textarea
+                    className={`${styles.input} ${styles.textareaInput}`}
+                    value={normalizeStringList(selected.otherPossessions).join('\n')}
+                    onChange={(e) => setSelectedField({ otherPossessions: normalizeStringList(e.target.value) })}
+                  />
+                </div>
+
+                <div className={styles.divider}/>
+                <div className={styles.actionRow}>
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
                     Remove
                   </button>
-                  <button style={sBtn('gold')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => { playNav(); toggleDead(selected.id); }}>
+                  <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
                     {selected.dead ? 'Revive' : 'Mark dead'}
                   </button>
                 </div>
+              </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {sheetImportState.running && editorOpen && selected && sheetImportState.targetId === selected.id && (
+          <div className={styles.modalBack}>
+            <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Importing Character Sheet</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); cancelSheetImport(); }}>
+                  Cancel
+                </button>
+              </div>
+              <div className={styles.managerBody}>
+                <div className={styles.managerHint}>{sheetImportStageLabel} • {sheetImportState.progress}%</div>
+                <div className={styles.importProgressTrack}>
+                  <div className={styles.importProgressFill} style={{ width: `${sheetImportState.progress}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editorOpen && selected && listEditorMode && (
+          <div className={styles.modalBack}>
+            <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                  Close
+                </button>
+              </div>
+              <div className={styles.managerBody}>
+                <div className={styles.managerHint}>
+                  {listEditorMode === 'spellbook' ? 'Add one spell per line.' : 'Add one class feature per line.'}
+                </div>
+                <textarea
+                  className={`${styles.input} ${styles.managerTextarea}`}
+                  value={listEditorText}
+                  onChange={(e) => setListEditorText(e.target.value)}
+                />
+              </div>
+              <div className={styles.managerActions}>
+                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                  Cancel
+                </button>
+                <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); saveListEditor(); }}>
+                  Save
+                </button>
               </div>
             </div>
           </div>
@@ -1557,34 +2656,22 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
         {/* ── IMAGE CROP MODAL ── */}
         {cropOpen && (
-          <div style={{ ...modalBack, zIndex:30, backdropFilter:'blur(4px)' }}
-            onMouseDown={e => { if (e.target===e.currentTarget) setCropOpen(false); }}>
-            <div style={{
-              width:'min(720px,96vw)', borderRadius:18, overflow:'hidden',
-              border:'1px solid rgba(255,220,160,0.18)',
-              background:'linear-gradient(180deg,rgba(18,12,6,0.98),rgba(8,6,4,0.98))',
-              backdropFilter:'blur(18px)', boxShadow:'0 30px 80px rgba(0,0,0,0.80)',
-              display:'flex', flexDirection:'column',
-            }}>
+          <div className={`${styles.modalBack} ${styles.modalBackCrop}`}>
+            <div className={styles.cropModal}>
               {/* Header */}
-              <div style={{ padding:'0 16px', height:50, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,220,160,0.09)' }}>
-                <div style={{ color:'var(--koa-cream)', fontWeight:950, fontSize:14, letterSpacing:0.3 }}>Crop Token Image</div>
-                <button style={sBtn('danger')} onMouseEnter={btnHover} onMouseLeave={btnLeave} onClick={() => setCropOpen(false)}>✕ Cancel</button>
+              <div className={`${styles.modalHeader} ${styles.modalHeaderCrop}`}>
+                <div className={`${styles.modalTitle} ${styles.modalTitleCrop}`}>Crop Token Image</div>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => setCropOpen(false)}>✕ Cancel</button>
               </div>
 
               {/* Body */}
-              <div style={{ padding:20, display:'grid', gridTemplateColumns:'1fr 220px', gap:20, alignItems:'start' }}>
+              <div className={styles.cropBody}>
 
                 {/* Crop canvas */}
-                <div style={{ display:'flex', justifyContent:'center' }}>
+                <div className={styles.cropCanvasWrap}>
                   <div
-                    style={{
-                      width: CROP_BOX, height: CROP_BOX, borderRadius: '50%',
-                      border: '3px solid rgba(255,210,80,0.55)',
-                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.62)',
-                      overflow: 'hidden', position: 'relative',
-                      cursor: 'grab', userSelect: 'none', touchAction: 'none',
-                    }}
+                    className={styles.cropCircle}
+                    style={{ width: CROP_BOX, height: CROP_BOX }}
                     onMouseDown={e => {
                       cropDragRef.current = { dragging:true, sx:e.clientX, sy:e.clientY, ox:cropOffset.x, oy:cropOffset.y };
                       e.preventDefault();
@@ -1616,26 +2703,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 </div>
 
                 {/* Controls */}
-                <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+                <div className={styles.cropControls}>
                   <div>
-                    <div style={lbl}>Zoom</div>
+                    <div className={styles.label}>Zoom</div>
                     <input type="range" min="0.5" max="4" step="0.01"
                       value={cropZoom}
                       onChange={e => { const z = parseFloat(e.target.value); setCropZoom(z); clampCropOffset(z); }}
-                      style={{ width:'100%', accentColor:'rgba(200,150,40,0.90)' }}
+                      className={styles.rangeInput}
                     />
-                    <div style={{ color:'rgba(255,220,160,0.50)', fontSize:10, marginTop:4, fontWeight:900 }}>
+                    <div className={styles.zoomPercent}>
                       {Math.round(cropZoom * 100)}%
                     </div>
                   </div>
 
-                  <div style={{ color:'rgba(255,245,220,0.45)', fontSize:11, fontWeight:900, lineHeight:1.6 }}>
+                  <div className={styles.cropHint}>
                     Drag to reposition.<br/>Scroll or use slider to zoom.
                   </div>
 
-                  <button style={{ ...btn('gold'), width:'100%' }}
-                    onMouseEnter={btnHover}
-                    onMouseLeave={btnLeave}
+                  <button className={btnClass('gold', 'md', styles.btnFull)}
+                    onMouseEnter={playHover}
                     onClick={() => { playNav(); applyCrop(); }}>
                     ✓ Apply Crop
                   </button>
