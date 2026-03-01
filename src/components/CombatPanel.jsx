@@ -379,6 +379,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
           level: null,
           source: '',
           saveAtk: '',
+          effect: '',
           time: '',
           range: '',
           components: '',
@@ -407,6 +408,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
           entry.saveHit ??
           entry.saveOrHit
         ),
+        effect: cleanText(entry.effect ?? entry.summary ?? ''),
         time: cleanText(entry.time ?? entry.castingTime ?? entry.castTime),
         range: cleanText(entry.range ?? entry.distance),
         components: cleanText(entry.components ?? entry.comp),
@@ -424,6 +426,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
     level: null,
     source: '',
     saveAtk: '',
+    effect: '',
     time: '',
     range: '',
     components: '',
@@ -581,6 +584,27 @@ function normalizeFeatureList(raw) {
   if (!text) return [];
   if (text.includes('\n')) return normalizeStringList(text.split(/\r?\n/g));
   return normalizeStringList(text.split(/[;]+/g));
+}
+
+function parseFeatureSections(rawFeatures) {
+  const lines = normalizeStringList(rawFeatures);
+  const groups = [];
+  const headingPattern = /^={2,}\s*(.+?)\s*={2,}$/;
+  let activeGroup = { title: 'Features', entries: [] };
+
+  lines.forEach((line) => {
+    const match = line.match(headingPattern);
+    if (match) {
+      if (activeGroup.entries.length > 0) groups.push(activeGroup);
+      activeGroup = { title: cleanText(match[1]) || 'Features', entries: [] };
+      return;
+    }
+    activeGroup.entries.push(line);
+  });
+
+  if (activeGroup.entries.length > 0) groups.push(activeGroup);
+  if (!groups.length && lines.length) groups.push({ title: 'Features', entries: lines });
+  return groups;
 }
 
 function normalizeSavingThrowRows(rawSavingThrows, abilityScores, level) {
@@ -1242,6 +1266,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [editorMode, setEditorMode] = useState('edit');
   const [listEditorMode, setListEditorMode] = useState('');
   const [listEditorText, setListEditorText] = useState('');
+  const [featureRawEditorOpen, setFeatureRawEditorOpen] = useState(false);
+  const [featureRawSnapshot, setFeatureRawSnapshot] = useState('');
   const [spellbookDraftEntries, setSpellbookDraftEntries] = useState([]);
   const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -1285,6 +1311,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
           setActiveSpellDraftId('');
           return;
         }
+        if (listEditorMode === 'features' && featureRawEditorOpen) {
+          setFeatureRawEditorOpen(false);
+          return;
+        }
         setListEditorMode('');
         return;
       }
@@ -1303,7 +1333,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, editorOpen, listEditorMode, activeSpellDraftId]);
+  }, [cropOpen, addModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -1384,6 +1414,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     () => spellbookDraftEntries.find((entry) => entry.id === activeSpellDraftId) || null,
     [spellbookDraftEntries, activeSpellDraftId]
   );
+  const featureDraftSections = useMemo(
+    () => (listEditorMode === 'features' ? parseFeatureSections(listEditorText) : []),
+    [listEditorMode, listEditorText]
+  );
   const sheetCurrentHpVisual = useMemo(() => {
     if (!selected) return { style: undefined, isCritical: false };
     const maxHp = selected.maxHP === '' ? null : Math.max(0, toInt(selected.maxHP, 0));
@@ -1458,11 +1492,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     if (listEditorMode === 'spellbook') {
       setSpellbookDraftEntries(selectedSpellbookEntries);
       setActiveSpellDraftId('');
+      setFeatureRawEditorOpen(false);
+      setFeatureRawSnapshot('');
       return;
     }
     if (listEditorMode === 'features') {
       setListEditorText(normalizeStringList(selected.classFeatures).join('\n'));
       setActiveSpellDraftId('');
+      setFeatureRawEditorOpen(false);
+      setFeatureRawSnapshot('');
     }
   }, [listEditorMode, selected, selectedSpellbookEntries]);
 
@@ -1930,6 +1968,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     level,
     source: '',
     saveAtk: '',
+    effect: '',
     time: '',
     range: '',
     components: '',
@@ -1951,6 +1990,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       if (Object.prototype.hasOwnProperty.call(patch, 'name')) next.name = String(patch.name ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'source')) next.source = String(patch.source ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'saveAtk')) next.saveAtk = String(patch.saveAtk ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'effect')) next.effect = String(patch.effect ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'time')) next.time = String(patch.time ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'range')) next.range = String(patch.range ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'components')) next.components = String(patch.components ?? '');
@@ -2962,11 +3002,17 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
-                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setListEditorMode(''); }}>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setFeatureRawEditorOpen(false); setListEditorMode(''); }}>
                   Close
                 </button>
               </div>
-              <div className={`${styles.managerBody} ${listEditorMode === 'spellbook' ? styles.managerBodySpellbook : ''}`}>
+              <div className={`${styles.managerBody} ${
+                listEditorMode === 'spellbook'
+                  ? styles.managerBodySpellbook
+                  : listEditorMode === 'features'
+                    ? styles.managerBodyFeatures
+                    : ''
+              }`}>
                 {listEditorMode === 'spellbook' ? (
                   <div className={styles.spellbookManager}>
                     <div className={styles.spellbookToolbar}>
@@ -3008,9 +3054,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                                     <th>Spell</th>
                                     <th>Source</th>
                                     <th>Save/Atk</th>
+                                    <th>Effect</th>
                                     <th>Time</th>
                                     <th>Range</th>
-                                    <th>Comp</th>
                                     <th>Duration</th>
                                     <th />
                                   </tr>
@@ -3026,9 +3072,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                                       <td className={styles.spellbookNameCell}>{spell.name || 'Untitled Spell'}</td>
                                       <td>{spell.source || '—'}</td>
                                       <td>{spell.saveAtk || '—'}</td>
+                                      <td>{spell.effect || '—'}</td>
                                       <td>{spell.time || '—'}</td>
                                       <td>{spell.range || '—'}</td>
-                                      <td>{spell.components || '—'}</td>
                                       <td>{spell.duration || '—'}</td>
                                       <td className={styles.spellbookRowActions}>
                                         <button
@@ -3070,17 +3116,44 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   </div>
                 ) : (
                   <>
-                    <div className={styles.managerHint}>Add one class feature per line.</div>
-                    <textarea
-                      className={`${styles.input} ${styles.managerTextarea}`}
-                      value={listEditorText}
-                      onChange={(e) => setListEditorText(e.target.value)}
-                    />
+                    <div className={styles.featureBlocksTop}>
+                      <div className={styles.managerHint}>Feature Groups</div>
+                      <button
+                        type="button"
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => {
+                          playNav();
+                          setFeatureRawSnapshot(listEditorText);
+                          setFeatureRawEditorOpen(true);
+                        }}
+                      >
+                        Edit Raw
+                      </button>
+                    </div>
+                    <div className={`${styles.featureBlocks} koa-scrollbar-thin`}>
+                      {featureDraftSections.length === 0 ? (
+                        <div className={styles.sheetListFallback}>No class features parsed.</div>
+                      ) : (
+                        featureDraftSections.map((group, index) => (
+                          <div key={`${group.title}-${index}`} className={styles.featureBlock}>
+                            <div className={styles.featureBlockTitle}>{group.title}</div>
+                            <div className={styles.featureBlockBody}>
+                              {group.entries.map((entry, entryIndex) => (
+                                <div key={`${group.title}-${index}-${entryIndex}`} className={styles.featureBlockLine}>
+                                  {entry}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </>
                 )}
               </div>
               <div className={styles.managerActions}>
-                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setListEditorMode(''); }}>
+                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setFeatureRawEditorOpen(false); setListEditorMode(''); }}>
                   Cancel
                 </button>
                 <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); saveListEditor(); }}>
@@ -3155,6 +3228,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           />
                         </div>
                         <div>
+                          <div className={styles.label}>Effect</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.effect || ''}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { effect: e.target.value })}
+                          />
+                        </div>
+                        <div>
                           <div className={styles.label}>Time</div>
                           <input
                             className={styles.input}
@@ -3208,6 +3289,51 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         className={btnClass('gold', 'sm')}
                         onMouseEnter={playHover}
                         onClick={() => { playNav(); setActiveSpellDraftId(''); }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {listEditorMode === 'features' && featureRawEditorOpen && (
+                <div className={styles.featureRawOverlay}>
+                  <div className={`${styles.modalCard} ${styles.featureRawCard}`}>
+                    <div className={styles.modalHeader}>
+                      <div className={styles.modalTitle}>Edit Raw Class Features</div>
+                      <button
+                        className={btnClass('danger', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setFeatureRawEditorOpen(false); }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className={styles.featureRawBody}>
+                      <div className={styles.managerHint}>One feature line per row. Section dividers use `=== TITLE ===`.</div>
+                      <textarea
+                        className={`${styles.input} ${styles.managerTextarea} ${styles.featureRawTextarea}`}
+                        value={listEditorText}
+                        onChange={(e) => setListEditorText(e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.managerActions}>
+                      <button
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => {
+                          playNav();
+                          setListEditorText(featureRawSnapshot);
+                          setFeatureRawEditorOpen(false);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={btnClass('gold', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setFeatureRawEditorOpen(false); }}
                       >
                         Done
                       </button>
