@@ -275,7 +275,20 @@ function parseJsonSheet(jsonText) {
     null;
   const abilities = parseAbilities(abilitySource, root);
 
-  const spellList = normalizeStringList(findValueByAliases(root, ['spells', 'spellList', 'spellbook']));
+  const rawSpellbookEntries = findValueByAliases(
+    root,
+    ['spellbookEntries', 'spellEntries', 'spellsDetailed', 'spellDetails']
+  );
+  const rawSpellListValue = findValueByAliases(root, ['spells', 'spellList', 'spellbook']);
+  const spellbookEntriesFromList = Array.isArray(rawSpellListValue) && rawSpellListValue.some((item) => isObject(item))
+    ? normalizeSpellbookEntries(rawSpellListValue)
+    : [];
+  const spellbookEntries = rawSpellbookEntries != null
+    ? normalizeSpellbookEntries(rawSpellbookEntries)
+    : spellbookEntriesFromList;
+  const spellList = spellbookEntries.length
+    ? normalizeStringList(spellbookEntries.map((entry) => entry.name))
+    : normalizeStringList(rawSpellListValue);
   const spellSlots = findValueByAliases(root, ['spellSlots', 'spell_slots', 'slotsByLevel', 'spellSlotLevels']);
   const savingThrows = normalizeStringList(
     findValueByAliases(root, ['savingThrows', 'saving_throws', 'saves', 'savingthrows'])
@@ -357,6 +370,10 @@ function parseJsonSheet(jsonText) {
       'spells',
       'spelllist',
       'spellbook',
+      'spellbookentries',
+      'spellentries',
+      'spellsdetailed',
+      'spelldetails',
       'spellslots',
       'spell_slots',
       'slotsbylevel',
@@ -415,6 +432,7 @@ function parseJsonSheet(jsonText) {
       spellAttackModifier,
       abilities,
       spellList,
+      spellbookEntries,
       spellSlots: mergeSpellSlots([], Array.isArray(spellSlots) ? spellSlots : []),
       featureCharges,
       savingThrows,
@@ -479,6 +497,7 @@ async function parseTextSheet(text, signal, onProgress) {
     spellAttackModifier: null,
     abilities: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     spellList: [],
+    spellbookEntries: [],
     spellSlots: [],
     savingThrows: [],
     skills: [],
@@ -646,6 +665,12 @@ async function parseTextSheet(text, signal, onProgress) {
   }
 
   fields.spellList = sanitizeSpellEntries(sections.spells);
+  fields.spellbookEntries = extractSpellbookEntriesFromTextLines(sections.spells);
+  if (!fields.spellbookEntries.length) {
+    fields.spellbookEntries = buildSpellbookEntriesFromSpellList(fields.spellList);
+  } else if (!fields.spellList.length) {
+    fields.spellList = normalizeStringList(fields.spellbookEntries.map((entry) => entry.name));
+  }
   fields.spellSlots = mergeSpellSlots(
     extractSpellSlotsFromLines(lines),
     extractSpellSlotsFromLines(sections.spells)
@@ -861,6 +886,203 @@ function sanitizeSpellEntries(lines) {
       });
   });
   return uniqueKeepOrder(out);
+}
+
+function normalizeSpellLevel(raw, fallback = null) {
+  if (raw == null || raw === '') return fallback;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const n = Math.trunc(raw);
+    return n >= 0 && n <= 9 ? n : fallback;
+  }
+
+  const text = cleanText(raw).toLowerCase();
+  if (!text) return fallback;
+  if (text.includes('cantrip')) return 0;
+  const withLevel = text.match(/\b([0-9])(?:st|nd|rd|th)?\s*level\b/i);
+  if (withLevel) {
+    const parsed = toInt(withLevel[1], fallback);
+    return parsed != null && parsed >= 0 && parsed <= 9 ? parsed : fallback;
+  }
+  if (/^[0-9]$/.test(text)) {
+    const parsed = toInt(text, fallback);
+    return parsed != null && parsed >= 0 && parsed <= 9 ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function sanitizeSpellCell(value) {
+  const compact = cleanText(value);
+  if (!compact) return '';
+  if (/^[-–—=]+$/i.test(compact)) return '';
+  if (compact === '--') return '';
+  return compact;
+}
+
+function normalizeSpellPrepared(value) {
+  if (value == null || value === '') return '';
+  if (typeof value === 'boolean') return value ? 'P' : '';
+  const compact = cleanText(value).toUpperCase();
+  if (!compact) return '';
+  if (['TRUE', 'YES', 'Y', '1'].includes(compact)) return 'P';
+  if (['FALSE', 'NO', 'N', '0'].includes(compact)) return '';
+  if (compact === 'AP') return 'A';
+  if (compact.length === 1) return compact;
+  return compact.slice(0, 10);
+}
+
+function normalizeSpellbookEntry(raw, index = 0) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    const name = cleanText(raw);
+    if (!name) return null;
+    return {
+      name,
+      level: normalizeSpellLevel(null, null),
+      source: '',
+      saveAtk: '',
+      time: '',
+      range: '',
+      components: '',
+      duration: '',
+      prepared: '',
+      notes: '',
+      index,
+    };
+  }
+  if (!isObject(raw)) return null;
+
+  const name = cleanText(raw.name ?? raw.spell ?? raw.title ?? raw.label);
+  if (!name) return null;
+
+  let level = normalizeSpellLevel(
+    raw.level ?? raw.spellLevel ?? raw.levelIndex ?? raw.circle ?? raw.slotLevel,
+    null
+  );
+  const source = sanitizeSpellCell(raw.source ?? raw.origin ?? raw.class);
+  if (level == null) level = normalizeSpellLevel(source, null);
+  if (level == null) level = normalizeSpellLevel(name, null);
+
+  return {
+    name,
+    level,
+    source,
+    saveAtk: sanitizeSpellCell(
+      raw.saveAtk ??
+      raw.saveAttack ??
+      raw.save ??
+      raw.attack ??
+      raw.atk ??
+      raw.saveHit ??
+      raw.saveOrHit
+    ),
+    time: sanitizeSpellCell(raw.time ?? raw.castingTime ?? raw.castTime),
+    range: sanitizeSpellCell(raw.range ?? raw.distance),
+    components: sanitizeSpellCell(raw.components ?? raw.comp),
+    duration: sanitizeSpellCell(raw.duration),
+    prepared: normalizeSpellPrepared(raw.prepared ?? raw.prep),
+    notes: sanitizeSpellCell(raw.notes ?? raw.description),
+    index: toInt(raw.index, index),
+  };
+}
+
+function buildSpellbookEntriesFromSpellList(spellList) {
+  return normalizeStringList(spellList).map((name, index) => ({
+    name,
+    level: null,
+    source: '',
+    saveAtk: '',
+    time: '',
+    range: '',
+    components: '',
+    duration: '',
+    prepared: '',
+    notes: '',
+    index,
+  }));
+}
+
+function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
+  const items = Array.isArray(raw) ? raw : [];
+  const normalized = items
+    .map((entry, index) => normalizeSpellbookEntry(entry, index))
+    .filter(Boolean);
+  if (normalized.length > 0) return normalized;
+  return buildSpellbookEntriesFromSpellList(fallbackSpellList);
+}
+
+function extractSpellbookEntriesFromTextLines(lines) {
+  const rows = Array.isArray(lines)
+    ? lines
+        .flatMap((line) => String(line == null ? '' : line).split(/\r?\n/g))
+        .map((line) => cleanText(line))
+    : [];
+
+  let activeLevel = null;
+  const entries = [];
+  rows.forEach((row) => {
+    if (!row) return;
+    const level = spellLevelFromText(row);
+    if (level != null) {
+      activeLevel = level;
+      return;
+    }
+    const names = sanitizeSpellEntries([row]);
+    names.forEach((name) => {
+      entries.push({
+        name,
+        level: activeLevel,
+      });
+    });
+  });
+
+  return normalizeSpellbookEntries(entries);
+}
+
+function mergeSpellbookEntries(base, overlay) {
+  const baseEntries = normalizeSpellbookEntries(base);
+  const overlayEntries = normalizeSpellbookEntries(overlay);
+  if (!overlayEntries.length) return baseEntries;
+  if (!baseEntries.length) return overlayEntries;
+
+  const levelHintsByName = new Map();
+  baseEntries.forEach((entry) => {
+    const key = normalizeKey(entry.name);
+    if (!key) return;
+    const bucket = levelHintsByName.get(key) || [];
+    bucket.push(entry.level);
+    levelHintsByName.set(key, bucket);
+  });
+
+  const mergedOverlay = overlayEntries.map((entry) => {
+    if (entry.level != null) return entry;
+    const key = normalizeKey(entry.name);
+    const bucket = key ? levelHintsByName.get(key) : null;
+    if (!bucket || bucket.length === 0) return entry;
+    const hintedLevel = bucket.shift();
+    if (hintedLevel == null) return entry;
+    return { ...entry, level: hintedLevel };
+  });
+
+  const overlayCounts = new Map();
+  mergedOverlay.forEach((entry) => {
+    const key = normalizeKey(entry.name);
+    if (!key) return;
+    overlayCounts.set(key, (overlayCounts.get(key) || 0) + 1);
+  });
+
+  const extras = [];
+  baseEntries.forEach((entry) => {
+    const key = normalizeKey(entry.name);
+    if (!key) return;
+    const remaining = overlayCounts.get(key) || 0;
+    if (remaining > 0) {
+      overlayCounts.set(key, remaining - 1);
+      return;
+    }
+    extras.push(entry);
+  });
+
+  return [...mergedOverlay, ...extras];
 }
 
 function normalizeFeatureChargeName(raw) {
@@ -1209,6 +1431,7 @@ function mapPdfFormPairsToParsed(pairs) {
   const otherPossessionsLines = [];
   const spellLines = [];
   const spellSlotHintLines = [];
+  const spellRowsByIndex = new Map();
   const senses = [];
 
   const savingThrows = PDF_SAVING_THROW_FIELDS
@@ -1249,6 +1472,53 @@ function mapPdfFormPairsToParsed(pairs) {
     normalizeStringList(additionalSenses).forEach((line) => senses.push(line));
   }
 
+  let activeSpellLevel = null;
+  pairs.forEach(({ field, value }) => {
+    const fieldName = cleanText(field);
+    if (!fieldName) return;
+    const cleanedValue = cleanText(value);
+
+    if (/^spellHeader\d+$/i.test(fieldName)) {
+      const headerLevel = spellLevelFromText(cleanedValue);
+      if (headerLevel != null) activeSpellLevel = headerLevel;
+      return;
+    }
+
+    const spellRowMatch = fieldName.match(
+      /^spell(name|source|savehit|castingtime|range|components|duration|prepared|notes)(\d+)$/i
+    );
+    if (!spellRowMatch) return;
+
+    const rowPart = spellRowMatch[1].toLowerCase();
+    const rowIndex = toInt(spellRowMatch[2], null);
+    if (rowIndex == null || rowIndex < 0) return;
+
+    const row = spellRowsByIndex.get(rowIndex) || { index: rowIndex, level: activeSpellLevel };
+    if (row.level == null && activeSpellLevel != null) row.level = activeSpellLevel;
+
+    const fieldMap = {
+      name: 'name',
+      source: 'source',
+      savehit: 'saveAtk',
+      castingtime: 'time',
+      range: 'range',
+      components: 'components',
+      duration: 'duration',
+      prepared: 'prepared',
+      notes: 'notes',
+    };
+    const targetField = fieldMap[rowPart];
+    if (!targetField) return;
+
+    const nextValue = targetField === 'prepared'
+      ? normalizeSpellPrepared(cleanedValue)
+      : sanitizeSpellCell(cleanedValue);
+    if (!cleanText(row[targetField]) || cleanText(row[targetField]) === '--') {
+      row[targetField] = nextValue;
+    }
+    spellRowsByIndex.set(rowIndex, row);
+  });
+
   for (const [field, value] of byField.entries()) {
     const cleanValue = cleanText(value);
     if (!cleanValue) continue;
@@ -1285,6 +1555,16 @@ function mapPdfFormPairsToParsed(pairs) {
     }
   }
 
+  const normalizedSpellbookEntries = normalizeSpellbookEntries(
+    Array.from(spellRowsByIndex.values())
+      .sort((a, b) => (a.index || 0) - (b.index || 0))
+      .map((row) => ({
+        ...row,
+        name: cleanText(row.name),
+      }))
+      .filter((row) => cleanText(row.name))
+  );
+
   const weaponAttackCandidates = [];
   for (const [field, value] of byField.entries()) {
     const key = fieldKeyName(field);
@@ -1305,7 +1585,9 @@ function mapPdfFormPairsToParsed(pairs) {
   const normalizedSaves = uniqueKeepOrder(savingThrows);
   const normalizedSkills = uniqueKeepOrder(skills);
   const normalizedSenses = uniqueKeepOrder(senses);
-  const normalizedSpellList = sanitizeSpellEntries(spellLines);
+  const normalizedSpellList = normalizedSpellbookEntries.length
+    ? normalizeStringList(normalizedSpellbookEntries.map((entry) => entry.name))
+    : sanitizeSpellEntries(spellLines);
   const normalizedSpellSlots = mergeSpellSlots(
     extractSpellSlotsFromLines(spellLines),
     extractSpellSlotsFromLines(spellSlotHintLines)
@@ -1332,6 +1614,7 @@ function mapPdfFormPairsToParsed(pairs) {
       spellAttackModifier,
       abilities,
       spellList: normalizedSpellList,
+      spellbookEntries: normalizedSpellbookEntries,
       spellSlots: normalizedSpellSlots,
       savingThrows: normalizedSaves,
       skills: normalizedSkills,
@@ -1379,7 +1662,14 @@ function mergeParsedData(base, overlay) {
   keys.forEach((key) => {
     out[key] = keepOverlay(key) ? overlay[key] : base[key];
   });
-  out.spellList = keepOverlay('spellList') ? overlay.spellList : (base?.spellList || []);
+  const mergedSpellList = keepOverlay('spellList') ? overlay.spellList : (base?.spellList || []);
+  out.spellbookEntries = mergeSpellbookEntries(base?.spellbookEntries, overlay?.spellbookEntries);
+  if (!out.spellbookEntries.length) {
+    out.spellbookEntries = buildSpellbookEntriesFromSpellList(mergedSpellList);
+  }
+  out.spellList = out.spellbookEntries.length
+    ? normalizeStringList(out.spellbookEntries.map((entry) => entry.name))
+    : normalizeStringList(mergedSpellList);
   out.spellSlots = mergeSpellSlots(base?.spellSlots, overlay?.spellSlots);
   out.featureCharges = mergeFeatureCharges(base?.featureCharges, overlay?.featureCharges);
   out.savingThrows = keepOverlay('savingThrows') ? overlay.savingThrows : (base?.savingThrows || []);
@@ -1394,6 +1684,7 @@ function mergeParsedData(base, overlay) {
     out.abilities[abilityKey] = fromOverlay != null ? fromOverlay : fromBase;
   });
 
+  out.spellbookEntries = normalizeSpellbookEntries(out.spellbookEntries, out.spellList);
   out.spellList = normalizeStringList(out.spellList);
   out.savingThrows = normalizeStringList(out.savingThrows);
   out.skills = normalizeStringList(out.skills);

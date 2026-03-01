@@ -926,6 +926,7 @@
   background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
   display: grid;
   grid-template-rows: auto 1fr auto;
+  position: relative;
 }
 
 .cropModal {
@@ -1051,6 +1052,13 @@
 .managerBody {
   padding: 12px;
   overflow-y: auto;
+  min-height: 0;
+}
+
+.managerBodySpellbook {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .managerHint {
@@ -1071,6 +1079,176 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.spellbookManager {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.spellbookToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.spellbookGroups {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 10px;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.spellbookGroup {
+  flex: 0 0 auto;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 220, 160, 0.15);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  overflow: hidden;
+}
+
+.spellbookGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.12);
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.spellbookGroupTitle {
+  color: rgba(255, 220, 160, 0.84);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.spellbookGroupActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.spellbookGroupCount {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(255, 220, 160, 0.08);
+  color: rgba(255, 240, 210, 0.86);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.spellbookTableWrap {
+  overflow-x: auto;
+}
+
+.spellbookTable {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+}
+
+.spellbookTable thead th {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.1);
+  white-space: nowrap;
+}
+
+.spellbookTable tbody td {
+  color: rgba(255, 245, 220, 0.88);
+  font-size: 12px;
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.08);
+  vertical-align: middle;
+}
+
+.spellbookTable tbody tr {
+  cursor: pointer;
+}
+
+.spellbookTable tbody tr:hover {
+  background: rgba(255, 220, 160, 0.06);
+}
+
+.spellbookTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.spellbookNameCell {
+  color: var(--koa-cream);
+  font-weight: 950;
+}
+
+.spellbookRowActive {
+  background: linear-gradient(90deg, rgba(76, 120, 180, 0.18), rgba(40, 70, 110, 0.1));
+}
+
+.spellbookRowActions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.spellbookRowBtn {
+  margin-left: 4px;
+}
+
+.spellDetailOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  z-index: 3;
+}
+
+.spellDetailCard {
+  width: min(740px, 92vw);
+  max-height: min(82vh, 760px);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.spellDetailBody {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.spellDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.spellDetailFieldWide {
+  grid-column: 1 / -1;
+}
+
+.spellDetailTextarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 .sheetView {
@@ -2758,6 +2936,18 @@
     grid-template-columns: 1fr;
   }
 
+  .spellbookToolbar {
+    align-items: stretch;
+  }
+
+  .spellbookTable {
+    min-width: 740px;
+  }
+
+  .spellDetailGrid {
+    grid-template-columns: 1fr;
+  }
+
   .slotBand {
     flex-direction: column;
     align-items: flex-start;
@@ -2807,6 +2997,24 @@
 
   .sheetInventoryGrid {
     grid-template-columns: 1fr;
+  }
+
+  .spellbookGroupHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .spellbookGroupActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .spellbookTable {
+    min-width: 640px;
+  }
+
+  .spellDetailCard {
+    width: min(96vw, 560px);
   }
 
   .spellSlotsEditGrid {

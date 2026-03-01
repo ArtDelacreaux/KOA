@@ -206,6 +206,7 @@ const ENEMY_TYPES = [
 
 const PC_COLORS = ['#a0c4ff','#c0a8ff','#ffd6a0','#a0ffcc','#ffb3b3','#ffe4a0','#b3e0ff'];
 const SPELL_SLOT_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const SPELLBOOK_LEVELS = [0, ...SPELL_SLOT_LEVELS];
 const TOKEN_IMAGE_BY_ID = {
   arlis: '/Token/arlis.png',
   castor: '/Token/castor.png',
@@ -323,6 +324,146 @@ function normalizeFeatureCharges(raw) {
     const current = clamp(toInt(fallbackCurrent, max), 0, max);
     return { id, name, max, current };
   });
+}
+
+function normalizeSpellLevel(raw, fallback = null) {
+  if (raw == null || raw === '') return fallback;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const n = Math.trunc(raw);
+    return n >= 0 && n <= 9 ? n : fallback;
+  }
+  const text = String(raw).trim().toLowerCase();
+  if (!text) return fallback;
+  if (text.includes('cantrip')) return 0;
+  const withLevel = text.match(/\b([0-9])(?:st|nd|rd|th)?\s*level\b/i);
+  if (withLevel) {
+    const parsed = toInt(withLevel[1], fallback);
+    return parsed != null && parsed >= 0 && parsed <= 9 ? parsed : fallback;
+  }
+  if (/^[0-9]$/.test(text)) {
+    const parsed = toInt(text, fallback);
+    return parsed != null && parsed >= 0 && parsed <= 9 ? parsed : fallback;
+  }
+  return fallback;
+}
+
+function normalizeSpellPrepared(raw) {
+  if (raw == null || raw === '') return '';
+  if (typeof raw === 'boolean') return raw ? 'P' : '';
+  const text = String(raw).trim().toUpperCase();
+  if (!text) return '';
+  if (['TRUE', 'YES', 'Y', '1'].includes(text)) return 'P';
+  if (['FALSE', 'NO', 'N', '0'].includes(text)) return '';
+  if (text === 'AP') return 'A';
+  return text.length === 1 ? text : text.slice(0, 10);
+}
+
+function spellEntryId(entry, index) {
+  const explicit = cleanText(entry?.id);
+  if (explicit) return explicit;
+  const nameKey = tokenKey(entry?.name);
+  return `spell-${index + 1}-${nameKey || 'entry'}`;
+}
+
+function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
+  const list = Array.isArray(raw) ? raw : [];
+  const normalized = list
+    .map((entry, index) => {
+      if (entry == null) return null;
+      if (typeof entry === 'string') {
+        const name = cleanText(entry);
+        if (!name) return null;
+        return {
+          id: spellEntryId({ name }, index),
+          name,
+          level: null,
+          source: '',
+          saveAtk: '',
+          time: '',
+          range: '',
+          components: '',
+          duration: '',
+          prepared: '',
+          notes: '',
+        };
+      }
+      if (!entry || typeof entry !== 'object') return null;
+      const name = cleanText(entry.name ?? entry.spell ?? entry.title ?? entry.label);
+      if (!name) return null;
+      return {
+        id: spellEntryId(entry, index),
+        name,
+        level: normalizeSpellLevel(
+          entry.level ?? entry.spellLevel ?? entry.levelIndex ?? entry.circle ?? entry.slotLevel,
+          null
+        ),
+        source: cleanText(entry.source ?? entry.origin ?? entry.class),
+        saveAtk: cleanText(
+          entry.saveAtk ??
+          entry.saveAttack ??
+          entry.save ??
+          entry.attack ??
+          entry.atk ??
+          entry.saveHit ??
+          entry.saveOrHit
+        ),
+        time: cleanText(entry.time ?? entry.castingTime ?? entry.castTime),
+        range: cleanText(entry.range ?? entry.distance),
+        components: cleanText(entry.components ?? entry.comp),
+        duration: cleanText(entry.duration),
+        prepared: normalizeSpellPrepared(entry.prepared ?? entry.prep),
+        notes: cleanText(entry.notes ?? entry.description),
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length) return normalized;
+  return normalizeStringList(fallbackSpellList).map((name, index) => ({
+    id: spellEntryId({ name }, index),
+    name,
+    level: null,
+    source: '',
+    saveAtk: '',
+    time: '',
+    range: '',
+    components: '',
+    duration: '',
+    prepared: '',
+    notes: '',
+  }));
+}
+
+function groupedSpellbookEntries(entries) {
+  const byLevel = new Map(SPELLBOOK_LEVELS.map((level) => [level, []]));
+  const unassigned = [];
+  normalizeSpellbookEntries(entries).forEach((entry) => {
+    const level = normalizeSpellLevel(entry.level, null);
+    if (level == null || !byLevel.has(level)) {
+      unassigned.push(entry);
+      return;
+    }
+    byLevel.get(level).push(entry);
+  });
+
+  const groups = SPELLBOOK_LEVELS
+    .map((level) => ({
+      key: `level-${level}`,
+      level,
+      label: level === 0 ? 'Cantrips' : `${spellLevelLabel(level)} Level`,
+      entries: byLevel.get(level),
+    }))
+    .filter((group) => group.entries.length > 0);
+
+  if (unassigned.length > 0) {
+    groups.push({
+      key: 'level-unassigned',
+      level: null,
+      label: 'Unassigned',
+      entries: unassigned,
+    });
+  }
+
+  return groups;
 }
 
 function spellLevelLabel(level) {
@@ -576,6 +717,10 @@ function buildSheetPatch(combatant, parsedResult) {
   const hasImportedSpellSlots = importedSpellSlots.some((slot) => slot.max > 0);
   const importedFeatureCharges = normalizeFeatureCharges(parsed.featureCharges);
   const hasParsedFeatureCharges = Array.isArray(parsed.featureCharges);
+  const normalizedSpellbookEntries = normalizeSpellbookEntries(parsed.spellbookEntries, parsed.spellList);
+  const normalizedSpellList = normalizedSpellbookEntries.length
+    ? normalizeStringList(normalizedSpellbookEntries.map((entry) => entry.name))
+    : normalizeStringList(parsed.spellList);
 
   return {
     name: cleanText(parsed.name) || combatant.name,
@@ -596,7 +741,8 @@ function buildSheetPatch(combatant, parsedResult) {
     savingThrows: normalizeStringList(parsed.savingThrows),
     skills: normalizeStringList(parsed.skills).filter((line) => /[a-z]/i.test(line)),
     senses: normalizeStringList(parsed.senses),
-    spellList: normalizeStringList(parsed.spellList),
+    spellbookEntries: normalizedSpellbookEntries,
+    spellList: normalizedSpellList,
     spellSlots: hasImportedSpellSlots ? importedSpellSlots : normalizeSpellSlots(combatant.spellSlots),
     classFeatures: normalizeFeatureList(parsed.classFeatures || parsed.abilitiesText),
     featureCharges: hasParsedFeatureCharges ? importedFeatureCharges : normalizeFeatureCharges(combatant.featureCharges),
@@ -622,6 +768,10 @@ function sheetProfileKey(sourceCharacterId, name) {
 
 function normalizeSheetProfile(raw) {
   const className = cleanText(raw?.className || raw?.role);
+  const spellbookEntries = normalizeSpellbookEntries(raw?.spellbookEntries, raw?.spellList);
+  const spellList = spellbookEntries.length
+    ? normalizeStringList(spellbookEntries.map((entry) => entry.name))
+    : normalizeStringList(raw?.spellList);
   return {
     race: cleanText(raw?.race),
     className,
@@ -640,7 +790,8 @@ function normalizeSheetProfile(raw) {
     savingThrows: normalizeStringList(raw?.savingThrows),
     skills: normalizeStringList(raw?.skills).filter((line) => /[a-z]/i.test(line)),
     senses: normalizeStringList(raw?.senses),
-    spellList: normalizeStringList(raw?.spellList),
+    spellbookEntries,
+    spellList,
     classFeatures: normalizeFeatureList(raw?.classFeatures),
     spellSlots: normalizeSpellSlots(raw?.spellSlots),
     featureCharges: normalizeFeatureCharges(raw?.featureCharges),
@@ -709,51 +860,58 @@ function normalize(enc) {
     acc[normalizedKey] = normalizeSheetProfile(value);
     return acc;
   }, {});
-  e.combatants = e.combatants.map((c, i) => ({
-    sourceCharacterId: c.sourceCharacterId || '',
-    id: c.id || uid(),
-    name: c.name || 'Unknown',
-    role: c.role || '',
-    race: c.race || '',
-    className: c.className || c.role || '',
-    level: c.level === '' || c.level == null ? '' : toInt(c.level, ''),
-    side: c.side || 'Enemy',
-    init: toInt(c.init, 10),
-    initiativeBonus: c.initiativeBonus == null || c.initiativeBonus === '' ? 0 : toInt(c.initiativeBonus, 0),
-    proficiencyBonus: c.proficiencyBonus == null || c.proficiencyBonus === '' ? null : toInt(c.proficiencyBonus, null),
-    spellSaveDC: c.spellSaveDC == null || c.spellSaveDC === '' ? null : toInt(c.spellSaveDC, null),
-    attackModifier: c.attackModifier == null || c.attackModifier === '' ? null : toInt(c.attackModifier, null),
-    spellAttackModifier: c.spellAttackModifier == null || c.spellAttackModifier === '' ? null : toInt(c.spellAttackModifier, null),
-    maxHP: c.maxHP === '' || c.maxHP == null ? '' : toInt(c.maxHP, 0),
-    hp: c.hp === '' || c.hp == null ? '' : toInt(c.hp, 0),
-    tempHP: toInt(c.tempHP, 0),
-    ac: c.ac === '' || c.ac == null ? '' : toInt(c.ac, 0),
-    speed: c.speed === '' || c.speed == null ? '' : toInt(c.speed, 0),
-    abilities: normalizeAbilities(c.abilities),
-    savingThrows: normalizeStringList(c.savingThrows),
-    skills: normalizeStringList(c.skills).filter((line) => /[a-z]/i.test(line)),
-    senses: normalizeStringList(c.senses),
-    spellList: normalizeStringList(c.spellList),
-    classFeatures: normalizeFeatureList(c.classFeatures),
-    status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
-    concentration: c.concentration || '',
-    notes: c.notes || '',
-    spellSlots: normalizeSpellSlots(c.spellSlots),
-    featureCharges: normalizeFeatureCharges(c.featureCharges),
-    equipmentItems: normalizeStringList(c.equipmentItems),
-    otherPossessions: normalizeStringList(c.otherPossessions),
-    sourceSheet: !!c.sourceSheet,
-    sourceSheetFileName: c.sourceSheetFileName || '',
-    sourceSheetFormat: c.sourceSheetFormat || '',
-    sheetWarnings: normalizeStringList(c.sheetWarnings),
-    sheetMissingFields: normalizeStringList(c.sheetMissingFields),
-    sheetUnknownFields: normalizeStringList(c.sheetUnknownFields),
-    sheetImportedAt: toInt(c.sheetImportedAt, 0),
-    dead: !!c.dead,
-    enemyType: c.enemyType || 'goblin',
-    customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
-    pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
-  }));
+  e.combatants = e.combatants.map((c, i) => {
+    const spellbookEntries = normalizeSpellbookEntries(c.spellbookEntries, c.spellList);
+    const spellList = normalizeStringList(c.spellList).length
+      ? normalizeStringList(c.spellList)
+      : normalizeStringList(spellbookEntries.map((entry) => entry.name));
+    return {
+      sourceCharacterId: c.sourceCharacterId || '',
+      id: c.id || uid(),
+      name: c.name || 'Unknown',
+      role: c.role || '',
+      race: c.race || '',
+      className: c.className || c.role || '',
+      level: c.level === '' || c.level == null ? '' : toInt(c.level, ''),
+      side: c.side || 'Enemy',
+      init: toInt(c.init, 10),
+      initiativeBonus: c.initiativeBonus == null || c.initiativeBonus === '' ? 0 : toInt(c.initiativeBonus, 0),
+      proficiencyBonus: c.proficiencyBonus == null || c.proficiencyBonus === '' ? null : toInt(c.proficiencyBonus, null),
+      spellSaveDC: c.spellSaveDC == null || c.spellSaveDC === '' ? null : toInt(c.spellSaveDC, null),
+      attackModifier: c.attackModifier == null || c.attackModifier === '' ? null : toInt(c.attackModifier, null),
+      spellAttackModifier: c.spellAttackModifier == null || c.spellAttackModifier === '' ? null : toInt(c.spellAttackModifier, null),
+      maxHP: c.maxHP === '' || c.maxHP == null ? '' : toInt(c.maxHP, 0),
+      hp: c.hp === '' || c.hp == null ? '' : toInt(c.hp, 0),
+      tempHP: toInt(c.tempHP, 0),
+      ac: c.ac === '' || c.ac == null ? '' : toInt(c.ac, 0),
+      speed: c.speed === '' || c.speed == null ? '' : toInt(c.speed, 0),
+      abilities: normalizeAbilities(c.abilities),
+      savingThrows: normalizeStringList(c.savingThrows),
+      skills: normalizeStringList(c.skills).filter((line) => /[a-z]/i.test(line)),
+      senses: normalizeStringList(c.senses),
+      spellbookEntries,
+      spellList,
+      classFeatures: normalizeFeatureList(c.classFeatures),
+      status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
+      concentration: c.concentration || '',
+      notes: c.notes || '',
+      spellSlots: normalizeSpellSlots(c.spellSlots),
+      featureCharges: normalizeFeatureCharges(c.featureCharges),
+      equipmentItems: normalizeStringList(c.equipmentItems),
+      otherPossessions: normalizeStringList(c.otherPossessions),
+      sourceSheet: !!c.sourceSheet,
+      sourceSheetFileName: c.sourceSheetFileName || '',
+      sourceSheetFormat: c.sourceSheetFormat || '',
+      sheetWarnings: normalizeStringList(c.sheetWarnings),
+      sheetMissingFields: normalizeStringList(c.sheetMissingFields),
+      sheetUnknownFields: normalizeStringList(c.sheetUnknownFields),
+      sheetImportedAt: toInt(c.sheetImportedAt, 0),
+      dead: !!c.dead,
+      enemyType: c.enemyType || 'goblin',
+      customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
+      pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
+    };
+  });
   e.round = toInt(e.round, 1);
   e.activeIndex = toInt(e.activeIndex, 0);
   e.updatedAt = Date.now();
@@ -1084,6 +1242,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [editorMode, setEditorMode] = useState('edit');
   const [listEditorMode, setListEditorMode] = useState('');
   const [listEditorText, setListEditorText] = useState('');
+  const [spellbookDraftEntries, setSpellbookDraftEntries] = useState([]);
+  const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
@@ -1121,6 +1281,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
       if (listEditorMode) {
+        if (listEditorMode === 'spellbook' && activeSpellDraftId) {
+          setActiveSpellDraftId('');
+          return;
+        }
         setListEditorMode('');
         return;
       }
@@ -1139,7 +1303,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, editorOpen, listEditorMode]);
+  }, [cropOpen, addModalOpen, editorOpen, listEditorMode, activeSpellDraftId]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -1207,6 +1371,18 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const selectedSenseRows = useMemo(
     () => normalizeSenseRows(selected?.senses),
     [selected]
+  );
+  const selectedSpellbookEntries = useMemo(
+    () => normalizeSpellbookEntries(selected?.spellbookEntries, selected?.spellList),
+    [selected]
+  );
+  const spellbookDraftGroups = useMemo(
+    () => groupedSpellbookEntries(spellbookDraftEntries),
+    [spellbookDraftEntries]
+  );
+  const activeSpellDraft = useMemo(
+    () => spellbookDraftEntries.find((entry) => entry.id === activeSpellDraftId) || null,
+    [spellbookDraftEntries, activeSpellDraftId]
   );
   const sheetCurrentHpVisual = useMemo(() => {
     if (!selected) return { style: undefined, isCritical: false };
@@ -1280,13 +1456,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   useEffect(() => {
     if (!listEditorMode || !selected) return;
     if (listEditorMode === 'spellbook') {
-      setListEditorText(normalizeStringList(selected.spellList).join('\n'));
+      setSpellbookDraftEntries(selectedSpellbookEntries);
+      setActiveSpellDraftId('');
       return;
     }
     if (listEditorMode === 'features') {
       setListEditorText(normalizeStringList(selected.classFeatures).join('\n'));
+      setActiveSpellDraftId('');
     }
-  }, [listEditorMode, selected]);
+  }, [listEditorMode, selected, selectedSpellbookEntries]);
 
   useEffect(() => {
     return () => {
@@ -1336,6 +1514,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       savingThrows: [],
       skills: [],
       senses: [],
+      spellbookEntries: [],
       spellList: [],
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
@@ -1374,6 +1553,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       savingThrows: [],
       skills: [],
       senses: [],
+      spellbookEntries: [],
       spellList: [],
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
@@ -1744,10 +1924,56 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     }
   };
 
+  const createSpellbookDraftEntry = (level = null) => ({
+    id: createId('spell'),
+    name: '',
+    level,
+    source: '',
+    saveAtk: '',
+    time: '',
+    range: '',
+    components: '',
+    duration: '',
+    prepared: '',
+    notes: '',
+  });
+
+  const addSpellbookDraftEntry = (level = null) => {
+    const entry = createSpellbookDraftEntry(level);
+    setSpellbookDraftEntries((prev) => [...prev, entry]);
+    setActiveSpellDraftId(entry.id);
+  };
+
+  const updateSpellbookDraftEntry = (id, patch) => {
+    setSpellbookDraftEntries((prev) => prev.map((entry) => {
+      if (entry.id !== id) return entry;
+      const next = { ...entry, ...patch };
+      if (Object.prototype.hasOwnProperty.call(patch, 'name')) next.name = String(patch.name ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'source')) next.source = String(patch.source ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'saveAtk')) next.saveAtk = String(patch.saveAtk ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'time')) next.time = String(patch.time ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'range')) next.range = String(patch.range ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'components')) next.components = String(patch.components ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'duration')) next.duration = String(patch.duration ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'notes')) next.notes = String(patch.notes ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'prepared')) next.prepared = normalizeSpellPrepared(patch.prepared);
+      if (Object.prototype.hasOwnProperty.call(patch, 'level')) next.level = normalizeSpellLevel(patch.level, null);
+      return next;
+    }));
+  };
+
+  const removeSpellbookDraftEntry = (id) => {
+    setSpellbookDraftEntries((prev) => prev.filter((entry) => entry.id !== id));
+    setActiveSpellDraftId((prev) => (prev === id ? '' : prev));
+  };
+
   const saveListEditor = () => {
     if (!selected || !listEditorMode) return;
     if (listEditorMode === 'spellbook') {
-      setSelectedField({ spellList: normalizeStringList(listEditorText) });
+      const normalizedEntries = normalizeSpellbookEntries(spellbookDraftEntries);
+      const spellList = normalizeStringList(normalizedEntries.map((entry) => entry.name));
+      setSelectedField({ spellbookEntries: normalizedEntries, spellList });
+      setActiveSpellDraftId('');
     } else if (listEditorMode === 'features') {
       setSelectedField({ classFeatures: normalizeStringList(listEditorText) });
     }
@@ -2736,28 +2962,259 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
             <div className={`${styles.modalCard} ${styles.sheetManagerModal}`}>
               <div className={styles.modalHeader}>
                 <div className={styles.modalTitle}>{listEditorMode === 'spellbook' ? 'Spellbook' : 'Class Features'}</div>
-                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setListEditorMode(''); }}>
                   Close
                 </button>
               </div>
-              <div className={styles.managerBody}>
-                <div className={styles.managerHint}>
-                  {listEditorMode === 'spellbook' ? 'Add one spell per line.' : 'Add one class feature per line.'}
-                </div>
-                <textarea
-                  className={`${styles.input} ${styles.managerTextarea}`}
-                  value={listEditorText}
-                  onChange={(e) => setListEditorText(e.target.value)}
-                />
+              <div className={`${styles.managerBody} ${listEditorMode === 'spellbook' ? styles.managerBodySpellbook : ''}`}>
+                {listEditorMode === 'spellbook' ? (
+                  <div className={styles.spellbookManager}>
+                    <div className={styles.spellbookToolbar}>
+                      <div className={styles.managerHint}>Spells are grouped by level. Click a row to edit details.</div>
+                      <button
+                        type="button"
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); addSpellbookDraftEntry(null); }}
+                      >
+                        + Add Spell
+                      </button>
+                    </div>
+                    <div className={`${styles.spellbookGroups} koa-scrollbar-thin`}>
+                      {spellbookDraftGroups.length === 0 ? (
+                        <div className={styles.sheetListFallback}>No spells yet. Add one to get started.</div>
+                      ) : (
+                        spellbookDraftGroups.map((group) => (
+                          <div key={group.key} className={styles.spellbookGroup}>
+                            <div className={styles.spellbookGroupHead}>
+                              <div className={styles.spellbookGroupTitle}>{group.label}</div>
+                              <div className={styles.spellbookGroupActions}>
+                                <span className={styles.spellbookGroupCount}>{group.entries.length}</span>
+                                <button
+                                  type="button"
+                                  className={btnClass('ghost', 'sm')}
+                                  onMouseEnter={playHover}
+                                  onClick={() => { playNav(); addSpellbookDraftEntry(group.level); }}
+                                >
+                                  + Spell
+                                </button>
+                              </div>
+                            </div>
+                            <div className={styles.spellbookTableWrap}>
+                              <table className={styles.spellbookTable}>
+                                <thead>
+                                  <tr>
+                                    <th>Prep</th>
+                                    <th>Spell</th>
+                                    <th>Source</th>
+                                    <th>Save/Atk</th>
+                                    <th>Time</th>
+                                    <th>Range</th>
+                                    <th>Comp</th>
+                                    <th>Duration</th>
+                                    <th />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.entries.map((spell) => (
+                                    <tr
+                                      key={spell.id}
+                                      className={spell.id === activeSpellDraftId ? styles.spellbookRowActive : ''}
+                                      onClick={() => setActiveSpellDraftId(spell.id)}
+                                    >
+                                      <td>{spell.prepared || '—'}</td>
+                                      <td className={styles.spellbookNameCell}>{spell.name || 'Untitled Spell'}</td>
+                                      <td>{spell.source || '—'}</td>
+                                      <td>{spell.saveAtk || '—'}</td>
+                                      <td>{spell.time || '—'}</td>
+                                      <td>{spell.range || '—'}</td>
+                                      <td>{spell.components || '—'}</td>
+                                      <td>{spell.duration || '—'}</td>
+                                      <td className={styles.spellbookRowActions}>
+                                        <button
+                                          type="button"
+                                          className={btnClass('ghost', 'sm', styles.spellbookRowBtn)}
+                                          onMouseEnter={playHover}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            playNav();
+                                            setActiveSpellDraftId(spell.id);
+                                          }}
+                                          title="Edit spell"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={btnClass('danger', 'sm', styles.spellbookRowBtn)}
+                                          onMouseEnter={playHover}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            playNav();
+                                            removeSpellbookDraftEntry(spell.id);
+                                          }}
+                                          title="Delete spell"
+                                        >
+                                          X
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className={styles.managerHint}>Add one class feature per line.</div>
+                    <textarea
+                      className={`${styles.input} ${styles.managerTextarea}`}
+                      value={listEditorText}
+                      onChange={(e) => setListEditorText(e.target.value)}
+                    />
+                  </>
+                )}
               </div>
               <div className={styles.managerActions}>
-                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode(''); }}>
+                <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setActiveSpellDraftId(''); setListEditorMode(''); }}>
                   Cancel
                 </button>
                 <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); saveListEditor(); }}>
                   Save
                 </button>
               </div>
+
+              {listEditorMode === 'spellbook' && activeSpellDraft && (
+                <div className={styles.spellDetailOverlay}>
+                  <div className={`${styles.modalCard} ${styles.spellDetailCard}`}>
+                    <div className={styles.modalHeader}>
+                      <div className={styles.modalTitle}>Spell Details</div>
+                      <button
+                        className={btnClass('danger', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setActiveSpellDraftId(''); }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className={styles.spellDetailBody}>
+                      <div className={styles.spellDetailGrid}>
+                        <div className={styles.spellDetailFieldWide}>
+                          <div className={styles.label}>Spell Name</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.name}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { name: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Level</div>
+                          <select
+                            className={`${styles.input} ${styles.selectInput}`}
+                            value={activeSpellDraft.level == null ? '' : String(activeSpellDraft.level)}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { level: e.target.value === '' ? null : e.target.value })}
+                          >
+                            <option value="">Unassigned</option>
+                            <option value="0">Cantrip</option>
+                            {SPELL_SLOT_LEVELS.map((level) => (
+                              <option key={`spell-detail-level-${level}`} value={String(level)}>{spellLevelLabel(level)} Level</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <div className={styles.label}>Prepared</div>
+                          <select
+                            className={`${styles.input} ${styles.selectInput}`}
+                            value={activeSpellDraft.prepared || ''}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { prepared: e.target.value })}
+                          >
+                            <option value="">None</option>
+                            <option value="O">O</option>
+                            <option value="P">P</option>
+                            <option value="A">Always</option>
+                          </select>
+                        </div>
+                        <div className={styles.spellDetailFieldWide}>
+                          <div className={styles.label}>Source</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.source}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { source: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Save/Atk</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.saveAtk}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { saveAtk: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Time</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.time}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { time: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Range</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.range}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { range: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Components</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.components}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { components: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <div className={styles.label}>Duration</div>
+                          <input
+                            className={styles.input}
+                            value={activeSpellDraft.duration}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { duration: e.target.value })}
+                          />
+                        </div>
+                        <div className={styles.spellDetailFieldWide}>
+                          <div className={styles.label}>Notes</div>
+                          <textarea
+                            className={`${styles.input} ${styles.spellDetailTextarea}`}
+                            value={activeSpellDraft.notes}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { notes: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className={styles.managerActions}>
+                      <button
+                        className={btnClass('danger', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); removeSpellbookDraftEntry(activeSpellDraft.id); }}
+                      >
+                        Delete
+                      </button>
+                      <button
+                        className={btnClass('gold', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setActiveSpellDraftId(''); }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
