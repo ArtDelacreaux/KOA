@@ -253,6 +253,22 @@ function parseJsonSheet(jsonText) {
     null
   );
   const speed = toSpeed(findValueByAliases(root, ['speed', 'movement', 'walkSpeed']));
+  const proficiencyBonus = toInt(
+    findValueByAliases(root, ['proficiencyBonus', 'proficiency_bonus', 'profBonus', 'pb']),
+    null
+  );
+  const spellSaveDC = toInt(
+    findValueByAliases(root, ['spellSaveDC', 'spell_save_dc', 'saveDC', 'spellDc']),
+    null
+  );
+  const attackModifier = toInt(
+    findValueByAliases(root, ['attackModifier', 'attack_bonus', 'attackBonus', 'toHitBonus']),
+    null
+  );
+  const spellAttackModifier = toInt(
+    findValueByAliases(root, ['spellAttackModifier', 'spellAttackBonus', 'spell_attack_bonus', 'spellAtkBonus']),
+    null
+  );
 
   const abilitySource =
     findValueByAliases(root, ['attributes', 'abilityScores', 'ability_scores', 'stats', 'abilities']) ||
@@ -318,6 +334,22 @@ function parseJsonSheet(jsonText) {
       'speed',
       'movement',
       'walkspeed',
+      'proficiencybonus',
+      'proficiency_bonus',
+      'profbonus',
+      'pb',
+      'spellsavedc',
+      'spell_save_dc',
+      'savedc',
+      'spelldc',
+      'attackmodifier',
+      'attackbonus',
+      'attack_bonus',
+      'tohitbonus',
+      'spellattackmodifier',
+      'spellattackbonus',
+      'spell_attack_bonus',
+      'spellatkbonus',
       'attributes',
       'abilityscores',
       'stats',
@@ -377,6 +409,10 @@ function parseJsonSheet(jsonText) {
       ac,
       initiativeBonus,
       speed,
+      proficiencyBonus,
+      spellSaveDC,
+      attackModifier,
+      spellAttackModifier,
       abilities,
       spellList,
       spellSlots: mergeSpellSlots([], Array.isArray(spellSlots) ? spellSlots : []),
@@ -437,6 +473,10 @@ async function parseTextSheet(text, signal, onProgress) {
     ac: null,
     initiativeBonus: null,
     speed: null,
+    proficiencyBonus: null,
+    spellSaveDC: null,
+    attackModifier: null,
+    spellAttackModifier: null,
     abilities: { str: null, dex: null, con: null, int: null, wis: null, cha: null },
     spellList: [],
     spellSlots: [],
@@ -528,6 +568,25 @@ async function parseTextSheet(text, signal, onProgress) {
       fields.speed = toSpeed(right);
       continue;
     }
+    if ((left === 'proficiency bonus' || left === 'prof bonus' || left === 'proficiency') && fields.proficiencyBonus == null) {
+      fields.proficiencyBonus = toInt(right, null);
+      continue;
+    }
+    if ((left === 'spell save dc' || left === 'save dc') && fields.spellSaveDC == null) {
+      fields.spellSaveDC = toInt(right, null);
+      continue;
+    }
+    if (
+      (left === 'spell attack bonus' || left === 'spell attack modifier' || left === 'spell attack mod' || left === 'spell attack') &&
+      fields.spellAttackModifier == null
+    ) {
+      fields.spellAttackModifier = toInt(right, null);
+      continue;
+    }
+    if ((left === 'attack modifier' || left === 'attack bonus' || left === 'to hit bonus' || left === 'attack mod') && fields.attackModifier == null) {
+      fields.attackModifier = toInt(right, null);
+      continue;
+    }
     if ((left === 'saving throws' || left === 'saves') && right) {
       fields.savingThrows = normalizeStringList(right);
       continue;
@@ -566,6 +625,23 @@ async function parseTextSheet(text, signal, onProgress) {
       hpFromText = parseHpPair(line);
       if (fields.hpCurrent == null) fields.hpCurrent = hpFromText.current;
       if (fields.hpMax == null) fields.hpMax = hpFromText.max;
+    }
+
+    if (fields.proficiencyBonus == null) {
+      const profMatch = line.match(/\bproficiency\s*bonus\b\s*[:=]?\s*([+-]?\d+)/i);
+      if (profMatch) fields.proficiencyBonus = toInt(profMatch[1], null);
+    }
+    if (fields.spellSaveDC == null) {
+      const spellDcMatch = line.match(/\b(?:spell\s*)?save\s*dc\b\s*[:=]?\s*(\d+)/i);
+      if (spellDcMatch) fields.spellSaveDC = toInt(spellDcMatch[1], null);
+    }
+    if (fields.spellAttackModifier == null) {
+      const spellAtkMatch = line.match(/\bspell\s*attack(?:\s*(?:bonus|modifier|mod))?\b\s*[:=]?\s*([+-]?\d+)/i);
+      if (spellAtkMatch) fields.spellAttackModifier = toInt(spellAtkMatch[1], null);
+    }
+    if (fields.attackModifier == null) {
+      const attackMatch = line.match(/\battack(?:\s*(?:bonus|modifier|mod))?\b\s*[:=]?\s*([+-]?\d+)/i);
+      if (attackMatch) fields.attackModifier = toInt(attackMatch[1], null);
     }
   }
 
@@ -1114,6 +1190,9 @@ function mapPdfFormPairsToParsed(pairs) {
   const speed = toSpeed(findValue('Speed', 'Speed3'));
   const hpMax = toInt(findValue('MaxHP', 'MaxHP3'), null);
   const hpCurrent = toInt(findValue('CurrentHP', 'CurrentHP3'), hpMax);
+  const proficiencyBonus = toInt(findValue('ProfBonus', 'ProficiencyBonus', 'PB'), null);
+  const spellSaveDC = toInt(findValue('spellSaveDC0', 'spellSaveDC', 'SpellSaveDC', 'SaveDC'), null);
+  const spellAttackModifier = toInt(findValue('spellAtkBonus0', 'spellAtkBonus', 'SpellAtkBonus', 'spellAttackBonus'), null);
 
   const abilities = {
     str: toInt(findValue('STR', 'STR3'), null),
@@ -1206,6 +1285,20 @@ function mapPdfFormPairsToParsed(pairs) {
     }
   }
 
+  const weaponAttackCandidates = [];
+  for (const [field, value] of byField.entries()) {
+    const key = fieldKeyName(field);
+    const match = key.match(/^wpn(\d+)atkbonus$/i);
+    if (!match) continue;
+    const parsedValue = toInt(value, null);
+    if (parsedValue == null) continue;
+    weaponAttackCandidates.push({ slot: toInt(match[1], 0), value: parsedValue });
+  }
+  weaponAttackCandidates.sort((a, b) => a.slot - b.slot);
+  const attackModifier = weaponAttackCandidates.length > 0
+    ? weaponAttackCandidates[0].value
+    : toInt(findValue('AttackBonus', 'AtkBonus', 'AttackModifier', 'ToHitBonus'), null);
+
   const normalizedOtherPossessions = uniqueKeepOrder(otherPossessionsLines);
   const otherPossessionKeys = new Set(normalizedOtherPossessions.map((item) => normalizeKey(item)).filter(Boolean));
   const normalizedEquipment = uniqueKeepOrder(equipmentLines).filter((item) => !otherPossessionKeys.has(normalizeKey(item)));
@@ -1233,6 +1326,10 @@ function mapPdfFormPairsToParsed(pairs) {
       ac,
       initiativeBonus,
       speed,
+      proficiencyBonus,
+      spellSaveDC,
+      attackModifier,
+      spellAttackModifier,
       abilities,
       spellList: normalizedSpellList,
       spellSlots: normalizedSpellSlots,
@@ -1272,6 +1369,10 @@ function mergeParsedData(base, overlay) {
     'ac',
     'initiativeBonus',
     'speed',
+    'proficiencyBonus',
+    'spellSaveDC',
+    'attackModifier',
+    'spellAttackModifier',
     'abilitiesText',
     'equipment',
   ];

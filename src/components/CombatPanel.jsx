@@ -564,6 +564,14 @@ function buildSheetPatch(combatant, parsedResult) {
   const hpCurrent = hpMax === '' ? hpCurrentRaw : Math.min(hpCurrentRaw, hpMax);
   const initiativeBonus =
     parsed.initiativeBonus == null ? toInt(combatant.initiativeBonus, 0) : toInt(parsed.initiativeBonus, 0);
+  const proficiencyBonus =
+    parsed.proficiencyBonus == null ? toInt(combatant.proficiencyBonus, null) : toInt(parsed.proficiencyBonus, null);
+  const spellSaveDC =
+    parsed.spellSaveDC == null ? toInt(combatant.spellSaveDC, null) : toInt(parsed.spellSaveDC, null);
+  const attackModifier =
+    parsed.attackModifier == null ? toInt(combatant.attackModifier, null) : toInt(parsed.attackModifier, null);
+  const spellAttackModifier =
+    parsed.spellAttackModifier == null ? toInt(combatant.spellAttackModifier, null) : toInt(parsed.spellAttackModifier, null);
   const importedSpellSlots = normalizeSpellSlots(parsed.spellSlots);
   const hasImportedSpellSlots = importedSpellSlots.some((slot) => slot.max > 0);
   const importedFeatureCharges = normalizeFeatureCharges(parsed.featureCharges);
@@ -580,6 +588,10 @@ function buildSheetPatch(combatant, parsedResult) {
     ac: parsed.ac == null ? combatant.ac : Math.max(0, toInt(parsed.ac, 0)),
     speed: parsed.speed == null ? combatant.speed : Math.max(0, toInt(parsed.speed, 0)),
     initiativeBonus,
+    proficiencyBonus,
+    spellSaveDC,
+    attackModifier,
+    spellAttackModifier,
     abilities: mergedAbilities,
     savingThrows: normalizeStringList(parsed.savingThrows),
     skills: normalizeStringList(parsed.skills).filter((line) => /[a-z]/i.test(line)),
@@ -620,6 +632,10 @@ function normalizeSheetProfile(raw) {
     ac: raw?.ac === '' || raw?.ac == null ? '' : toInt(raw.ac, 0),
     speed: raw?.speed === '' || raw?.speed == null ? '' : toInt(raw.speed, 0),
     initiativeBonus: raw?.initiativeBonus == null || raw?.initiativeBonus === '' ? 0 : toInt(raw.initiativeBonus, 0),
+    proficiencyBonus: raw?.proficiencyBonus == null || raw?.proficiencyBonus === '' ? null : toInt(raw.proficiencyBonus, null),
+    spellSaveDC: raw?.spellSaveDC == null || raw?.spellSaveDC === '' ? null : toInt(raw.spellSaveDC, null),
+    attackModifier: raw?.attackModifier == null || raw?.attackModifier === '' ? null : toInt(raw.attackModifier, null),
+    spellAttackModifier: raw?.spellAttackModifier == null || raw?.spellAttackModifier === '' ? null : toInt(raw.spellAttackModifier, null),
     abilities: normalizeAbilities(raw?.abilities),
     savingThrows: normalizeStringList(raw?.savingThrows),
     skills: normalizeStringList(raw?.skills).filter((line) => /[a-z]/i.test(line)),
@@ -704,6 +720,10 @@ function normalize(enc) {
     side: c.side || 'Enemy',
     init: toInt(c.init, 10),
     initiativeBonus: c.initiativeBonus == null || c.initiativeBonus === '' ? 0 : toInt(c.initiativeBonus, 0),
+    proficiencyBonus: c.proficiencyBonus == null || c.proficiencyBonus === '' ? null : toInt(c.proficiencyBonus, null),
+    spellSaveDC: c.spellSaveDC == null || c.spellSaveDC === '' ? null : toInt(c.spellSaveDC, null),
+    attackModifier: c.attackModifier == null || c.attackModifier === '' ? null : toInt(c.attackModifier, null),
+    spellAttackModifier: c.spellAttackModifier == null || c.spellAttackModifier === '' ? null : toInt(c.spellAttackModifier, null),
     maxHP: c.maxHP === '' || c.maxHP == null ? '' : toInt(c.maxHP, 0),
     hp: c.hp === '' || c.hp == null ? '' : toInt(c.hp, 0),
     tempHP: toInt(c.tempHP, 0),
@@ -1188,6 +1208,41 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     () => normalizeSenseRows(selected?.senses),
     [selected]
   );
+  const sheetCurrentHpVisual = useMemo(() => {
+    if (!selected) return { style: undefined, isCritical: false };
+    const maxHp = selected.maxHP === '' ? null : Math.max(0, toInt(selected.maxHP, 0));
+    const currentHp = selected.hp === '' ? null : Math.max(0, toInt(selected.hp, 0));
+    if (maxHp == null || maxHp <= 0 || currentHp == null) return { style: undefined, isCritical: false };
+
+    const ratio = clamp(currentHp / maxHp, 0, 1);
+    if (ratio > 0.5) return { style: undefined, isCritical: false };
+
+    // 0 at half HP, 1 at 0 HP: progressively deeper red as HP drops.
+    const critical = clamp((0.5 - ratio) / 0.5, 0, 1);
+    const hue = 6 - (critical * 6);
+    const saturation = 82 + (critical * 8);
+    const lightness = 56 - (critical * 26);
+    const glow = 0.18 + (critical * 0.3);
+    const style = {
+      color: `hsl(${hue} ${saturation}% ${lightness}%)`,
+      textShadow: `0 0 10px rgba(220, 38, 38, ${glow})`,
+    };
+    if (ratio <= 0.2) {
+      const pulseProgress = clamp((0.2 - ratio) / 0.2, 0, 1);
+      const pulseDurationMs = Math.round(1200 - (pulseProgress * 780));
+      style['--hp-critical-pulse-ms'] = `${pulseDurationMs}ms`;
+      return { style, isCritical: true };
+    }
+    return { style, isCritical: false };
+  }, [selected]);
+  const selectedProficiencyBonus = useMemo(() => {
+    if (!selected) return null;
+    if (selected.proficiencyBonus != null && selected.proficiencyBonus !== '') {
+      return toInt(selected.proficiencyBonus, null);
+    }
+    if (selected.level === '' || selected.level == null) return null;
+    return proficiencyBonusFromLevel(selected.level);
+  }, [selected]);
   const allSpellSlots = useMemo(
     () => normalizeSpellSlots(selected?.spellSlots),
     [selected]
@@ -1266,6 +1321,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       id: uid(), name, role: '', side: draft.side||'Enemy',
       init: toInt(draft.init,10),
       initiativeBonus: 0,
+      proficiencyBonus: null,
+      spellSaveDC: null,
+      attackModifier: null,
+      spellAttackModifier: null,
       hp: draft.hp==='' ? '' : toInt(draft.hp,0),
       maxHP: draft.maxHP==='' ? '' : toInt(draft.maxHP,0),
       ac: draft.ac==='' ? '' : toInt(draft.ac,0),
@@ -1303,6 +1362,10 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       id: uid(), name: uniqueName(existingNames, adv.name), role: adv.role,
       side: adventurerSide, init:10, hp: adv.hp, maxHP: adv.maxHP, ac: adv.ac,
       initiativeBonus: 0,
+      proficiencyBonus: null,
+      spellSaveDC: null,
+      attackModifier: null,
+      spellAttackModifier: null,
       speed: '',
       race: '',
       className: adv.role || '',
@@ -2158,43 +2221,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           </div>
                         )}
                       </div>
-                      <div className={styles.sheetHeroTools}>
-                        <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
-                          <div className={styles.sheetToolsTopRow}>
-                            <div className={styles.sheetToolsAdjustRow}>
-                              <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
-                              <div className={styles.sheetToolsAdjustInputWrap}>
-                                <input
-                                  className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
-                                  inputMode="numeric"
-                                  maxLength={4}
-                                  value={hpAdjustAmount}
-                                  onChange={(e) => setHpAdjustAmount(e.target.value)}
-                                />
-                              </div>
-                              <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
-                            </div>
-                          </div>
+                      {selected.customImage && (
+                        <div className={styles.sheetHeroPortrait}>
+                          <img
+                            className={styles.sheetHeroPortraitImg}
+                            src={selected.customImage}
+                            alt={`${selected.name} portrait`}
+                          />
                         </div>
-                      </div>
-                      <div className={styles.sheetHeroVitals}>
-                        <div className={styles.sheetHeroVitalsRow}>
-                          <div className={styles.sheetHeroHpGroup}>
-                            <span className={styles.sheetHeroVitalsLabel}>HP</span>
-                            <span className={`${styles.sheetHeroVitalsValue} ${styles.sheetHeroVitalsValueMain}`}>
-                              {selected.hp === '' ? '—' : selected.hp} / {selected.maxHP === '' ? '—' : selected.maxHP}
-                            </span>
-                          </div>
-                          <div className={styles.sheetHeroTempGroup}>
-                            <span className={styles.sheetHeroVitalsLabel}>Temp HP</span>
-                            <div className={styles.sheetHeroTempControls}>
-                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(-1); }}>-</button>
-                              <input className={`${styles.input} ${styles.tempAdjustInput}`} inputMode="numeric" maxLength={4} value={selected.tempHP} onChange={(e) => updateSelectedTempHp(e.target.value)} />
-                              <button type="button" className={styles.tempAdjustBtn} onMouseEnter={playHover} onClick={() => { playNav(); adjustSelectedTempHp(1); }}>+</button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -2216,29 +2251,100 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   )}
 
                   <div className={styles.sheetSectionGrid}>
-                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Core Stats</div>
-                      <div className={styles.sheetAbilityChipGrid}>
-                        {ABILITY_META.map((ability) => {
-                          const score = selected.abilities?.[ability.key];
-                          const mod = abilityModifier(score);
-                          return (
-                            <div key={ability.key} className={styles.sheetAbilityChip}>
-                              <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
-                              <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
-                              <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
-                            </div>
-                          );
-                        })}
+                    <div className={`${styles.sheetCoreVitalsRow} ${styles.sheetCardFull}`}>
+                      <div className={`${styles.sheetCard} ${styles.sheetCoreStatsCard}`}>
+                        <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Stats</div>
+                        <div className={`${styles.sheetAbilityChipGrid} ${styles.sheetAbilityChipGridCompact}`}>
+                          {ABILITY_META.map((ability) => {
+                            const score = selected.abilities?.[ability.key];
+                            const mod = abilityModifier(score);
+                            return (
+                              <div key={ability.key} className={styles.sheetAbilityChip}>
+                                <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
+                                <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
+                                <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className={styles.sheetCoreStatsCombat}>
+                          
+                          <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
+                            <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
+                            <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
+                            <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Combat Stats</div>
-                      <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
-                        <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
-                        <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
-                        <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                      <div className={`${styles.sheetCard} ${styles.sheetHpCard}`}>
+                        
+                        <div className={styles.sheetHpCardBody}>
+                          <div className={`${styles.sheetHeroVitalsRow} ${styles.sheetHpVitalsLayout}`}>
+                            <div className={`${styles.sheetHeroHpGroup} ${styles.sheetHpDisplayGroup}`}>
+                              <span className={styles.sheetHeroVitalsLabel}>HP</span>
+                              <span className={`${styles.sheetHeroVitalsValue} ${styles.sheetHeroVitalsValueMain}`}>
+                                <span
+                                  className={`${styles.sheetCurrentHpValue} ${sheetCurrentHpVisual.isCritical ? styles.sheetCurrentHpValueCritical : ''}`}
+                                  style={sheetCurrentHpVisual.style}
+                                >
+                                  {selected.hp === '' ? '—' : selected.hp}
+                                </span>
+                                <span className={styles.sheetHpDivider}> / </span>
+                                <span className={styles.sheetMaxHpValue}>{selected.maxHP === '' ? '—' : selected.maxHP}</span>
+                              </span>
+                            </div>
+                            <div className={styles.sheetHpControlStack}>
+                              <div className={`${styles.sheetHeroTempGroup} ${styles.sheetHpTempGroup}`}>
+                                <span className={styles.sheetHeroVitalsLabel}>Temp HP</span>
+                                <div className={styles.sheetHeroTempControls}>
+                                  <input className={`${styles.input} ${styles.tempAdjustInput}`} inputMode="numeric" maxLength={4} value={selected.tempHP} onChange={(e) => updateSelectedTempHp(e.target.value)} />
+                                </div>
+                              </div>
+
+                              <div className={`${styles.sheetToolsAdjustRow} ${styles.sheetHpAdjustRowCompact}`}>
+                                <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
+                                <div className={styles.sheetToolsAdjustInputWrap}>
+                                  <input
+                                    className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
+                                    inputMode="numeric"
+                                    maxLength={4}
+                                    value={hpAdjustAmount}
+                                    onChange={(e) => setHpAdjustAmount(e.target.value)}
+                                  />
+                                </div>
+                                <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className={styles.sheetHpMetaGrid}>
+                            <div className={styles.sheetHpMetaItem}>
+                              <span className={styles.sheetHpMetaLabel}>Proficiency</span>
+                              <span className={styles.sheetHpMetaValue}>
+                                {selectedProficiencyBonus == null ? '—' : formatSigned(selectedProficiencyBonus)}
+                              </span>
+                            </div>
+                            <div className={styles.sheetHpMetaItem}>
+                              <span className={styles.sheetHpMetaLabel}>Spell Save DC</span>
+                              <span className={styles.sheetHpMetaValue}>
+                                {selected.spellSaveDC == null || selected.spellSaveDC === '' ? '—' : selected.spellSaveDC}
+                              </span>
+                            </div>
+                            <div className={styles.sheetHpMetaItem}>
+                              <span className={styles.sheetHpMetaLabel}>Attack Mod</span>
+                              <span className={styles.sheetHpMetaValue}>
+                                {selected.attackModifier == null || selected.attackModifier === '' ? '—' : formatSigned(selected.attackModifier)}
+                              </span>
+                            </div>
+                            <div className={styles.sheetHpMetaItem}>
+                              <span className={styles.sheetHpMetaLabel}>Spell Attack</span>
+                              <span className={styles.sheetHpMetaValue}>
+                                {selected.spellAttackModifier == null || selected.spellAttackModifier === '' ? '—' : formatSigned(selected.spellAttackModifier)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -2346,7 +2452,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <div className={styles.sheetCard}>
                       <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Saving Throws & Senses</div>
                       <div className={styles.sheetSaveSenseGrid}>
-                        <div>
+                        <div className={styles.sheetSaveSenseBlock}>
                           <div className={styles.sheetSavingThrowGrid}>
                             {selectedSavingThrowRows.map((row) => (
                               <div
@@ -2369,7 +2475,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             ))}
                           </div>
                         </div>
-                        <div>
+                        <div className={styles.sheetSaveSenseBlock}>
                           <div className={styles.sheetStatRows}>
                             {selectedSenseRows.length ? selectedSenseRows.map((sense) => (
                               <div key={sense.id} className={styles.sheetStatRow}>
@@ -2379,11 +2485,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             )) : <div className={styles.sheetListFallback}>No senses parsed.</div>}
                           </div>
                         </div>
-                        <div>
+                        <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
                           <div className={styles.sheetSubTitle}>Equipment</div>
                           <div className={styles.sheetListBlock}>
                             {normalizeStringList(selected.equipmentItems).length ? normalizeStringList(selected.equipmentItems).join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
                           </div>
+                        </div>
+                        <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
                           <div className={styles.sheetSubTitle}>Other Possessions</div>
                           <div className={styles.sheetListBlock}>
                             {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
