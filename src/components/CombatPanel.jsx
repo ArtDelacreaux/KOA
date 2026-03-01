@@ -365,6 +365,104 @@ function spellEntryId(entry, index) {
   return `spell-${index + 1}-${nameKey || 'entry'}`;
 }
 
+const SPELL_UNASSIGNED_NOISE_WORDS = new Set([
+  'a',
+  'an',
+  'and',
+  'arcana',
+  'are',
+  'as',
+  'at',
+  'attack',
+  'attacks',
+  'bonus',
+  'can',
+  'check',
+  'class',
+  'cleric',
+  'con',
+  'dc',
+  'dex',
+  'from',
+  'have',
+  'if',
+  'in',
+  'int',
+  'is',
+  'it',
+  'level',
+  'levels',
+  'list',
+  'modifier',
+  'of',
+  'or',
+  'paladin',
+  'proficiency',
+  'save',
+  'saving',
+  'spell',
+  'spells',
+  'slot',
+  'slots',
+  'str',
+  'the',
+  'their',
+  'them',
+  'this',
+  'to',
+  'use',
+  'warlock',
+  'when',
+  'while',
+  'with',
+  'wis',
+  'you',
+  'your',
+]);
+
+function isBareSpellbookEntry(entry) {
+  if (!entry || typeof entry !== 'object') return true;
+  return [
+    'source',
+    'saveAtk',
+    'effect',
+    'time',
+    'range',
+    'components',
+    'duration',
+    'prepared',
+    'notes',
+  ].every((key) => cleanText(entry[key]) === '');
+}
+
+function isLikelyUnassignedSpellNoiseName(name) {
+  const compact = cleanText(name).replace(/\s+/g, ' ').trim();
+  if (!compact) return true;
+  const words = compact.split(' ').filter(Boolean);
+  if (words.length === 1) return SPELL_UNASSIGNED_NOISE_WORDS.has(tokenKey(words[0]));
+  if (words.length >= 6) {
+    return /\b(?:you|your|from|when|while|until|within|spell|spells|list|ability|modifier|attack|save|saving|throw|bonus|proficiency)\b/i.test(compact);
+  }
+  return /[.!?]$/.test(compact);
+}
+
+function stripLikelySpellbookNoise(entries) {
+  const list = Array.isArray(entries) ? entries.filter(Boolean) : [];
+  if (!list.length) return [];
+
+  const bareUnassigned = list.filter((entry) => normalizeSpellLevel(entry?.level, null) == null && isBareSpellbookEntry(entry));
+  const shouldDropAllBareUnassigned = list.length >= 80 && (bareUnassigned.length / list.length) >= 0.9;
+  if (shouldDropAllBareUnassigned) {
+    return list.filter((entry) => !(normalizeSpellLevel(entry?.level, null) == null && isBareSpellbookEntry(entry)));
+  }
+
+  return list.filter((entry) => {
+    if (normalizeSpellLevel(entry?.level, null) != null) return true;
+    if (!isBareSpellbookEntry(entry)) return true;
+    return !isLikelyUnassignedSpellNoiseName(entry?.name);
+  });
+}
+
 function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
   const list = Array.isArray(raw) ? raw : [];
   const normalized = list
@@ -419,8 +517,10 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
     })
     .filter(Boolean);
 
-  if (normalized.length) return normalized;
-  return normalizeStringList(fallbackSpellList).map((name, index) => ({
+  const filteredNormalized = stripLikelySpellbookNoise(normalized);
+  if (filteredNormalized.length) return filteredNormalized;
+
+  const fallbackEntries = normalizeStringList(fallbackSpellList).map((name, index) => ({
     id: spellEntryId({ name }, index),
     name,
     level: null,
@@ -434,6 +534,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
     prepared: '',
     notes: '',
   }));
+  return stripLikelySpellbookNoise(fallbackEntries);
 }
 
 function groupedSpellbookEntries(entries) {
@@ -742,9 +843,7 @@ function buildSheetPatch(combatant, parsedResult) {
   const importedFeatureCharges = normalizeFeatureCharges(parsed.featureCharges);
   const hasParsedFeatureCharges = Array.isArray(parsed.featureCharges);
   const normalizedSpellbookEntries = normalizeSpellbookEntries(parsed.spellbookEntries, parsed.spellList);
-  const normalizedSpellList = normalizedSpellbookEntries.length
-    ? normalizeStringList(normalizedSpellbookEntries.map((entry) => entry.name))
-    : normalizeStringList(parsed.spellList);
+  const normalizedSpellList = normalizeStringList(normalizedSpellbookEntries.map((entry) => entry.name));
 
   return {
     name: cleanText(parsed.name) || combatant.name,
@@ -793,9 +892,7 @@ function sheetProfileKey(sourceCharacterId, name) {
 function normalizeSheetProfile(raw) {
   const className = cleanText(raw?.className || raw?.role);
   const spellbookEntries = normalizeSpellbookEntries(raw?.spellbookEntries, raw?.spellList);
-  const spellList = spellbookEntries.length
-    ? normalizeStringList(spellbookEntries.map((entry) => entry.name))
-    : normalizeStringList(raw?.spellList);
+  const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
   return {
     race: cleanText(raw?.race),
     className,
@@ -886,9 +983,7 @@ function normalize(enc) {
   }, {});
   e.combatants = e.combatants.map((c, i) => {
     const spellbookEntries = normalizeSpellbookEntries(c.spellbookEntries, c.spellList);
-    const spellList = normalizeStringList(c.spellList).length
-      ? normalizeStringList(c.spellList)
-      : normalizeStringList(spellbookEntries.map((entry) => entry.name));
+    const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
     return {
       sourceCharacterId: c.sourceCharacterId || '',
       id: c.id || uid(),
