@@ -2158,6 +2158,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           </div>
                         )}
                       </div>
+                      <div className={styles.sheetHeroTools}>
+                        <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
+                          <div className={styles.sheetToolsTopRow}>
+                            <div className={styles.sheetToolsAdjustRow}>
+                              <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
+                              <div className={styles.sheetToolsAdjustInputWrap}>
+                                <input
+                                  className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
+                                  inputMode="numeric"
+                                  maxLength={4}
+                                  value={hpAdjustAmount}
+                                  onChange={(e) => setHpAdjustAmount(e.target.value)}
+                                />
+                              </div>
+                              <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div className={styles.sheetHeroVitals}>
                         <div className={styles.sheetHeroVitalsRow}>
                           <div className={styles.sheetHeroHpGroup}>
@@ -2177,24 +2196,55 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                         </div>
                       </div>
                     </div>
-                    <div className={styles.sheetHeroTools}>
-                      <div className={`${styles.combatToolsCard} ${styles.combatToolsCardCompact}`}>
-                        <div className={styles.toolsTitle}>Combat Tools</div>
-                        <div className={styles.sheetToolsTopRow}>
-                          <div className={styles.sheetToolsAdjustRow}>
-                            <button className={btnClass('danger', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('damage'); }}>- HP</button>
-                            <div className={styles.sheetToolsAdjustInputWrap}>
-                              <input
-                                className={`${styles.input} ${styles.compactInput} ${styles.sheetToolsAdjustInput}`}
-                                inputMode="numeric"
-                                maxLength={4}
-                                value={hpAdjustAmount}
-                                onChange={(e) => setHpAdjustAmount(e.target.value)}
-                              />
-                            </div>
-                            <button className={btnClass('gold', 'sm', styles.toolMiniBtn)} onMouseEnter={playHover} onClick={() => { playNav(); applyHpAdjustment('heal'); }}>+ HP</button>
-                          </div>
+                  </div>
+
+                  {(selectedSheetIssues.length > 0 || sheetImportState.error) && (
+                    <div className={styles.sheetIssues}>
+                      {sheetImportState.error && sheetImportState.targetId === selected.id && (
+                        <div className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>Import Error</div>
+                          <div className={styles.sheetIssueText}>{sheetImportState.error}</div>
                         </div>
+                      )}
+                      {selectedSheetIssues.slice(0, 6).map((issue, idx) => (
+                        <div key={`${issue.kind}-${idx}`} className={styles.sheetIssueBlock}>
+                          <div className={styles.sheetIssueLabel}>{issue.kind}</div>
+                          <div className={styles.sheetIssueText}>{issue.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={styles.sheetSectionGrid}>
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Core Stats</div>
+                      <div className={styles.sheetAbilityChipGrid}>
+                        {ABILITY_META.map((ability) => {
+                          const score = selected.abilities?.[ability.key];
+                          const mod = abilityModifier(score);
+                          return (
+                            <div key={ability.key} className={styles.sheetAbilityChip}>
+                              <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
+                              <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
+                              <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
+                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Combat Stats</div>
+                      <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
+                        <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
+                        <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
+                        <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
+                      </div>
+                    </div>
+
+                    <div className={`${styles.sectionTopGap} ${styles.sheetCardFull}`}>
+                      <div className={styles.combatToolsCard}>
+                        <div className={styles.toolsTitle}>Combat Tools</div>
                         <div className={styles.sheetToolsResourceGrid}>
                           <div className={styles.combatToolGroup}>
                             <div className={styles.label}>Feature Charges</div>
@@ -2264,51 +2314,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {(selectedSheetIssues.length > 0 || sheetImportState.error) && (
-                    <div className={styles.sheetIssues}>
-                      {sheetImportState.error && sheetImportState.targetId === selected.id && (
-                        <div className={styles.sheetIssueBlock}>
-                          <div className={styles.sheetIssueLabel}>Import Error</div>
-                          <div className={styles.sheetIssueText}>{sheetImportState.error}</div>
-                        </div>
-                      )}
-                      {selectedSheetIssues.slice(0, 6).map((issue, idx) => (
-                        <div key={`${issue.kind}-${idx}`} className={styles.sheetIssueBlock}>
-                          <div className={styles.sheetIssueLabel}>{issue.kind}</div>
-                          <div className={styles.sheetIssueText}>{issue.text}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className={styles.sheetSectionGrid}>
-                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Core Stats</div>
-                      <div className={styles.sheetAbilityChipGrid}>
-                        {ABILITY_META.map((ability) => {
-                          const score = selected.abilities?.[ability.key];
-                          const mod = abilityModifier(score);
-                          return (
-                            <div key={ability.key} className={styles.sheetAbilityChip}>
-                              <div className={styles.sheetAbilityChipLabel}>{ability.label}</div>
-                              <div className={styles.sheetAbilityChipMod}>{formatSigned(mod)}</div>
-                              <div className={styles.sheetAbilityChipScore}>{score == null ? '—' : score}</div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className={`${styles.sheetCard} ${styles.sheetCardFull}`}>
-                      <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Combat Stats</div>
-                      <div className={`${styles.sheetStatsGrid} ${styles.sheetStatsGridRow}`}>
-                        <div><span>Armor Class</span><b>{selected.ac === '' ? '—' : selected.ac}</b></div>
-                        <div><span>Initiative</span><b>{formatSigned(selected.initiativeBonus)}</b></div>
-                        <div><span>Speed</span><b>{selected.speed === '' ? '—' : `${selected.speed} FT`}</b></div>
                       </div>
                     </div>
 

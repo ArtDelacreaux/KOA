@@ -911,7 +911,7 @@
 }
 
 .editorModal {
-  width: min(780px, 92vw);
+  width: min(950px, 92vw);
   max-height: 82vh;
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
@@ -920,7 +920,7 @@
 }
 
 .sheetManagerModal {
-  width: min(760px, 92vw);
+  width: min(950px, 92vw);
   max-height: 82vh;
   border-radius: 16px;
   background: linear-gradient(180deg, rgba(8, 6, 4, 0.97), rgba(4, 3, 2, 0.88));
@@ -1099,7 +1099,7 @@
   padding: 14px 16px;
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 20px;
   row-gap: 0;
   align-items: flex-start;
@@ -1116,6 +1116,8 @@
 }
 
 .sheetHeroTools {
+  grid-column: 2;
+  grid-row: 1;
   border-radius: 14px;
   border: 1px solid rgba(255, 220, 160, 0.2);
   background: linear-gradient(180deg, rgba(34, 24, 16, 0.74), rgba(10, 8, 6, 0.7));
@@ -1149,7 +1151,7 @@
 }
 
 .sheetHeroVitals {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1;
   padding: 0;
 }
@@ -2449,6 +2451,18 @@
 
   .sheetTopRow {
     grid-template-columns: 1fr;
+  }
+
+  .sheetHero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sheetIdentity,
+  .sheetHeroTools,
+  .sheetHeroVitals {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .sheetHeroVitalsRow {
