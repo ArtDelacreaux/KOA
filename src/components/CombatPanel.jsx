@@ -1,5 +1,6 @@
 ﻿// ===== COMBAT PANEL — with Battle Background Selector =====
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ShellLayout from './ShellLayout';
 import styles from './CombatPanel.module.css';
 import { createId } from '../domain/ids';
@@ -335,6 +336,14 @@ function cloneCastorWilliamResourcePatch(patch) {
     out.featureCharges = normalizeFeatureCharges(patch.featureCharges).map((feature) => ({ ...feature }));
   }
   return out;
+}
+
+function copyHeadStyles(sourceDoc, targetDoc) {
+  if (!sourceDoc || !targetDoc) return;
+  const styleNodes = sourceDoc.querySelectorAll('link[rel="stylesheet"], style');
+  styleNodes.forEach((node) => {
+    targetDoc.head.appendChild(node.cloneNode(true));
+  });
 }
 
 function defaultSpellSlots() {
@@ -1450,6 +1459,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
   const sheetFileInputRef = useRef(null);
   const sheetImportAbortRef = useRef(null);
+  const [sheetPopoutOpen, setSheetPopoutOpen] = useState(false);
+  const sheetPopoutWindowRef = useRef(null);
+  const sheetPopoutRootRef = useRef(null);
 
   useEffect(() => {
     const anyModalOpen = cropOpen || addModalOpen || editorOpen || !!listEditorMode;
@@ -1665,6 +1677,130 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   useEffect(() => {
     return () => {
       if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
+    };
+  }, []);
+
+  const closeSheetPopout = (closeWindow = true) => {
+    const popout = sheetPopoutWindowRef.current;
+    const host = sheetPopoutRootRef.current;
+
+    if (closeWindow && popout && !popout.closed) {
+      try { popout.close(); } catch (_) {}
+    }
+
+    if (host && host.parentNode) {
+      host.parentNode.removeChild(host);
+    }
+    sheetPopoutRootRef.current = null;
+    sheetPopoutWindowRef.current = null;
+    setSheetPopoutOpen(false);
+  };
+
+  const openSheetPopout = () => {
+    if (!editorOpen || !selected || editorMode !== 'sheet') return;
+    const existing = sheetPopoutWindowRef.current;
+    if (existing && !existing.closed) {
+      existing.focus();
+      return;
+    }
+
+    const popout = window.open('', 'combat-sheet-popout', 'popup=yes,width=1180,height=900,resizable=yes,scrollbars=yes');
+    if (!popout) {
+      window.alert('Pop-up blocked. Please allow pop-ups for this site to use Character Sheet pop out.');
+      return;
+    }
+
+    try {
+      popout.document.head.innerHTML = '';
+      const metaCharset = popout.document.createElement('meta');
+      metaCharset.setAttribute('charset', 'utf-8');
+      popout.document.head.appendChild(metaCharset);
+      const metaViewport = popout.document.createElement('meta');
+      metaViewport.setAttribute('name', 'viewport');
+      metaViewport.setAttribute('content', 'width=device-width, initial-scale=1');
+      popout.document.head.appendChild(metaViewport);
+      copyHeadStyles(document, popout.document);
+
+      popout.document.body.innerHTML = '';
+      popout.document.body.style.margin = '0';
+      popout.document.body.style.background = 'transparent';
+
+      const host = popout.document.createElement('div');
+      host.id = 'combat-sheet-popout-root';
+      host.style.position = 'fixed';
+      host.style.inset = '0';
+      popout.document.body.appendChild(host);
+
+      popout.addEventListener('beforeunload', () => {
+        sheetPopoutRootRef.current = null;
+        sheetPopoutWindowRef.current = null;
+        setSheetPopoutOpen(false);
+      }, { once: true });
+
+      sheetPopoutWindowRef.current = popout;
+      sheetPopoutRootRef.current = host;
+      setSheetPopoutOpen(true);
+      popout.document.title = `${selected.name} — Character Sheet`;
+      popout.focus();
+    } catch (_) {
+      try { popout.close(); } catch (err) {}
+      sheetPopoutRootRef.current = null;
+      sheetPopoutWindowRef.current = null;
+      setSheetPopoutOpen(false);
+      window.alert('Unable to open the sheet pop-out window. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (!sheetPopoutOpen) return;
+    const popout = sheetPopoutWindowRef.current;
+    if (!popout || popout.closed) {
+      setSheetPopoutOpen(false);
+      sheetPopoutWindowRef.current = null;
+      sheetPopoutRootRef.current = null;
+      return;
+    }
+    if (!editorOpen || !selected || editorMode !== 'sheet') {
+      closeSheetPopout(true);
+      return;
+    }
+    popout.document.title = `${selected.name} — Character Sheet`;
+  }, [sheetPopoutOpen, editorOpen, selected, editorMode]);
+
+  useEffect(() => {
+    if (!sheetPopoutOpen) return;
+    const popout = sheetPopoutWindowRef.current;
+    if (!popout || popout.closed) return;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (listEditorMode) {
+        if (listEditorMode === 'spellbook' && activeSpellDraftId) {
+          setActiveSpellDraftId('');
+          return;
+        }
+        if (listEditorMode === 'features' && featureRawEditorOpen) {
+          setFeatureRawEditorOpen(false);
+          return;
+        }
+        setListEditorMode('');
+        return;
+      }
+      if (editorOpen) setEditorOpen(false);
+    };
+
+    popout.addEventListener('keydown', onKeyDown);
+    return () => popout.removeEventListener('keydown', onKeyDown);
+  }, [sheetPopoutOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen, editorOpen]);
+
+  useEffect(() => {
+    return () => {
+      const popout = sheetPopoutWindowRef.current;
+      if (popout && !popout.closed) {
+        try { popout.close(); } catch (_) {}
+      }
+      sheetPopoutRootRef.current = null;
+      sheetPopoutWindowRef.current = null;
     };
   }, []);
 
@@ -2304,6 +2440,18 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       ...normalizeStringList(selected.sheetWarnings).map((line) => ({ kind: 'Warning', text: line })),
     ];
   }, [selected]);
+  const popoutWindow = sheetPopoutWindowRef.current;
+  const isSheetPopoutActive = !!(
+    sheetPopoutOpen
+    && editorOpen
+    && selected
+    && editorMode === 'sheet'
+    && popoutWindow
+    && !popoutWindow.closed
+    && sheetPopoutRootRef.current
+  );
+  const sheetPortalHost = isSheetPopoutActive ? sheetPopoutRootRef.current : null;
+  const shouldRenderEditorInline = !!(editorOpen && selected && !(editorMode === 'sheet' && isSheetPopoutActive));
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -2640,8 +2788,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         )}
 
         {/* ── EDITOR MODAL ── */}
-        {editorOpen && selected && (
-          <div className={styles.modalBack}>
+        {(() => {
+          if (!editorOpen || !selected) return null;
+          const editorModal = (
+            <>
+            <div className={styles.modalBack}>
             <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal}`}>
               <div className={styles.editorHeader}>
                 <div className={styles.editorTitle}>
@@ -2673,6 +2824,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
                         Edit
                       </button>
+                      {!sheetPopoutOpen && (
+                        <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); openSheetPopout(); }}>
+                          Pop Out
+                        </button>
+                      )}
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
                       <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
                       <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>Long Rest</button>
@@ -3194,7 +3350,6 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
               )}
             </div>
           </div>
-        )}
 
         {sheetImportState.running && editorOpen && selected && sheetImportState.targetId === selected.id && (
           <div className={styles.modalBack}>
@@ -3562,8 +3717,16 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 </div>
               )}
             </div>
-          </div>
+            </div>
         )}
+          </>
+          );
+          if (editorMode === 'sheet' && isSheetPopoutActive && sheetPortalHost) {
+            return createPortal(editorModal, sheetPortalHost);
+          }
+          if (!shouldRenderEditorInline) return null;
+          return editorModal;
+        })()}
 
         {/* ── IMAGE CROP MODAL ── */}
         {cropOpen && (
