@@ -993,6 +993,81 @@
   flex: 0 1 auto;
 }
 
+.castorWilliamSyncToggle {
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.28);
+  background: linear-gradient(180deg, rgba(64, 46, 32, 0.72), rgba(30, 20, 12, 0.68));
+  color: rgba(255, 238, 210, 0.9);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-family: var(--koa-font-display);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  transition: transform 130ms ease, filter 130ms ease, border-color 130ms ease, opacity 130ms ease;
+}
+
+.castorWilliamSyncToggle:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.castorWilliamSyncToggle:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.castorWilliamSyncToggleLabel {
+  white-space: nowrap;
+}
+
+.castorWilliamSyncToggleTrack {
+  width: 30px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.34);
+  background: rgba(12, 20, 24, 0.82);
+  display: inline-flex;
+  align-items: center;
+  padding: 1px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.castorWilliamSyncToggleThumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 220, 160, 0.94);
+  box-shadow: 0 0 8px rgba(255, 220, 160, 0.46);
+  transform: translateX(0);
+  transition: transform 130ms ease, background 130ms ease, box-shadow 130ms ease;
+}
+
+.castorWilliamSyncToggleOn {
+  border-color: rgba(140, 226, 255, 0.6);
+  background: linear-gradient(180deg, rgba(24, 70, 98, 0.78), rgba(10, 36, 52, 0.72));
+  color: rgba(222, 248, 255, 0.96);
+}
+
+.castorWilliamSyncToggleOn .castorWilliamSyncToggleTrack {
+  border-color: rgba(140, 226, 255, 0.72);
+  background: rgba(12, 58, 74, 0.86);
+}
+
+.castorWilliamSyncToggleOn .castorWilliamSyncToggleThumb {
+  transform: translateX(14px);
+  background: rgba(182, 243, 255, 0.98);
+  box-shadow: 0 0 10px rgba(140, 226, 255, 0.55);
+}
+
 .longRestBtn {
   border-color: rgba(120, 180, 255, 0.42) !important;
   background: linear-gradient(180deg, rgba(42, 68, 102, 0.72), rgba(20, 34, 54, 0.68)) !important;

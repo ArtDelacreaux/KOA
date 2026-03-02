@@ -283,6 +283,60 @@ function tokenImageForCharacter(id, name) {
   return TOKEN_IMAGE_BY_NAME_KEY[tokenKey(name)] || '';
 }
 
+function castorWilliamSyncRole(combatant) {
+  const sourceKey = tokenKey(combatant?.sourceCharacterId);
+  if (sourceKey === 'castor') return 'castor';
+  if (sourceKey === 'william' || sourceKey === 'williamspicer') return 'william';
+  const nameKey = tokenKey(combatant?.name);
+  if (nameKey === 'castor') return 'castor';
+  if (nameKey === 'william' || nameKey === 'williamspicer') return 'william';
+  return null;
+}
+
+function findCastorWilliamPair(combatants) {
+  let castor = null;
+  let william = null;
+  (Array.isArray(combatants) ? combatants : []).forEach((combatant) => {
+    const role = castorWilliamSyncRole(combatant);
+    if (role === 'castor' && !castor) castor = combatant;
+    if (role === 'william' && !william) william = combatant;
+  });
+  return { castor, william };
+}
+
+function resourceSyncPatchFromCombatant(combatant) {
+  return {
+    hp: combatant?.hp ?? '',
+    maxHP: combatant?.maxHP ?? '',
+    spellSlots: normalizeSpellSlots(combatant?.spellSlots),
+    featureCharges: normalizeFeatureCharges(combatant?.featureCharges),
+  };
+}
+
+function pickCastorWilliamResourcePatch(patch) {
+  if (!patch || typeof patch !== 'object') return null;
+  const out = {};
+  if (Object.prototype.hasOwnProperty.call(patch, 'hp')) out.hp = patch.hp;
+  if (Object.prototype.hasOwnProperty.call(patch, 'maxHP')) out.maxHP = patch.maxHP;
+  if (Object.prototype.hasOwnProperty.call(patch, 'spellSlots')) out.spellSlots = normalizeSpellSlots(patch.spellSlots);
+  if (Object.prototype.hasOwnProperty.call(patch, 'featureCharges')) out.featureCharges = normalizeFeatureCharges(patch.featureCharges);
+  return Object.keys(out).length ? out : null;
+}
+
+function cloneCastorWilliamResourcePatch(patch) {
+  if (!patch || typeof patch !== 'object') return {};
+  const out = {};
+  if (Object.prototype.hasOwnProperty.call(patch, 'hp')) out.hp = patch.hp;
+  if (Object.prototype.hasOwnProperty.call(patch, 'maxHP')) out.maxHP = patch.maxHP;
+  if (Object.prototype.hasOwnProperty.call(patch, 'spellSlots')) {
+    out.spellSlots = normalizeSpellSlots(patch.spellSlots).map((slot) => ({ ...slot }));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'featureCharges')) {
+    out.featureCharges = normalizeFeatureCharges(patch.featureCharges).map((feature) => ({ ...feature }));
+  }
+  return out;
+}
+
 function defaultSpellSlots() {
   return SPELL_SLOT_LEVELS.map((level) => ({ level, max: 0, current: 0 }));
 }
@@ -965,6 +1019,7 @@ function defaultEncounter() {
     round: 1,
     activeIndex: 0,
     combatants: [],
+    castorWilliamResourceSync: false,
     sheetProfiles: {},
     updatedAt: Date.now(),
   };
@@ -1033,6 +1088,7 @@ function normalize(enc) {
   });
   e.round = toInt(e.round, 1);
   e.activeIndex = toInt(e.activeIndex, 0);
+  e.castorWilliamResourceSync = !!e.castorWilliamResourceSync;
   e.updatedAt = Date.now();
   return e;
 }
@@ -1484,6 +1540,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
+  const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
+  const selectedCastorWilliamRole = useMemo(() => castorWilliamSyncRole(selected), [selected]);
+  const castorWilliamResourceSyncAvailable = !!castorWilliamPair.castor && !!castorWilliamPair.william;
+  const castorWilliamResourceSyncEnabled = !!encounter.castorWilliamResourceSync;
+  const castorWilliamSyncSwitchTitle = castorWilliamResourceSyncAvailable
+    ? 'Mirror HP, spell slots, and feature charges between Castor and William Spicer'
+    : 'Add both Castor and William Spicer to enable sync';
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
   const selectedSavingThrowRows = useMemo(
     () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
@@ -1604,6 +1667,30 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
     };
   }, []);
+
+  const toggleCastorWilliamResourceSync = () => {
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const enabling = !next.castorWilliamResourceSync;
+      next.castorWilliamResourceSync = enabling;
+      if (!enabling) return next;
+
+      const pair = findCastorWilliamPair(next.combatants);
+      if (!pair.castor || !pair.william) return next;
+      const source =
+        selectedId === pair.william.id
+          ? pair.william
+          : selectedId === pair.castor.id
+            ? pair.castor
+            : pair.castor;
+      const syncPatch = resourceSyncPatchFromCombatant(source);
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== pair.castor.id && combatant.id !== pair.william.id) return combatant;
+        return { ...combatant, ...cloneCastorWilliamResourcePatch(syncPatch) };
+      });
+      return next;
+    });
+  };
 
   const addCombatant = (c) => {
     setEncounter(prev => {
@@ -1756,7 +1843,25 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       const next = normalize(prev);
       const previousProfileKey = sheetProfileKey(selected.sourceCharacterId, selected.name);
       const activeId = next.combatants[next.activeIndex]?.id || null;
-      next.combatants = next.combatants.map(x => x.id === selected.id ? { ...x, ...patch } : x);
+      const pair = findCastorWilliamPair(next.combatants);
+      const syncRole = castorWilliamSyncRole(selected);
+      const mirrorTargetId =
+        syncRole === 'castor'
+          ? pair.william?.id || ''
+          : syncRole === 'william'
+            ? pair.castor?.id || ''
+            : '';
+      const mirroredResourcePatch =
+        next.castorWilliamResourceSync && mirrorTargetId
+          ? pickCastorWilliamResourcePatch(patch)
+          : null;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id === selected.id) return { ...combatant, ...patch };
+        if (mirroredResourcePatch && combatant.id === mirrorTargetId) {
+          return { ...combatant, ...cloneCastorWilliamResourcePatch(mirroredResourcePatch) };
+        }
+        return combatant;
+      });
       const updatedSelected = next.combatants.find((x) => x.id === selected.id);
       if (updatedSelected) {
         const nextProfileKey = sheetProfileKey(updatedSelected.sourceCharacterId, updatedSelected.name);
@@ -2543,6 +2648,26 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   {editorMode === 'sheet' ? 'Character Sheet:' : 'Editing:'} <span className={styles.editorNameAccent}>{selected.name}</span>
                 </div>
                 <div className={`${styles.editorHeaderActions} ${editorMode === 'sheet' ? styles.sheetHeaderActions : ''}`}>
+                  {selectedCastorWilliamRole && (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={castorWilliamResourceSyncEnabled}
+                      aria-label="Sync Castor and William Spicer resources"
+                      title={castorWilliamSyncSwitchTitle}
+                      className={`${styles.castorWilliamSyncToggle} ${
+                        castorWilliamResourceSyncEnabled ? styles.castorWilliamSyncToggleOn : ''
+                      }`}
+                      onMouseEnter={playHover}
+                      onClick={() => { playNav(); toggleCastorWilliamResourceSync(); }}
+                      disabled={!castorWilliamResourceSyncAvailable && !castorWilliamResourceSyncEnabled}
+                    >
+                      <span className={styles.castorWilliamSyncToggleLabel}>Castor + William Sync</span>
+                      <span className={styles.castorWilliamSyncToggleTrack}>
+                        <span className={styles.castorWilliamSyncToggleThumb} />
+                      </span>
+                    </button>
+                  )}
                   {editorMode === 'sheet' ? (
                     <>
                       <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
