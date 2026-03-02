@@ -1462,6 +1462,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   const [sheetPopoutOpen, setSheetPopoutOpen] = useState(false);
   const sheetPopoutWindowRef = useRef(null);
   const sheetPopoutRootRef = useRef(null);
+  const suppressNextPopoutSessionEndRef = useRef(false);
 
   useEffect(() => {
     const anyModalOpen = cropOpen || addModalOpen || editorOpen || !!listEditorMode;
@@ -1680,11 +1681,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     };
   }, []);
 
-  const closeSheetPopout = (closeWindow = true) => {
+  const closeSheetPopout = (closeWindow = true, { suppressSessionEnd = false } = {}) => {
     const popout = sheetPopoutWindowRef.current;
     const host = sheetPopoutRootRef.current;
 
     if (closeWindow && popout && !popout.closed) {
+      if (suppressSessionEnd) suppressNextPopoutSessionEndRef.current = true;
       try { popout.close(); } catch (_) {}
     }
 
@@ -1732,9 +1734,17 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       popout.document.body.appendChild(host);
 
       popout.addEventListener('beforeunload', () => {
+        const suppressSessionEnd = suppressNextPopoutSessionEndRef.current;
+        suppressNextPopoutSessionEndRef.current = false;
         sheetPopoutRootRef.current = null;
         sheetPopoutWindowRef.current = null;
         setSheetPopoutOpen(false);
+        if (!suppressSessionEnd) {
+          setEditorOpen(false);
+          setListEditorMode('');
+          setActiveSpellDraftId('');
+          setFeatureRawEditorOpen(false);
+        }
       }, { once: true });
 
       sheetPopoutWindowRef.current = popout;
@@ -1761,7 +1771,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
       return;
     }
     if (!editorOpen || !selected || editorMode !== 'sheet') {
-      closeSheetPopout(true);
+      closeSheetPopout(true, { suppressSessionEnd: true });
       return;
     }
     popout.document.title = `${selected.name} — Character Sheet`;
@@ -1795,12 +1805,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   useEffect(() => {
     return () => {
-      const popout = sheetPopoutWindowRef.current;
-      if (popout && !popout.closed) {
-        try { popout.close(); } catch (_) {}
-      }
-      sheetPopoutRootRef.current = null;
-      sheetPopoutWindowRef.current = null;
+      closeSheetPopout(true, { suppressSessionEnd: true });
     };
   }, []);
 
