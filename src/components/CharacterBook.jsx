@@ -1111,11 +1111,10 @@ export default function CharacterBook({
   };
 
   useEffect(() => {
-    if (charView === 'worldnpcs') {
-      importCharacterNpcsIntoWorld();
-    }
+    // Keep world NPCs synchronized with character-owned NPC rosters automatically.
+    importCharacterNpcsIntoWorld();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [charView]);
+  }, [characters, charNpcByCharacter]);
 
   useEffect(() => {
     if (charView !== 'worldnpcs') setConnectionWebModalOpen(false);
@@ -1583,15 +1582,6 @@ export default function CharacterBook({
                       onClick={() => setConnectionWebModalOpen(true)}
                     >
                       Connection Web
-                    </button>
-                    <button
-                      className={`${styles.tinyBtn} ${styles.worldNpcActionBtn}`}
-                      onMouseEnter={tinyBtnHover}
-                      onMouseLeave={tinyBtnLeave}
-                      onMouseDown={navClick}
-                      onClick={importCharacterNpcsIntoWorld}
-                    >
-                      Import Character NPCs
                     </button>
                     <button className={styles.goldBtn} onMouseEnter={btnHover} onMouseLeave={btnLeave} onMouseDown={btnDown} onClick={openAddWorldNpc}>
                       + Add NPC

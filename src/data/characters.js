@@ -67,11 +67,6 @@ export const DEFAULT_CHARACTERS = [
         relation: 'Family',
         bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.',
       },
-      {
-        name: 'Jasper Delancey',
-        relation: 'Childhood Friend (Cover Story)',
-        bio: "Their parents think they're courting. In reality: a mutually useful disguise with complicated edges.",
-      },
     ],
   },
   {
@@ -89,13 +84,7 @@ export const DEFAULT_CHARACTERS = [
     class: 'Sorcerer',
     lore: 'Little is known of Thryvaris beyond whispers of forbidden study and impossible power.',
     goals: 'Pursue truths lost to time.',
-    npcs: [
-      {
-        name: 'The Archivist',
-        relation: 'Informant',
-        bio: "A keeper of forbidden catalogs who sells information like it's contraband. Because it is.",
-      },
-    ],
+    npcs: [],
   },
   {
     id: 'fen',
@@ -113,18 +102,7 @@ export const DEFAULT_CHARACTERS = [
     lore:
       'Blunt, fierce, and fiercely loyal, Fen masks deep care with sharp words and unstoppable fury in battle.',
     goals: 'Protect the party at any cost.',
-    npcs: [
-      {
-        name: 'Warchief Brann',
-        relation: 'Former Leader',
-        bio: "The one who taught Fen to fight first and ask questions later. Whether he'd be proud or furious… depends on the day.",
-      },
-      {
-        name: 'Sister Kaela',
-        relation: 'Old Rival',
-        bio: "A rival who never let Fen win clean. Somehow, that's exactly why Fen respects her.",
-      },
-    ],
+    npcs: [],
   },
   {
     id: 'vonghul',
