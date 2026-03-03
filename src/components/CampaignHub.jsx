@@ -867,13 +867,6 @@ export default function CampaignHub(props) {
           {/* ========== QUEST BOARD ========== */}
           {campaignTab === 'quests' && (
             <div className={styles.questBoardStack}>
-              {!canManageQuests && (
-                <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                  <div className={styles.blockTitle}>Quest Board is read-only.</div>
-                  <div className={styles.bodyCopy}>Only owner/DM accounts can create or manage quests.</div>
-                </div>
-              )}
-
               <div className={styles.questBoardSection}>
                 <div className={styles.questBoardHeader}>
                   <div className={styles.questBoardTitle}>Party Quest Board</div>
