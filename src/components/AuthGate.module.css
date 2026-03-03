@@ -82,29 +82,29 @@
 
 .authHud {
   position: fixed;
-  top: 10px;
-  left: 12px;
+  top: 18px;
+  right: 260px;
   z-index: 1000;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   background: rgba(14, 11, 9, 0.86);
   border: 1px solid rgba(230, 189, 125, 0.35);
-  border-radius: 999px;
-  padding: 8px 12px;
+  border-radius: 14px;
+  padding: 5px 8px;
   color: #f4e6d1;
   backdrop-filter: blur(4px);
 }
 
 .hudLabel {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
 }
 
 .hudBtn,
 .hudBtnGhost {
   border-radius: 999px;
-  padding: 5px 10px;
-  font-size: 0.76rem;
+  padding: 4px 8px;
+  font-size: 0.68rem;
   cursor: pointer;
 }
 
@@ -131,26 +131,38 @@
   background: rgba(12, 10, 8, 0.9);
   color: #f4e6d1;
   border-radius: 999px;
-  padding: 5px 10px;
-  min-width: 160px;
+  padding: 4px 8px;
+  min-width: 130px;
 }
 
 .syncLabel {
-  font-size: 0.72rem;
+  font-size: 0.66rem;
   opacity: 0.78;
 }
 
 .toast {
   position: fixed;
-  top: 58px;
-  left: 12px;
+  top: 56px;
+  right: 260px;
   z-index: 1000;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   background: rgba(14, 11, 9, 0.9);
   border: 1px solid rgba(230, 189, 125, 0.35);
   border-radius: 8px;
   color: #f4e6d1;
-  padding: 6px 10px;
+  padding: 5px 8px;
+}
+
+@media (max-width: 1280px) {
+  .authHud {
+    left: 12px;
+    right: auto;
+  }
+
+  .toast {
+    left: 12px;
+    right: auto;
+  }
 }
 
 @media (max-width: 760px) {
