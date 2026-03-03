@@ -34,6 +34,43 @@ function scopePriority(scope) {
   return 2;
 }
 
+function normalizeErrorMessage(err) {
+  if (!err) return 'Unknown sync error.';
+  if (typeof err === 'string') return err;
+  const parts = [];
+  if (typeof err.message === 'string' && err.message.trim()) parts.push(err.message.trim());
+  if (typeof err.details === 'string' && err.details.trim()) parts.push(err.details.trim());
+  if (typeof err.hint === 'string' && err.hint.trim()) parts.push(`Hint: ${err.hint.trim()}`);
+  if (typeof err.code === 'string' && err.code.trim()) parts.push(`Code: ${err.code.trim()}`);
+  if (parts.length) return parts.join(' | ');
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return 'Unknown sync error.';
+  }
+}
+
+function isPermissionLikeError(err) {
+  const text = normalizeErrorMessage(err).toLowerCase();
+  return (
+    text.includes('row-level security') ||
+    text.includes('permission denied') ||
+    text.includes('not invited') ||
+    text.includes('campaign_members') ||
+    text.includes('42501')
+  );
+}
+
+function sanitizeValueForTransport(type, value) {
+  if (type === 'text') return normalizeText(value);
+  if (value === undefined) return null;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return null;
+  }
+}
+
 function normalizePayload(stored) {
   if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
     return { type: 'json', value: stored };
@@ -368,7 +405,7 @@ export function createSupabaseAdapter() {
 
     const payload = {
       type: op.type === 'text' ? 'text' : 'json',
-      value: op.value,
+      value: sanitizeValueForTransport(op.type, op.value),
     };
 
     const row = {
@@ -408,11 +445,23 @@ export function createSupabaseAdapter() {
         await sendOperation(op);
         pendingQueue.delete(id);
       } catch (err) {
+        let effectiveError = err;
+        if (isPermissionLikeError(err)) {
+          try {
+            await supabase.rpc('claim_campaign_membership', { p_campaign_id: campaignId });
+            await sendOperation(op);
+            pendingQueue.delete(id);
+            continue;
+          } catch (retryErr) {
+            effectiveError = retryErr;
+          }
+        }
+
         const attempts = (op.attempts || 0) + 1;
         maxAttempts = Math.max(maxAttempts, attempts);
         pendingQueue.set(id, { ...op, attempts });
         if (!failureMessage) {
-          failureMessage = err instanceof Error ? err.message : 'Failed to sync pending changes.';
+          failureMessage = `[${op.scope}:${op.key}] ${normalizeErrorMessage(effectiveError)}`;
         }
       }
     }
