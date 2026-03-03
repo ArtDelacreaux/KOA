@@ -166,6 +166,7 @@ export default function CampaignHub(props) {
   const cloudStatus = repository.getCloudStatus();
   const usingSupabase = authEnabled && repository.adapterName === 'supabase';
   const canSeedCloud = usingSupabase && canManageCampaign && canEditCampaignData;
+  const showCloudPrepBackup = !authEnabled || canManageCampaign;
   const cloudPendingWrites = Number(cloudStatus?.queueSize || 0);
   const cloudError = String(cloudStatus?.lastSyncError || '');
 
@@ -515,61 +516,60 @@ export default function CampaignHub(props) {
                     className={`${styles.inputBase} ${styles.textarea}`}
                   />
                 </div>
-                <div className={styles.softCard}>
-                  <div>
-                    <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                    <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
-                  </div>
-                  <div className={styles.toolActions}>
-                    <button
-                      className={smallBtnClass('gold')}
-                      onMouseEnter={smallBtnHover}
-                      onClick={exportBackup}
-                      disabled={backupBusy || seedBusy}
-                    >
-                      Download Backup
-                    </button>
-                    <button
-                      className={smallBtnClass('ghost')}
-                      onMouseEnter={smallBtnHover}
-                      onClick={openRestorePicker}
-                      disabled={backupBusy || seedBusy}
-                    >
-                      Restore Backup
-                    </button>
-                    {canSeedCloud && (
+                {showCloudPrepBackup && (
+                  <div className={styles.softCard}>
+                    <div>
+                      <div className={styles.blockTitle}>Cloud Prep Backup</div>
+                      <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
+                    </div>
+                    <div className={styles.toolActions}>
                       <button
                         className={smallBtnClass('gold')}
                         onMouseEnter={smallBtnHover}
-                        onClick={seedCloudFromThisDevice}
+                        onClick={exportBackup}
                         disabled={backupBusy || seedBusy}
                       >
-                        {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                        Download Backup
                       </button>
-                    )}
+                      <button
+                        className={smallBtnClass('ghost')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={openRestorePicker}
+                        disabled={backupBusy || seedBusy}
+                      >
+                        Restore Backup
+                      </button>
+                      {canSeedCloud && (
+                        <button
+                          className={smallBtnClass('gold')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={seedCloudFromThisDevice}
+                          disabled={backupBusy || seedBusy}
+                        >
+                          {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={backupFileRef}
+                      type="file"
+                      accept="application/json"
+                      className={styles.hiddenFileInput}
+                      onChange={onBackupPicked}
+                    />
+                    <div className={styles.backupHint}>
+                      Each person should download their own backup from their own device/browser profile.
+                      {usingSupabase && (
+                        <>
+                          {' '}
+                          Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
+                        </>
+                      )}
+                    </div>
+                    {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
+                    {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
                   </div>
-                  <input
-                    ref={backupFileRef}
-                    type="file"
-                    accept="application/json"
-                    className={styles.hiddenFileInput}
-                    onChange={onBackupPicked}
-                  />
-                  <div className={styles.backupHint}>
-                    Each person should download their own backup from their own device/browser profile.
-                    {usingSupabase && (
-                      <>
-                        {' '}
-                        Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
-                      </>
-                    )}
-                    {usingSupabase && !canSeedCloud && (
-                      <> Cloud seed is owner/DM-only.</>
-                    )}
-                  </div>
-                  {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
-                  {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
-                </div>
+                )}
               </div>
             </div>
           )}
