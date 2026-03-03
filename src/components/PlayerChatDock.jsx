@@ -11,8 +11,12 @@ function normalizeText(value) {
   return String(value ?? '').trim();
 }
 
+function normalizeEmail(value) {
+  return normalizeText(value).toLowerCase();
+}
+
 function emailLocalPart(email) {
-  const normalized = normalizeText(email).toLowerCase();
+  const normalized = normalizeEmail(email);
   if (!normalized) return '';
   return normalized.split('@')[0] || '';
 }
@@ -21,6 +25,13 @@ function formatTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function canViewMessage(row, currentUserId) {
+  const recipientUserId = normalizeText(row?.recipient_user_id);
+  if (!recipientUserId) return true;
+  const authorUserId = normalizeText(row?.author_user_id);
+  return recipientUserId === currentUserId || authorUserId === currentUserId;
 }
 
 function upsertMessage(list, row) {
@@ -38,10 +49,13 @@ function upsertMessage(list, row) {
   return next.slice(next.length - MAX_RENDERED_MESSAGES);
 }
 
-export default function PlayerChatDock({ panelType }) {
+export default function PlayerChatDock() {
   const { enabled, session, profile, canWriteData } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [recipientId, setRecipientId] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
@@ -64,10 +78,96 @@ export default function PlayerChatDock({ panelType }) {
     return 'Player';
   }, [profile?.username, session?.user?.email]);
 
+  const displayNameByUserId = useMemo(() => {
+    const map = new Map();
+    if (currentUserId) map.set(currentUserId, authorDisplay);
+    members.forEach((member) => {
+      if (member.userId) map.set(member.userId, member.label);
+    });
+    return map;
+  }, [authorDisplay, currentUserId, members]);
+
   useEffect(() => {
     openRef.current = open;
     if (open) setUnreadCount(0);
   }, [open]);
+
+  useEffect(() => {
+    if (!enabled || !supabase || !campaignId || !hasSession) {
+      setMembers([]);
+      setMembersLoading(false);
+      setRecipientId('');
+      return () => {};
+    }
+
+    let active = true;
+    const loadMembers = async () => {
+      setMembersLoading(true);
+      try {
+        const { data, error: memberError } = await supabase
+          .from('campaign_members')
+          .select('user_id,email,joined_at')
+          .eq('campaign_id', campaignId)
+          .order('joined_at', { ascending: true });
+
+        if (memberError) throw memberError;
+        if (!active) return;
+
+        const memberRows = Array.isArray(data) ? data : [];
+        const memberUserIds = memberRows
+          .map((row) => normalizeText(row?.user_id))
+          .filter(Boolean);
+
+        const usernameByUserId = new Map();
+        if (memberUserIds.length > 0) {
+          const { data: profileRows, error: profileError } = await supabase
+            .from('profiles')
+            .select('user_id,username')
+            .in('user_id', memberUserIds);
+
+          if (!profileError && Array.isArray(profileRows)) {
+            profileRows.forEach((row) => {
+              const userId = normalizeText(row?.user_id);
+              const username = normalizeText(row?.username);
+              if (userId && username) usernameByUserId.set(userId, username);
+            });
+          }
+        }
+
+        const seen = new Set();
+        const nextMembers = memberRows
+          .map((row, index) => {
+            const userId = normalizeText(row?.user_id);
+            const email = normalizeEmail(row?.email);
+            if (!userId || userId === currentUserId) return null;
+            if (seen.has(userId)) return null;
+            seen.add(userId);
+
+            const username = normalizeText(usernameByUserId.get(userId));
+            const fallbackName = emailLocalPart(email);
+            const label = username || fallbackName || `Player ${index + 1}`;
+            return { userId, label };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.label.localeCompare(b.label));
+
+        if (!active) return;
+        setMembers(nextMembers);
+        setRecipientId((prev) => (nextMembers.some((entry) => entry.userId === prev) ? prev : ''));
+      } catch {
+        if (!active) return;
+        setMembers([]);
+        setRecipientId('');
+      } finally {
+        if (active) setMembersLoading(false);
+      }
+    };
+
+    loadMembers();
+    return () => {
+      active = false;
+    };
+  }, [campaignId, currentUserId, enabled, hasSession, supabase]);
 
   useEffect(() => {
     if (!enabled || !supabase || !campaignId || !hasSession) {
@@ -90,6 +190,7 @@ export default function PlayerChatDock({ panelType }) {
         (payload) => {
           const incoming = payload.new;
           if (!active || !incoming || incoming.id == null) return;
+          if (!canViewMessage(incoming, currentUserId)) return;
 
           setMessages((prev) => upsertMessage(prev, incoming));
           if (!openRef.current && normalizeText(incoming.author_user_id) !== currentUserId) {
@@ -110,7 +211,7 @@ export default function PlayerChatDock({ panelType }) {
       try {
         const { data, error: queryError } = await supabase
           .from('chat_messages')
-          .select('id,campaign_id,author_user_id,author_display,body,created_at')
+          .select('id,campaign_id,author_user_id,author_display,recipient_user_id,body,created_at')
           .eq('campaign_id', campaignId)
           .order('created_at', { ascending: false })
           .limit(INITIAL_LOAD_LIMIT);
@@ -118,7 +219,7 @@ export default function PlayerChatDock({ panelType }) {
         if (queryError) throw queryError;
         if (!active) return;
         const ordered = (Array.isArray(data) ? data : []).slice().reverse();
-        setMessages(ordered);
+        setMessages(ordered.filter((message) => canViewMessage(message, currentUserId)));
       } catch (err) {
         if (!active) return;
         const msg = err instanceof Error ? err.message : 'Failed to load chat messages.';
@@ -146,7 +247,7 @@ export default function PlayerChatDock({ panelType }) {
     node.scrollTop = node.scrollHeight;
   }, [messages, open]);
 
-  if (!enabled || panelType === 'menu') return null;
+  if (!enabled) return null;
 
   const toggleOpen = () => {
     setOpen((prev) => {
@@ -158,10 +259,21 @@ export default function PlayerChatDock({ panelType }) {
 
   const sendMessage = async () => {
     const body = normalizeText(draft);
+    const targetUserId = normalizeText(recipientId);
     if (!canSend || !supabase || !campaignId || !body || sending) return;
 
     if (body.length > MAX_MESSAGE_LENGTH) {
       setError(`Message is too long (${body.length}/${MAX_MESSAGE_LENGTH}).`);
+      return;
+    }
+
+    if (targetUserId && targetUserId === currentUserId) {
+      setError('Cannot send a private message to yourself.');
+      return;
+    }
+
+    if (targetUserId && !members.some((member) => member.userId === targetUserId)) {
+      setError('Selected member is no longer available.');
       return;
     }
 
@@ -174,9 +286,10 @@ export default function PlayerChatDock({ panelType }) {
           campaign_id: campaignId,
           author_user_id: currentUserId,
           author_display: authorDisplay,
+          recipient_user_id: targetUserId || null,
           body,
         })
-        .select('id,campaign_id,author_user_id,author_display,body,created_at')
+        .select('id,campaign_id,author_user_id,author_display,recipient_user_id,body,created_at')
         .single();
 
       if (insertError) throw insertError;
@@ -208,12 +321,30 @@ export default function PlayerChatDock({ panelType }) {
             {loading ? <p className={styles.status}>Loading recent messages...</p> : null}
             {!loading && messages.length === 0 ? <p className={styles.status}>No messages yet.</p> : null}
             {messages.map((message) => {
-              const mine = normalizeText(message.author_user_id) === currentUserId;
+              const authorUserId = normalizeText(message.author_user_id);
+              const mine = authorUserId === currentUserId;
+              const recipientUserId = normalizeText(message.recipient_user_id);
+              const isPrivate = !!recipientUserId;
+              const authorLabel =
+                normalizeText(message.author_display) ||
+                displayNameByUserId.get(authorUserId) ||
+                'Player';
+              const targetLabel = displayNameByUserId.get(recipientUserId) || 'member';
+
               return (
                 <article key={message.id} className={`${styles.message} ${mine ? styles.mine : styles.other}`}>
                   <div className={styles.meta}>
-                    <span className={styles.author}>{normalizeText(message.author_display) || 'Player'}</span>
-                    <time className={styles.time} dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+                    <span className={styles.author}>{authorLabel}</span>
+                    <div className={styles.metaRight}>
+                      {isPrivate ? (
+                        <span className={styles.privateBadge}>
+                          {mine ? `Private to ${targetLabel}` : 'Private'}
+                        </span>
+                      ) : (
+                        <span className={styles.partyBadge}>Party</span>
+                      )}
+                      <time className={styles.time} dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+                    </div>
                   </div>
                   <p className={styles.body}>{String(message.body ?? '')}</p>
                 </article>
@@ -224,11 +355,30 @@ export default function PlayerChatDock({ panelType }) {
           <div className={styles.composer}>
             {!hasSession ? <p className={styles.hint}>Sign in with an invited account to join chat.</p> : null}
             {hasSession && !canWriteData ? <p className={styles.hint}>Guest mode is read-only.</p> : null}
+            {hasSession ? (
+              <div className={styles.targetRow}>
+                <label className={styles.targetLabel} htmlFor="chat-recipient">Send to</label>
+                <select
+                  id="chat-recipient"
+                  className={styles.targetSelect}
+                  value={recipientId}
+                  onChange={(event) => setRecipientId(event.target.value)}
+                  disabled={!canSend || sending || membersLoading}
+                >
+                  <option value="">Party (everyone)</option>
+                  {members.map((member) => (
+                    <option key={member.userId} value={member.userId}>
+                      {member.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <textarea
               className={styles.input}
               rows={2}
               maxLength={MAX_MESSAGE_LENGTH}
-              placeholder="Message the party..."
+              placeholder={recipientId ? 'Send a private message...' : 'Message the party...'}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -242,7 +392,7 @@ export default function PlayerChatDock({ panelType }) {
             <div className={styles.composerFooter}>
               <span className={styles.counter}>{draft.length}/{MAX_MESSAGE_LENGTH}</span>
               <button type="button" className={styles.sendButton} onClick={sendMessage} disabled={!canSend || sending || !normalizeText(draft)}>
-                {sending ? 'Sending...' : 'Send'}
+                {sending ? 'Sending...' : (recipientId ? 'Send Private' : 'Send')}
               </button>
             </div>
             {error ? <p className={styles.error}>{error}</p> : null}

@@ -111,7 +111,7 @@ After owner/DM signs in:
 
 - Shared data: synced through `shared_docs`.
 - Private data: session notes only, synced through `private_docs`.
-- Party chat: synced through `chat_messages` with realtime inserts.
+- Party chat: synced through `chat_messages` with realtime inserts (public + private member DMs).
 - Offline writes: queued locally and retried automatically.
 - Conflict strategy: last write wins.
 - Realtime: Supabase Realtime subscriptions for shared/private docs and chat.

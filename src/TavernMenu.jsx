@@ -677,7 +677,7 @@ export default function TavernMenu() {
       </div>
 
       <div className={styles.chatLayer}>
-        <PlayerChatDock panelType={panelType} />
+        <PlayerChatDock />
       </div>
     </div>
   );
