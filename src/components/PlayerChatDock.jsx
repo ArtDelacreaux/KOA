@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import styles from './PlayerChatDock.module.css';
@@ -7,9 +7,18 @@ const INITIAL_LOAD_LIMIT = 120;
 const MAX_RENDERED_MESSAGES = 200;
 const MAX_MESSAGE_LENGTH = 1000;
 const PARTY_THREAD_ID = 'party';
+const CHAT_PANEL_SIZE_KEY = 'koa:chat:panel:size:v1';
+const PANEL_MIN_WIDTH = 420;
+const PANEL_MIN_HEIGHT = 420;
+const PANEL_MARGIN = 24;
+const PANEL_DEFAULT_SIZE = { width: 680, height: 620 };
 
 function normalizeText(value) {
   return String(value ?? '').trim();
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function formatTime(value) {
@@ -66,6 +75,21 @@ function upsertMessage(list, row) {
   return next.slice(next.length - MAX_RENDERED_MESSAGES);
 }
 
+function loadStoredPanelSize() {
+  if (typeof window === 'undefined') return PANEL_DEFAULT_SIZE;
+  try {
+    const raw = localStorage.getItem(CHAT_PANEL_SIZE_KEY);
+    if (!raw) return PANEL_DEFAULT_SIZE;
+    const parsed = JSON.parse(raw);
+    const width = Number(parsed?.width);
+    const height = Number(parsed?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return PANEL_DEFAULT_SIZE;
+    return { width, height };
+  } catch {
+    return PANEL_DEFAULT_SIZE;
+  }
+}
+
 export default function PlayerChatDock() {
   const { enabled, session, profile, canWriteData } = useAuth();
   const [open, setOpen] = useState(false);
@@ -78,9 +102,13 @@ export default function PlayerChatDock() {
   const [sending, setSending] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
+  const [panelSize, setPanelSize] = useState(() => loadStoredPanelSize());
+  const [isResizing, setIsResizing] = useState(false);
+  const panelRef = useRef(null);
   const listRef = useRef(null);
   const openRef = useRef(open);
   const selectedThreadRef = useRef(selectedThreadId);
+  const resizeStartRef = useRef(null);
 
   const campaignId = useMemo(() => getCampaignId(), []);
   const supabase = useMemo(() => (enabled ? getSupabaseClient() : null), [enabled]);
@@ -94,6 +122,17 @@ export default function PlayerChatDock() {
     return 'Player';
   }, [profile?.username]);
 
+  const clampPanelSize = useCallback((size) => {
+    const maxWidth = Math.max(300, window.innerWidth - PANEL_MARGIN);
+    const maxHeight = Math.max(280, window.innerHeight - PANEL_MARGIN);
+    const minWidth = Math.min(PANEL_MIN_WIDTH, maxWidth);
+    const minHeight = Math.min(PANEL_MIN_HEIGHT, maxHeight);
+    return {
+      width: Math.round(clamp(size.width, minWidth, maxWidth)),
+      height: Math.round(clamp(size.height, minHeight, maxHeight)),
+    };
+  }, []);
+
   const displayNameByUserId = useMemo(() => {
     const map = new Map();
     if (currentUserId) map.set(currentUserId, authorDisplay);
@@ -106,6 +145,52 @@ export default function PlayerChatDock() {
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setPanelSize((prev) => clampPanelSize(prev));
+    const onWindowResize = () => {
+      setPanelSize((prev) => clampPanelSize(prev));
+    };
+    window.addEventListener('resize', onWindowResize);
+    return () => {
+      window.removeEventListener('resize', onWindowResize);
+    };
+  }, [clampPanelSize]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(CHAT_PANEL_SIZE_KEY, JSON.stringify(panelSize));
+    } catch {}
+  }, [panelSize]);
+
+  useEffect(() => {
+    if (!isResizing) return () => {};
+    const onPointerMove = (event) => {
+      const start = resizeStartRef.current;
+      if (!start) return;
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      const next = clampPanelSize({
+        width: start.width + dx,
+        height: start.height + dy,
+      });
+      setPanelSize(next);
+    };
+    const onPointerUp = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [clampPanelSize, isResizing]);
 
   useEffect(() => {
     selectedThreadRef.current = selectedThreadId;
@@ -377,6 +462,25 @@ export default function PlayerChatDock() {
     }
   };
 
+  const beginResize = (event) => {
+    if (event.button !== 0) return;
+    if (!panelRef.current) return;
+    event.preventDefault();
+    const rect = panelRef.current.getBoundingClientRect();
+    resizeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      width: rect.width,
+      height: rect.height,
+    };
+    setIsResizing(true);
+  };
+
+  const panelInlineStyle = {
+    width: `${panelSize.width}px`,
+    height: `${panelSize.height}px`,
+  };
+
   if (!enabled) return null;
 
   return (
@@ -387,7 +491,12 @@ export default function PlayerChatDock() {
           {totalUnread > 0 ? <span className={styles.unreadBadge}>{totalUnread}</span> : null}
         </button>
       ) : (
-        <section className={styles.panel} aria-label="Party chat">
+        <section
+          ref={panelRef}
+          className={`${styles.panel}${isResizing ? ` ${styles.panelResizing}` : ''}`}
+          style={panelInlineStyle}
+          aria-label="Party chat"
+        >
           <header className={styles.header}>
             <h2 className={styles.title}>Campaign Chat</h2>
             <button type="button" className={styles.closeButton} onClick={toggleOpen}>Close</button>
@@ -498,6 +607,12 @@ export default function PlayerChatDock() {
               </div>
             </section>
           </div>
+          <button
+            type="button"
+            className={styles.resizeHandle}
+            aria-label="Resize chat window"
+            onPointerDown={beginResize}
+          />
         </section>
       )}
     </div>
