@@ -34,6 +34,33 @@ create index if not exists chat_messages_campaign_recipient_created_idx
 
 grant select, insert on public.chat_messages to authenticated;
 
+create or replace function public.list_campaign_member_directory(p_campaign_id text)
+returns table (
+  user_id uuid,
+  username text,
+  role text,
+  joined_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    cm.user_id,
+    coalesce(nullif(btrim(p.username), ''), 'Unnamed Adventurer') as username,
+    cm.role,
+    cm.joined_at
+  from public.campaign_members cm
+  left join public.profiles p
+    on p.user_id = cm.user_id
+  where cm.campaign_id = p_campaign_id
+    and public.is_campaign_member(p_campaign_id)
+  order by cm.joined_at asc;
+$$;
+
+grant execute on function public.list_campaign_member_directory(text) to authenticated;
+
 alter table public.chat_messages enable row level security;
 
 drop policy if exists chat_messages_member_read on public.chat_messages;
@@ -64,6 +91,13 @@ create policy chat_messages_member_insert
       )
     )
   );
+
+update public.chat_messages cm
+set author_display = p.username
+from public.profiles p
+where p.user_id = cm.author_user_id
+  and nullif(btrim(p.username), '') is not null
+  and cm.author_display <> p.username;
 
 do $$
 begin

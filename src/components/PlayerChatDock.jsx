@@ -11,16 +11,6 @@ function normalizeText(value) {
   return String(value ?? '').trim();
 }
 
-function normalizeEmail(value) {
-  return normalizeText(value).toLowerCase();
-}
-
-function emailLocalPart(email) {
-  const normalized = normalizeEmail(email);
-  if (!normalized) return '';
-  return normalized.split('@')[0] || '';
-}
-
 function formatTime(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
@@ -73,10 +63,8 @@ export default function PlayerChatDock() {
   const authorDisplay = useMemo(() => {
     const username = normalizeText(profile?.username);
     if (username) return username;
-    const fallback = emailLocalPart(session?.user?.email);
-    if (fallback) return fallback;
     return 'Player';
-  }, [profile?.username, session?.user?.email]);
+  }, [profile?.username]);
 
   const displayNameByUserId = useMemo(() => {
     const map = new Map();
@@ -104,48 +92,25 @@ export default function PlayerChatDock() {
     const loadMembers = async () => {
       setMembersLoading(true);
       try {
-        const { data, error: memberError } = await supabase
-          .from('campaign_members')
-          .select('user_id,email,joined_at')
-          .eq('campaign_id', campaignId)
-          .order('joined_at', { ascending: true });
+        const { data, error: memberError } = await supabase.rpc('list_campaign_member_directory', {
+          p_campaign_id: campaignId,
+        });
 
         if (memberError) throw memberError;
         if (!active) return;
 
         const memberRows = Array.isArray(data) ? data : [];
-        const memberUserIds = memberRows
-          .map((row) => normalizeText(row?.user_id))
-          .filter(Boolean);
-
-        const usernameByUserId = new Map();
-        if (memberUserIds.length > 0) {
-          const { data: profileRows, error: profileError } = await supabase
-            .from('profiles')
-            .select('user_id,username')
-            .in('user_id', memberUserIds);
-
-          if (!profileError && Array.isArray(profileRows)) {
-            profileRows.forEach((row) => {
-              const userId = normalizeText(row?.user_id);
-              const username = normalizeText(row?.username);
-              if (userId && username) usernameByUserId.set(userId, username);
-            });
-          }
-        }
 
         const seen = new Set();
         const nextMembers = memberRows
           .map((row, index) => {
             const userId = normalizeText(row?.user_id);
-            const email = normalizeEmail(row?.email);
             if (!userId || userId === currentUserId) return null;
             if (seen.has(userId)) return null;
             seen.add(userId);
 
-            const username = normalizeText(usernameByUserId.get(userId));
-            const fallbackName = emailLocalPart(email);
-            const label = username || fallbackName || `Player ${index + 1}`;
+            const username = normalizeText(row?.username);
+            const label = username || `Member ${index + 1}`;
             return { userId, label };
           })
           .filter(Boolean)
