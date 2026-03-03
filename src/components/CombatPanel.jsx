@@ -2671,26 +2671,30 @@ export default function CombatPanel({
             <div />
 
             <div className={styles.windowControlsCenter}>
-                <button
-                  className={btnClass('gold')}
-                  onMouseEnter={playHover}
-                  onClick={() => { playNav(); gotoPrev(); }}
-                  disabled={!canWriteCombat}
-                >
-                  ◀ Prev
-                </button>
+                {canManageCombat && (
+                  <button
+                    className={btnClass('gold')}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); gotoPrev(); }}
+                    disabled={!canWriteCombat}
+                  >
+                    ◀ Prev
+                  </button>
+                )}
                 <div className={styles.roundBadge}>
                   <span className={styles.roundLabel}>Round</span>
                   <span className={styles.roundValue}>{encounter.round}</span>
                 </div>
-                <button
-                  className={btnClass('gold')}
-                  onMouseEnter={playHover}
-                  onClick={() => { playNav(); gotoNext(); }}
-                  disabled={!canWriteCombat}
-                >
-                  Next ▶
-                </button>
+                {canManageCombat && (
+                  <button
+                    className={btnClass('gold')}
+                    onMouseEnter={playHover}
+                    onClick={() => { playNav(); gotoNext(); }}
+                    disabled={!canWriteCombat}
+                  >
+                    Next ▶
+                  </button>
+                )}
               </div>
 
             <div className={styles.controlsRight}>
