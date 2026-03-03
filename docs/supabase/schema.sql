@@ -17,7 +17,7 @@ create table if not exists public.campaign_invites (
   role text not null default 'member',
   created_at timestamptz not null default timezone('utc', now()),
   primary key (campaign_id, email),
-  constraint campaign_invites_role_check check (role in ('owner', 'member'))
+  constraint campaign_invites_role_check check (role in ('owner', 'dm', 'member'))
 );
 
 create table if not exists public.campaign_members (
@@ -28,8 +28,22 @@ create table if not exists public.campaign_members (
   joined_at timestamptz not null default timezone('utc', now()),
   last_seen_at timestamptz not null default timezone('utc', now()),
   primary key (campaign_id, user_id),
-  constraint campaign_members_role_check check (role in ('owner', 'member'))
+  constraint campaign_members_role_check check (role in ('owner', 'dm', 'member'))
 );
+
+alter table public.campaign_invites
+  drop constraint if exists campaign_invites_role_check;
+
+alter table public.campaign_invites
+  add constraint campaign_invites_role_check
+  check (role in ('owner', 'dm', 'member'));
+
+alter table public.campaign_members
+  drop constraint if exists campaign_members_role_check;
+
+alter table public.campaign_members
+  add constraint campaign_members_role_check
+  check (role in ('owner', 'dm', 'member'));
 
 create table if not exists public.shared_docs (
   campaign_id text not null,
@@ -119,7 +133,7 @@ as $$
       from public.campaign_members cm
      where cm.campaign_id = p_campaign_id
        and cm.user_id = coalesce(p_user_id, auth.uid())
-       and cm.role = 'owner'
+       and cm.role in ('owner', 'dm')
   );
 $$;
 
@@ -185,9 +199,9 @@ begin
       from public.campaign_members cm
      where cm.campaign_id = p_campaign_id
        and cm.user_id = v_user_id
-       and cm.role = 'owner'
+       and cm.role in ('owner', 'dm')
   ) then
-    raise exception 'Only campaign owners can seed shared state.';
+    raise exception 'Only campaign owners/DMs can seed shared state.';
   end if;
 
   if exists (

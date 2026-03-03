@@ -75,6 +75,7 @@ Supabase Dashboard -> Authentication -> Providers/Settings:
 Dashboard -> Authentication -> Users -> Invite user
 
 - Invite owner + players by email.
+- Optional: invite a DM account (campaign-admin role).
 - Users finish account setup from invite email.
 
 ### 4. Allowlist campaign membership
@@ -85,14 +86,21 @@ Add invited emails to `campaign_invites` table (same `campaign_id` as `VITE_CAMP
 insert into public.campaign_invites (campaign_id, email, role)
 values
   ('main-party', 'owner@example.com', 'owner'),
+  ('main-party', 'dm@example.com', 'dm'),
   ('main-party', 'player1@example.com', 'member'),
   ('main-party', 'player2@example.com', 'member')
 on conflict (campaign_id, email) do update set role = excluded.role;
 ```
 
-### 5. First cloud seed (owner only)
+Supported roles:
 
-After owner signs in:
+- `owner`: full campaign admin.
+- `dm`: owner-level campaign admin (seed + invite visibility).
+- `member`: normal shared-data access.
+
+### 5. First cloud seed (owner/DM only)
+
+After owner/DM signs in:
 
 1. Open Campaign Hub -> **Cloud Prep Backup**.
 2. Click **Seed Cloud Once**.

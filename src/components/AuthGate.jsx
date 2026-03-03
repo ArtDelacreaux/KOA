@@ -4,11 +4,18 @@ import { getCampaignId, getSupabaseClient, isSupabaseConfigured } from '../lib/s
 import { isSupabaseBackend, repository } from '../repository';
 import styles from './AuthGate.module.css';
 
+const VALID_CAMPAIGN_ROLES = new Set(['owner', 'dm', 'member']);
+
+function normalizeCampaignRole(value) {
+  const role = String(value || 'member').trim().toLowerCase();
+  return VALID_CAMPAIGN_ROLES.has(role) ? role : 'member';
+}
+
 function roleFromMembershipData(data) {
   if (!data) return 'member';
-  if (typeof data === 'string') return data || 'member';
+  if (typeof data === 'string') return normalizeCampaignRole(data);
   if (Array.isArray(data)) return roleFromMembershipData(data[0]);
-  if (typeof data === 'object') return String(data.role || 'member');
+  if (typeof data === 'object') return normalizeCampaignRole(data.role);
   return 'member';
 }
 
@@ -136,7 +143,7 @@ export default function AuthGate({ children }) {
         return;
       }
 
-      const nextRole = String(memberResult.role || 'member');
+      const nextRole = normalizeCampaignRole(memberResult.role);
       setRole(nextRole);
 
       const profileResult = await loadProfile(supabase, nextSession.user.id);
@@ -277,6 +284,8 @@ export default function AuthGate({ children }) {
       profile,
       role,
       isOwner: role === 'owner',
+      isDm: role === 'dm',
+      canManageCampaign: role === 'owner' || role === 'dm',
       cloudStatus,
       signOut,
       updateUsername,

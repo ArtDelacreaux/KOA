@@ -18,7 +18,7 @@ import {
 } from '../migration/backupService';
 
 export default function CampaignHub(props) {
-  const { enabled: authEnabled, isOwner } = useAuth();
+  const { enabled: authEnabled, canManageCampaign } = useAuth();
 
   const {
     panelType,
@@ -158,7 +158,7 @@ export default function CampaignHub(props) {
 
   const cloudStatus = repository.getCloudStatus();
   const usingSupabase = authEnabled && repository.adapterName === 'supabase';
-  const canSeedCloud = usingSupabase && isOwner;
+  const canSeedCloud = usingSupabase && canManageCampaign;
   const cloudPendingWrites = Number(cloudStatus?.queueSize || 0);
   const cloudError = String(cloudStatus?.lastSyncError || '');
 
@@ -208,7 +208,7 @@ export default function CampaignHub(props) {
 
   const seedCloudFromThisDevice = async () => {
     if (!canSeedCloud || seedBusy) return;
-    const ok = confirm('Seed shared cloud state from this device now? This should be done once by the campaign owner.');
+    const ok = confirm('Seed shared cloud state from this device now? This should be done once by the campaign owner/DM.');
     if (!ok) return;
 
     setSeedBusy(true);
@@ -498,7 +498,7 @@ export default function CampaignHub(props) {
                 <div className={styles.softCard}>
                   <div>
                     <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                    <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner.</div>
+                    <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
                   </div>
                   <div className={styles.toolActions}>
                     <button
@@ -544,7 +544,7 @@ export default function CampaignHub(props) {
                       </>
                     )}
                     {usingSupabase && !canSeedCloud && (
-                      <> Cloud seed is owner-only.</>
+                      <> Cloud seed is owner/DM-only.</>
                     )}
                   </div>
                   {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}

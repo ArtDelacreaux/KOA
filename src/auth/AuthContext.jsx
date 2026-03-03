@@ -6,6 +6,8 @@ const defaultAuthValue = {
   profile: null,
   role: 'member',
   isOwner: false,
+  isDm: false,
+  canManageCampaign: false,
   cloudStatus: { enabled: false },
   signOut: async () => {},
   updateUsername: async () => {},
