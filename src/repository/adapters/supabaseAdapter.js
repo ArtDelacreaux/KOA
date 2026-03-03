@@ -28,6 +28,12 @@ function queueKey(scope, key) {
   return `${scope}:${key}`;
 }
 
+function scopePriority(scope) {
+  if (scope === 'shared') return 0;
+  if (scope === 'private') return 1;
+  return 2;
+}
+
 function normalizePayload(stored) {
   if (!stored || typeof stored !== 'object' || Array.isArray(stored)) {
     return { type: 'json', value: stored };
@@ -386,7 +392,14 @@ export function createSupabaseAdapter() {
     if (pendingQueue.size === 0) return;
 
     isFlushing = true;
-    const ops = Array.from(pendingQueue.values()).sort((a, b) => a.enqueuedAt.localeCompare(b.enqueuedAt));
+    const ops = Array.from(pendingQueue.values()).sort((a, b) => {
+      const scopeDiff = scopePriority(a.scope) - scopePriority(b.scope);
+      if (scopeDiff !== 0) return scopeDiff;
+      return a.enqueuedAt.localeCompare(b.enqueuedAt);
+    });
+
+    let maxAttempts = 0;
+    let failureMessage = '';
 
     for (let i = 0; i < ops.length; i += 1) {
       const op = ops[i];
@@ -394,17 +407,22 @@ export function createSupabaseAdapter() {
       try {
         await sendOperation(op);
         pendingQueue.delete(id);
-        persistQueue();
       } catch (err) {
         const attempts = (op.attempts || 0) + 1;
+        maxAttempts = Math.max(maxAttempts, attempts);
         pendingQueue.set(id, { ...op, attempts });
-        persistQueue();
-        const msg = err instanceof Error ? err.message : 'Failed to sync pending changes.';
-        updateStatus({ lastSyncError: msg });
-        isFlushing = false;
-        scheduleFlush(clampRetryMs(attempts));
-        return;
+        if (!failureMessage) {
+          failureMessage = err instanceof Error ? err.message : 'Failed to sync pending changes.';
+        }
       }
+    }
+    persistQueue();
+
+    if (failureMessage) {
+      updateStatus({ lastSyncError: failureMessage });
+      isFlushing = false;
+      scheduleFlush(clampRetryMs(maxAttempts || 1));
+      return;
     }
 
     updateStatus({
