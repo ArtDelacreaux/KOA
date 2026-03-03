@@ -1420,7 +1420,7 @@ export default function CombatPanel({
   // ✅ Adventurers are now derived from the shared Character Book roster (single source of truth)
   const adventurers = useMemo(() => {
     return (characters || [])
-      .filter((c) => c && c.combat)
+      .filter((c) => c && c.combat !== false)
       .map((c) => ({
         id: c.id || '',
         name: c.name,

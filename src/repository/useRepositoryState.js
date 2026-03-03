@@ -8,6 +8,12 @@ function nextSubscriberId() {
   return `repo-sub-${subscriberSeq}`;
 }
 
+function cloneIfObject(value) {
+  if (Array.isArray(value)) return [...value];
+  if (value && typeof value === 'object') return { ...value };
+  return value;
+}
+
 export default function useRepositoryState(key, initialValue) {
   const subscriberIdRef = useRef(nextSubscriberId());
   const suppressNextWriteRef = useRef(false);
@@ -29,7 +35,10 @@ export default function useRepositoryState(key, initialValue) {
       if (event?.meta?.sourceId === subscriberIdRef.current) return;
       if (event?.meta?.type !== 'json') return;
       suppressNextWriteRef.current = true;
-      setValue(event.value);
+      setValue((prevValue) => {
+        if (Object.is(event.value, prevValue)) return cloneIfObject(event.value);
+        return event.value;
+      });
     });
     return unsubscribe;
   }, [key]);
@@ -45,7 +54,15 @@ export default function useRepositoryState(key, initialValue) {
 
   const setPersistedValue = useCallback((nextValue) => {
     if (typeof repository?.canWrite === 'function' && !repository.canWrite()) return;
-    setValue(nextValue);
+    setValue((prevValue) => {
+      const resolvedValue =
+        typeof nextValue === 'function'
+          ? nextValue(prevValue)
+          : nextValue;
+      // Guard against accidental in-place mutations that return the same reference.
+      if (Object.is(resolvedValue, prevValue)) return cloneIfObject(resolvedValue);
+      return resolvedValue;
+    });
   }, []);
 
   return [value, setPersistedValue];
