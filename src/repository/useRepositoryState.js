@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { repository } from './index';
 
 let subscriberSeq = 0;
@@ -39,8 +39,14 @@ export default function useRepositoryState(key, initialValue) {
       suppressNextWriteRef.current = false;
       return;
     }
+    if (typeof repository?.canWrite === 'function' && !repository.canWrite()) return;
     repository.writeJson(key, value, { sourceId: subscriberIdRef.current });
   }, [key, value]);
 
-  return [value, setValue];
+  const setPersistedValue = useCallback((nextValue) => {
+    if (typeof repository?.canWrite === 'function' && !repository.canWrite()) return;
+    setValue(nextValue);
+  }, []);
+
+  return [value, setPersistedValue];
 }

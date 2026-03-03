@@ -5,6 +5,8 @@ const defaultAuthValue = {
   session: null,
   profile: null,
   role: 'member',
+  isGuest: false,
+  canWriteData: true,
   isOwner: false,
   isDm: false,
   canManageCampaign: false,

@@ -1109,6 +1109,7 @@ export default function WorldLore({
   panelType,
   cinematicNav,
   playNav = () => { },
+  canEditLore = true,
   setCharView,
   setSelectedChar,
   setSelectedNpc,
@@ -1139,12 +1140,18 @@ export default function WorldLore({
 
   // when the user toggles edit mode for lore entries
   const [loreEditMode, setLoreEditMode] = useState(false);
+  const loreEditEnabled = !!canEditLore;
 
   const isActive = panelType === 'worldLore';
 
   useEffect(() => {
     if (!isActive) setLightboxItem(null);
   }, [isActive]);
+
+  useEffect(() => {
+    if (loreEditEnabled || !loreEditMode) return;
+    setLoreEditMode(false);
+  }, [loreEditEnabled, loreEditMode]);
 
   const goBack = () => {
     cinematicNav('menu');
@@ -1213,6 +1220,7 @@ export default function WorldLore({
   };
 
   const handleUpdateItem = (updated) => {
+    if (!loreEditEnabled) return;
     if (!updated || updated.id == null) return;
     const tab = updated._tab || activeTab;
     const list = (gallery[tab] || []).map((it) => (it.id === updated.id ? { ...updated } : it));
@@ -1387,6 +1395,7 @@ export default function WorldLore({
   };
 
   const handleAddItem = () => {
+    if (!loreEditEnabled) return;
     const tab = activeTab;
     const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
     const nextId = currentList.reduce((maxId, item) => {
@@ -1405,6 +1414,7 @@ export default function WorldLore({
   };
 
   const handleDeleteItem = (candidate) => {
+    if (!loreEditEnabled) return;
     if (!candidate || candidate.id == null) return;
     const tab = candidate._tab || activeTab;
     if (!isUserAddedItem(tab, candidate)) return;
@@ -1494,7 +1504,7 @@ export default function WorldLore({
             </div>
 
             <div className={styles.worldLoreBottomActions}>
-              {loreEditMode && (
+              {loreEditEnabled && loreEditMode && (
                 <button
                   onClick={handleAddItem}
                   className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
@@ -1502,12 +1512,14 @@ export default function WorldLore({
                   {`ADD ${tabSingularLabels[activeTab].toUpperCase()}`}
                 </button>
               )}
-              <button
-                onClick={() => setLoreEditMode((prev) => !prev)}
-                className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
-              >
-                {loreEditMode ? 'DONE EDITING' : 'EDIT LORE'}
-              </button>
+              {loreEditEnabled && (
+                <button
+                  onClick={() => setLoreEditMode((prev) => !prev)}
+                  className={`koa-glass-btn koa-interactive-lift ${styles.worldLoreEditBtn}`}
+                >
+                  {loreEditMode ? 'DONE EDITING' : 'EDIT LORE'}
+                </button>
+              )}
             </div>
           </section>
         </div>
@@ -1516,7 +1528,7 @@ export default function WorldLore({
       {/* Lightbox */}
       <Lightbox
         item={lightboxItem}
-        editMode={loreEditMode}
+        editMode={loreEditEnabled && loreEditMode}
         onUpdateItem={handleUpdateItem}
         canDeleteItem={(entry) => isUserAddedItem(entry?._tab || activeTab, entry)}
         onDeleteItem={handleDeleteItem}

@@ -5,6 +5,7 @@ import { isSupabaseBackend, repository } from '../repository';
 import styles from './AuthGate.module.css';
 
 const VALID_CAMPAIGN_ROLES = new Set(['owner', 'dm', 'member']);
+const GUEST_PROFILE = { user_id: 'guest', username: 'Guest', updated_at: null };
 
 function normalizeCampaignRole(value) {
   const role = String(value || 'member').trim().toLowerCase();
@@ -66,6 +67,7 @@ export default function AuthGate({ children }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
+  const [guestMode, setGuestMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const sessionRunRef = useRef(0);
@@ -79,6 +81,23 @@ export default function AuthGate({ children }) {
   const refreshCloudStatus = useCallback(() => {
     setCloudStatus(repository.getCloudStatus());
   }, []);
+
+  useEffect(() => {
+    if (typeof repository?.setWriteAccess !== 'function') return;
+    if (!enabled) {
+      repository.setWriteAccess({ enabled: true, reason: '' });
+      return;
+    }
+    if (guestMode) {
+      repository.setWriteAccess({ enabled: false, reason: 'guest-read-only' });
+      return;
+    }
+    if (phase === 'ready') {
+      repository.setWriteAccess({ enabled: true, reason: '' });
+      return;
+    }
+    repository.setWriteAccess({ enabled: false, reason: 'auth-required' });
+  }, [enabled, guestMode, phase]);
 
   const updateUsername = useCallback(
     async (nextUsername) => {
@@ -187,6 +206,7 @@ export default function AuthGate({ children }) {
 
   useEffect(() => {
     if (!enabled) return () => {};
+    if (guestMode) return () => {};
     if (!supabase || !isSupabaseConfigured()) {
       setPhase('error');
       setAuthError('Supabase environment variables are missing.');
@@ -223,13 +243,14 @@ export default function AuthGate({ children }) {
       data?.subscription?.unsubscribe();
       repository.clearSupabaseSession();
     };
-  }, [applySession, enabled, supabase]);
+  }, [applySession, enabled, guestMode, supabase]);
 
   const signIn = async (event) => {
     event.preventDefault();
     if (!supabase) return;
     setBusy(true);
     setAuthError('');
+    setGuestMode(false);
     const { error } = await supabase.auth.signInWithPassword({
       email: String(email || '').trim(),
       password: String(password || ''),
@@ -238,8 +259,29 @@ export default function AuthGate({ children }) {
     setBusy(false);
   };
 
+  const continueAsGuest = useCallback(async () => {
+    setBusy(true);
+    setGuestMode(true);
+    setSession(null);
+    userIdRef.current = '';
+    setProfile(GUEST_PROFILE);
+    setRole('guest');
+    setEditingUsername(false);
+    setUsernameDraft('Guest');
+    setStatusMessage('');
+    setAuthError('');
+    await repository.clearSupabaseSession();
+    refreshCloudStatus();
+    setPhase('ready');
+    setBusy(false);
+  }, [refreshCloudStatus]);
+
   const signOut = useCallback(async () => {
-    if (supabase) await supabase.auth.signOut();
+    if (guestMode) {
+      setGuestMode(false);
+    } else if (supabase) {
+      await supabase.auth.signOut();
+    }
     await repository.clearSupabaseSession();
     setProfile(null);
     setRole('member');
@@ -248,7 +290,7 @@ export default function AuthGate({ children }) {
     setStatusMessage('');
     refreshCloudStatus();
     setPhase(enabled ? 'signed_out' : 'ready');
-  }, [enabled, refreshCloudStatus, supabase]);
+  }, [enabled, guestMode, refreshCloudStatus, supabase]);
 
   const saveUsername = async (event) => {
     event.preventDefault();
@@ -278,19 +320,24 @@ export default function AuthGate({ children }) {
   };
 
   const authValue = useMemo(
-    () => ({
-      enabled,
-      session,
-      profile,
-      role,
-      isOwner: role === 'owner',
-      isDm: role === 'dm',
-      canManageCampaign: role === 'owner' || role === 'dm',
-      cloudStatus,
-      signOut,
-      updateUsername,
-    }),
-    [cloudStatus, enabled, profile, role, session, signOut, updateUsername]
+    () => {
+      const canWriteData = !enabled || (phase === 'ready' && !guestMode);
+      return {
+        enabled,
+        session,
+        profile,
+        role,
+        isGuest: guestMode,
+        canWriteData,
+        isOwner: !guestMode && role === 'owner',
+        isDm: !guestMode && role === 'dm',
+        canManageCampaign: !guestMode && (role === 'owner' || role === 'dm'),
+        cloudStatus,
+        signOut,
+        updateUsername,
+      };
+    },
+    [cloudStatus, enabled, guestMode, phase, profile, role, session, signOut, updateUsername]
   );
 
   if (!enabled) {
@@ -337,7 +384,11 @@ export default function AuthGate({ children }) {
           <button className={styles.primaryBtn} type="submit" disabled={busy}>
             {busy ? 'Signing In...' : 'Sign In'}
           </button>
+          <button className={styles.secondaryBtn} type="button" onClick={continueAsGuest} disabled={busy}>
+            Continue as Guest
+          </button>
           <p className={styles.hint}>Self-signup is disabled. Ask the DM for an invite.</p>
+          <p className={styles.hint}>Guest mode is read-only.</p>
           {authError && <p className={styles.error}>{authError}</p>}
         </form>
       </div>
@@ -402,7 +453,7 @@ export default function AuthGate({ children }) {
     <AuthContext.Provider value={authValue}>
       {children}
       <div className={styles.authHud}>
-        {editingUsername ? (
+        {editingUsername && !guestMode ? (
           <form className={styles.hudForm} onSubmit={saveUsername}>
             <input
               className={styles.hudInput}
@@ -426,22 +477,26 @@ export default function AuthGate({ children }) {
         ) : (
           <>
             <span className={styles.hudLabel}>
-              {profile?.username || 'Unknown'} ({role})
+              {profile?.username || (guestMode ? 'Guest' : 'Unknown')} ({role})
             </span>
-            <button className={styles.hudBtnGhost} type="button" onClick={() => setEditingUsername(true)}>
-              Edit Username
-            </button>
+            {!guestMode && (
+              <button className={styles.hudBtnGhost} type="button" onClick={() => setEditingUsername(true)}>
+                Edit Username
+              </button>
+            )}
             <button className={styles.hudBtn} type="button" onClick={signOut}>
-              Sign Out
+              {guestMode ? 'Exit Guest' : 'Sign Out'}
             </button>
           </>
         )}
         <span className={styles.syncLabel}>
-          {cloudStatus?.queueSize
-            ? `${cloudStatus.queueSize} pending`
-            : cloudStatus?.connected
-              ? 'Synced (realtime)'
-              : 'Synced (polling)'}
+          {guestMode
+            ? 'Guest view (read-only)'
+            : cloudStatus?.queueSize
+              ? `${cloudStatus.queueSize} pending`
+              : cloudStatus?.connected
+                ? 'Synced (realtime)'
+                : 'Synced (polling)'}
         </span>
       </div>
       {statusMessage && <div className={styles.toast}>{statusMessage}</div>}

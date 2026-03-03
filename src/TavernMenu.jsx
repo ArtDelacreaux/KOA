@@ -51,7 +51,13 @@ function useAudioLoop(ref, { volume, loop = true }) {
 
 /* ---------- component ---------- */
 export default function TavernMenu() {
-  const { enabled: authEnabled, session, profile, canManageCampaign } = useAuth();
+  const {
+    enabled: authEnabled,
+    session,
+    profile,
+    canManageCampaign,
+    canWriteData,
+  } = useAuth();
 
   /* ================= STATE ================= */
   const [musicOn, setMusicOn] = useState(false);
@@ -94,7 +100,8 @@ export default function TavernMenu() {
   const currentUserId = String(session?.user?.id || '');
   const currentUserEmail = String(session?.user?.email || '').trim().toLowerCase();
   const currentUsername = String(profile?.username || '').trim();
-  const canManageCharacterAccess = authEnabled ? canManageCampaign : true;
+  const canEditCampaignData = authEnabled ? canWriteData : true;
+  const canManageCharacterAccess = authEnabled ? canManageCampaign && canEditCampaignData : true;
 
   useEffect(() => {
     setCharacterAccess((prev) => normalizeCharacterAccessMap(prev));
@@ -118,15 +125,17 @@ export default function TavernMenu() {
 
   const canControlCharacter = useMemo(
     () => (character) =>
-      canUserControlCharacter({
-        accessMap: characterAccess,
-        character,
-        authEnabled,
-        isManager: canManageCharacterAccess,
-        userId: currentUserId,
-        email: currentUserEmail,
-      }),
-    [authEnabled, canManageCharacterAccess, characterAccess, currentUserEmail, currentUserId]
+      (authEnabled && !canEditCampaignData)
+        ? false
+        : canUserControlCharacter({
+            accessMap: characterAccess,
+            character,
+            authEnabled,
+            isManager: canManageCharacterAccess,
+            userId: currentUserId,
+            email: currentUserEmail,
+          }),
+    [authEnabled, canEditCampaignData, canManageCharacterAccess, characterAccess, currentUserEmail, currentUserId]
   );
 
   const assignCharacterController = useMemo(
@@ -586,6 +595,7 @@ export default function TavernMenu() {
             // everything else silent:
             playSilent: silentClick,
             playHover,
+            canEditCampaignData,
           }}
         />
 		<CombatPanel
@@ -649,6 +659,7 @@ export default function TavernMenu() {
           panelType={panelType}
           cinematicNav={cinematicNav}
           playNav={playNavClick}
+          canEditLore={canEditCampaignData}
           setCharView={setCharView}
           setSelectedChar={setSelectedChar}
           setSelectedNpc={setSelectedNpc}

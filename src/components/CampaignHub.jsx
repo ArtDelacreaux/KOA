@@ -18,7 +18,7 @@ import {
 } from '../migration/backupService';
 
 export default function CampaignHub(props) {
-  const { enabled: authEnabled, canManageCampaign } = useAuth();
+  const { enabled: authEnabled, canManageCampaign, canWriteData } = useAuth();
 
   const {
     panelType,
@@ -34,10 +34,17 @@ export default function CampaignHub(props) {
     setEditingQuestId,
     questDraft,
     setQuestDraft,
+    canEditCampaignData: canEditCampaignDataProp,
 
     playHover = () => {},
     playNav   = () => {},
   } = props;
+
+  const canEditCampaignData =
+    typeof canEditCampaignDataProp === 'boolean'
+      ? canEditCampaignDataProp
+      : (authEnabled ? canWriteData : true);
+  const readOnlyStatusMessage = 'Guest mode is read-only. Sign in to make changes.';
 
   const smallBtnClass = (variant = 'gold', extraClass = '') => {
     const variantClass =
@@ -158,7 +165,7 @@ export default function CampaignHub(props) {
 
   const cloudStatus = repository.getCloudStatus();
   const usingSupabase = authEnabled && repository.adapterName === 'supabase';
-  const canSeedCloud = usingSupabase && canManageCampaign;
+  const canSeedCloud = usingSupabase && canManageCampaign && canEditCampaignData;
   const cloudPendingWrites = Number(cloudStatus?.queueSize || 0);
   const cloudError = String(cloudStatus?.lastSyncError || '');
 
@@ -170,6 +177,10 @@ export default function CampaignHub(props) {
   };
 
   const openRestorePicker = () => {
+    if (!canEditCampaignData) {
+      setBackupStatus(readOnlyStatusMessage);
+      return;
+    }
     if (backupBusy) return;
     if (backupFileRef.current) backupFileRef.current.click();
   };
@@ -177,6 +188,11 @@ export default function CampaignHub(props) {
   const onBackupPicked = async (event) => {
     const file = event?.target?.files?.[0];
     if (!file) return;
+    if (!canEditCampaignData) {
+      setBackupStatus(readOnlyStatusMessage);
+      if (backupFileRef.current) backupFileRef.current.value = '';
+      return;
+    }
 
     setBackupBusy(true);
     try {
@@ -207,6 +223,10 @@ export default function CampaignHub(props) {
   };
 
   const seedCloudFromThisDevice = async () => {
+    if (!canEditCampaignData) {
+      setBackupStatus(readOnlyStatusMessage);
+      return;
+    }
     if (!canSeedCloud || seedBusy) return;
     const ok = confirm('Seed shared cloud state from this device now? This should be done once by the campaign owner/DM.');
     if (!ok) return;

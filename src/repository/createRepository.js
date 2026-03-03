@@ -24,6 +24,10 @@ function notify(listenersByKey, key, payload) {
 
 export function createRepository(adapter) {
   const listenersByKey = createListenerMap();
+  const writeAccess = {
+    enabled: true,
+    reason: '',
+  };
 
   const emit = (key, value, meta = {}) => {
     notify(listenersByKey, key, {
@@ -39,6 +43,17 @@ export function createRepository(adapter) {
     });
   }
 
+  const normalizeWriteAccess = (next = {}) => {
+    const hasEnabled = Object.prototype.hasOwnProperty.call(next, 'enabled');
+    const enabled = hasEnabled ? !!next.enabled : true;
+    return {
+      enabled,
+      reason: enabled ? '' : String(next.reason || 'read-only').trim(),
+    };
+  };
+
+  const canWrite = () => !!writeAccess.enabled;
+
   return {
     get adapterName() {
       return adapter?.name || 'unknown';
@@ -47,19 +62,25 @@ export function createRepository(adapter) {
       return adapter.readJson(key, fallbackValue);
     },
     writeJson(key, value, options = {}) {
+      if (!canWrite()) return false;
       adapter.writeJson(key, value, options);
       emit(key, value, { source: 'local', type: 'json', ...options });
+      return true;
     },
     readText(key, fallbackValue = '') {
       return adapter.readText(key, fallbackValue);
     },
     writeText(key, value, options = {}) {
+      if (!canWrite()) return false;
       adapter.writeText(key, value, options);
       emit(key, value, { source: 'local', type: 'text', ...options });
+      return true;
     },
     remove(key, options = {}) {
+      if (!canWrite()) return false;
       adapter.remove(key, options);
       emit(key, undefined, { source: 'local', type: 'remove', ...options });
+      return true;
     },
     subscribe(key, listener) {
       if (typeof listener !== 'function') return () => {};
@@ -97,6 +118,18 @@ export function createRepository(adapter) {
     async flushPendingWrites() {
       if (typeof adapter?.flushPendingWrites !== 'function') return null;
       return adapter.flushPendingWrites();
+    },
+    canWrite() {
+      return canWrite();
+    },
+    getWriteAccess() {
+      return { ...writeAccess };
+    },
+    setWriteAccess(next = {}) {
+      const normalized = normalizeWriteAccess(next);
+      writeAccess.enabled = normalized.enabled;
+      writeAccess.reason = normalized.reason;
+      return { ...writeAccess };
     },
   };
 }
