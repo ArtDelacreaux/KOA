@@ -139,8 +139,9 @@ export default function TavernMenu() {
             isManager: canManageCharacterAccess,
             userId: currentUserId,
             email: currentUserEmail,
+            username: currentUsername,
           }),
-    [authEnabled, canEditCampaignData, canManageCharacterAccess, characterAccess, currentUserEmail, currentUserId]
+    [authEnabled, canEditCampaignData, canManageCharacterAccess, characterAccess, currentUserEmail, currentUserId, currentUsername]
   );
 
   const assignCharacterController = useMemo(

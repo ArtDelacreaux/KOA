@@ -296,6 +296,24 @@ export default function CharacterBook({
     return canControlCharacter(match || { name });
   };
 
+  const hasAssignedControllerByName = (name) => {
+    const match = findCharacterFromName(name);
+    const assignment = getCharacterController(match || { name });
+    return !!(
+      assignment
+      && (
+        String(assignment.ownerUserId || '').trim()
+        || String(assignment.ownerEmail || '').trim()
+        || String(assignment.ownerUsername || '').trim()
+      )
+    );
+  };
+
+  const canEditRelationshipByName = (name) => (
+    canEditCharacterByName(name)
+    && (canAssignCharacterController || hasAssignedControllerByName(name))
+  );
+
   /* ---------- Relationship value helpers ---------- */
   const getRelObj = (fromName, toName) => {
     const raw = relationshipValues?.[fromName]?.[toName];
@@ -309,7 +327,7 @@ export default function CharacterBook({
   };
 
   const setRelObj = (fromName, toName, patch) => {
-    if (!canEditCharacterByName(fromName)) return;
+    if (!canEditRelationshipByName(fromName)) return;
     setRelationshipValues((prev) => {
       const cur = (() => {
         const raw = prev?.[fromName]?.[toName];
@@ -1256,6 +1274,9 @@ export default function CharacterBook({
     () => (selectedChar ? canControlCharacter(selectedChar) : true),
     [canControlCharacter, selectedChar]
   );
+  const selectedCharCanEditRelationships = selectedChar
+    ? canEditRelationshipByName(selectedChar.name)
+    : false;
 
   const formatControllerLabel = (assignment) => (
     assignment?.ownerUsername
@@ -1809,7 +1830,7 @@ export default function CharacterBook({
                                   onMouseEnter={tinyBtnHover}
                                   onMouseLeave={tinyBtnLeave}
                                   onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}
-                                  disabled={!selectedCharCanEdit}
+                                  disabled={!selectedCharCanEditRelationships}
                                 >
                                   ✎
                                 </button>
@@ -1819,7 +1840,7 @@ export default function CharacterBook({
                             <input className={styles.rng}
                               style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 10 }}
                               type="range" min={0} max={100} value={value}
-                              disabled={!selectedCharCanEdit}
+                              disabled={!selectedCharCanEditRelationships}
                               onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
                             />
 
@@ -1828,7 +1849,7 @@ export default function CharacterBook({
                                 <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
                                   onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
                                   onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
-                                  readOnly={!selectedCharCanEdit}
+                                  readOnly={!selectedCharCanEditRelationships}
                                   rows={2}
                                   className={`${styles.inputBase} ${styles.relationTextarea}`}
                                 />

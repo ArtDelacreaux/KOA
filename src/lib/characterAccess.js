@@ -102,6 +102,7 @@ export function canUserControlCharacter({
   isManager,
   userId,
   email,
+  username,
 }) {
   if (!character) return true;
   if (!authEnabled) return true;
@@ -110,13 +111,17 @@ export function canUserControlCharacter({
   const assignment = getCharacterAccessEntry(accessMap, character);
   if (!assignment) return true;
 
-  if (!assignment.ownerUserId && !assignment.ownerEmail) return true;
+  if (!assignment.ownerUserId && !assignment.ownerEmail && !assignment.ownerUsername) return true;
 
   const normalizedUserId = normalizeText(userId);
   if (assignment.ownerUserId && normalizedUserId && assignment.ownerUserId === normalizedUserId) return true;
 
   const normalizedEmail = normalizeAccountEmail(email);
   if (assignment.ownerEmail && normalizedEmail && assignment.ownerEmail === normalizedEmail) return true;
+
+  const normalizedUsername = normalizeText(username).toLowerCase();
+  const assignmentUsername = normalizeText(assignment.ownerUsername).toLowerCase();
+  if (assignmentUsername && normalizedUsername && assignmentUsername === normalizedUsername) return true;
 
   return false;
 }
