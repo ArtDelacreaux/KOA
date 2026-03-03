@@ -92,6 +92,37 @@ as $$
   select lower(coalesce(auth.jwt() ->> 'email', ''));
 $$;
 
+create or replace function public.is_campaign_member(p_campaign_id text, p_user_id uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+      from public.campaign_members cm
+     where cm.campaign_id = p_campaign_id
+       and cm.user_id = coalesce(p_user_id, auth.uid())
+  );
+$$;
+
+create or replace function public.is_campaign_owner(p_campaign_id text, p_user_id uuid default auth.uid())
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+      from public.campaign_members cm
+     where cm.campaign_id = p_campaign_id
+       and cm.user_id = coalesce(p_user_id, auth.uid())
+       and cm.role = 'owner'
+  );
+$$;
+
 create or replace function public.claim_campaign_membership(p_campaign_id text)
 returns text
 language plpgsql
@@ -195,6 +226,8 @@ grant select, insert, update, delete on public.shared_docs to authenticated;
 grant select, insert, update, delete on public.private_docs to authenticated;
 grant execute on function public.claim_campaign_membership(text) to authenticated;
 grant execute on function public.seed_campaign_once(text, jsonb) to authenticated;
+grant execute on function public.is_campaign_member(text, uuid) to authenticated;
+grant execute on function public.is_campaign_owner(text, uuid) to authenticated;
 
 alter table public.profiles enable row level security;
 alter table public.campaign_invites enable row level security;
@@ -225,101 +258,41 @@ drop policy if exists campaign_invites_owner_read on public.campaign_invites;
 create policy campaign_invites_owner_read
   on public.campaign_invites
   for select
-  using (
-    exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = campaign_invites.campaign_id
-         and cm.user_id = auth.uid()
-         and cm.role = 'owner'
-    )
-  );
+  using (public.is_campaign_owner(campaign_invites.campaign_id));
 
 drop policy if exists campaign_members_member_read on public.campaign_members;
 create policy campaign_members_member_read
   on public.campaign_members
   for select
   using (
-    user_id = auth.uid()
-    or exists (
-      select 1
-        from public.campaign_members owner_row
-       where owner_row.campaign_id = campaign_members.campaign_id
-         and owner_row.user_id = auth.uid()
-         and owner_row.role = 'owner'
-    )
+    user_id = auth.uid() or public.is_campaign_owner(campaign_members.campaign_id)
   );
 
 drop policy if exists shared_docs_member_read on public.shared_docs;
 create policy shared_docs_member_read
   on public.shared_docs
   for select
-  using (
-    exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = shared_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  );
+  using (public.is_campaign_member(shared_docs.campaign_id));
 
 drop policy if exists shared_docs_member_write on public.shared_docs;
 create policy shared_docs_member_write
   on public.shared_docs
   for all
-  using (
-    exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = shared_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  )
-  with check (
-    exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = shared_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  );
+  using (public.is_campaign_member(shared_docs.campaign_id))
+  with check (public.is_campaign_member(shared_docs.campaign_id));
 
 drop policy if exists private_docs_member_read on public.private_docs;
 create policy private_docs_member_read
   on public.private_docs
   for select
-  using (
-    user_id = auth.uid()
-    and exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = private_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  );
+  using (user_id = auth.uid() and public.is_campaign_member(private_docs.campaign_id));
 
 drop policy if exists private_docs_member_write on public.private_docs;
 create policy private_docs_member_write
   on public.private_docs
   for all
-  using (
-    user_id = auth.uid()
-    and exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = private_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  )
-  with check (
-    user_id = auth.uid()
-    and exists (
-      select 1
-        from public.campaign_members cm
-       where cm.campaign_id = private_docs.campaign_id
-         and cm.user_id = auth.uid()
-    )
-  );
+  using (user_id = auth.uid() and public.is_campaign_member(private_docs.campaign_id))
+  with check (user_id = auth.uid() and public.is_campaign_member(private_docs.campaign_id));
 
 do $$
 begin
