@@ -245,6 +245,36 @@ export default function AuthGate({ children }) {
     };
   }, [applySession, enabled, guestMode, supabase]);
 
+  useEffect(() => {
+    if (!enabled || !guestMode) return () => {};
+    if (!supabase || !isSupabaseConfigured()) return () => {};
+
+    let cancelled = false;
+    const setupGuestReadSync = async () => {
+      try {
+        await repository.configureSupabaseSession({
+          campaignId,
+          userId: '',
+          role: 'guest',
+          email: '',
+          readOnlyShared: true,
+        });
+        if (cancelled) return;
+        refreshCloudStatus();
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Unable to start guest read-only sync.';
+        setAuthError(msg);
+      }
+    };
+
+    setupGuestReadSync();
+    return () => {
+      cancelled = true;
+      repository.clearSupabaseSession();
+    };
+  }, [campaignId, enabled, guestMode, refreshCloudStatus, supabase]);
+
   const signIn = async (event) => {
     event.preventDefault();
     if (!supabase) return;

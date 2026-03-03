@@ -108,6 +108,7 @@ export function createSupabaseAdapter() {
   let campaignId = getCampaignId();
   let userId = '';
   let role = 'member';
+  let sharedReadOnly = false;
 
   let changeHandler = () => {};
   let queueFlushTimer = null;
@@ -213,7 +214,7 @@ export function createSupabaseAdapter() {
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState !== 'visible') return;
       scheduleFlush(10);
-      if (!status.ready || !supabase || !campaignId || !userId) return;
+      if (!status.ready || !supabase || !campaignId || (!userId && !sharedReadOnly)) return;
       try {
         await loadRemoteDocuments();
         updateStatus({
@@ -286,7 +287,7 @@ export function createSupabaseAdapter() {
   function startPolling() {
     stopPolling();
     remotePollTimer = setInterval(async () => {
-      if (!status.ready || !supabase || !campaignId || !userId) return;
+      if (!status.ready || !supabase || !campaignId || (!userId && !sharedReadOnly)) return;
       try {
         await loadRemoteDocuments();
         updateStatus({
@@ -320,18 +321,20 @@ export function createSupabaseAdapter() {
   }
 
   async function loadRemoteDocuments() {
-    if (!supabase || !campaignId || !userId) return;
+    if (!supabase || !campaignId || (!userId && !sharedReadOnly)) return;
 
     const [sharedRes, privateRes] = await Promise.all([
       supabase
         .from('shared_docs')
         .select('doc_key,payload,updated_at')
         .eq('campaign_id', campaignId),
-      supabase
-        .from('private_docs')
-        .select('doc_key,payload,updated_at,user_id')
-        .eq('campaign_id', campaignId)
-        .eq('user_id', userId),
+      userId
+        ? supabase
+            .from('private_docs')
+            .select('doc_key,payload,updated_at,user_id')
+            .eq('campaign_id', campaignId)
+            .eq('user_id', userId)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (sharedRes.error) throw sharedRes.error;
@@ -342,7 +345,7 @@ export function createSupabaseAdapter() {
   }
 
   function startRealtime() {
-    if (!supabase || !campaignId || !userId) return;
+    if (!supabase || !campaignId || (!userId && !sharedReadOnly)) return;
     teardownRealtime();
 
     sharedChannel = supabase
@@ -361,9 +364,11 @@ export function createSupabaseAdapter() {
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') {
           updateStatus({ connected: true });
-          scheduleFlush(50);
+          if (userId) scheduleFlush(50);
         }
       });
+
+    if (!userId) return;
 
     privateChannel = supabase
       .channel(`koa-private:${campaignId}:${userId}`)
@@ -550,6 +555,7 @@ export function createSupabaseAdapter() {
       campaignId = normalizeText(config.campaignId) || getCampaignId();
       userId = normalizeText(config.userId);
       role = normalizeText(config.role) || 'member';
+      sharedReadOnly = !!config.readOnlyShared;
       updateStatus({
         configured: true,
         ready: false,
@@ -562,7 +568,7 @@ export function createSupabaseAdapter() {
       teardownRealtime();
       stopPolling();
 
-      if (!userId || !campaignId) {
+      if (!campaignId || (!userId && !sharedReadOnly)) {
         updateStatus({ ready: false });
         return this.getCloudStatus();
       }
@@ -577,7 +583,7 @@ export function createSupabaseAdapter() {
       startRealtime();
       updateStatus({ ready: true });
       startPolling();
-      await flushPendingWrites();
+      if (userId) await flushPendingWrites();
       return this.getCloudStatus();
     },
     async clearSession() {
@@ -585,6 +591,7 @@ export function createSupabaseAdapter() {
       stopPolling();
       userId = '';
       role = 'member';
+      sharedReadOnly = false;
       updateStatus({
         ready: false,
         connected: false,
