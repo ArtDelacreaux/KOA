@@ -3049,7 +3049,7 @@ export default function CombatPanel({
               )}
 
               {editorMode === 'sheet' && (
-                <fieldset className={styles.editorFieldset} disabled={selectedReadOnly}>
+                <fieldset className={styles.editorFieldset} aria-disabled={selectedReadOnly}>
                 <div className={`${styles.sheetView} koa-scrollbar-thin`}>
                   <div className={styles.sheetTopRow}>
                     <div className={styles.sheetHero}>
