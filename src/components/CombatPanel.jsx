@@ -1019,7 +1019,7 @@ function applySheetProfileToCombatant(combatant, profile) {
 function loadState() {
   return repository.readJson(LS_KEY, null);
 }
-function saveState(state) { repository.writeJson(LS_KEY, state); }
+function saveState(state, options = {}) { repository.writeJson(LS_KEY, state, options); }
 
 function defaultEncounter() {
   return {
@@ -1101,7 +1101,7 @@ function normalize(enc) {
   e.round = toInt(e.round, 1);
   e.activeIndex = toInt(e.activeIndex, 0);
   e.castorWilliamResourceSync = !!e.castorWilliamResourceSync;
-  e.updatedAt = Date.now();
+  e.updatedAt = toInt(e.updatedAt, Date.now());
   return e;
 }
 
@@ -1550,6 +1550,8 @@ export default function CombatPanel({
   );
 
   const active = panelType === 'combat';
+  const repositorySourceIdRef = useRef(createId('combat-sync'));
+  const suppressNextPersistRef = useRef(false);
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
   const [selectedId, setSelectedId] = useState(null);
@@ -1678,8 +1680,29 @@ export default function CombatPanel({
 
   const hydrated = useRef(false);
   useEffect(() => {
+    const unsubscribe = repository.subscribe(LS_KEY, (event) => {
+      if (event?.meta?.sourceId === repositorySourceIdRef.current) return;
+      if (event?.meta?.type && event.meta.type !== 'json' && event.meta.type !== 'remove') return;
+
+      const incoming = normalize(event?.value) || defaultEncounter();
+      setEncounter((prev) => {
+        try {
+          if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
+        } catch {}
+        suppressNextPersistRef.current = true;
+        return incoming;
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     if (!hydrated.current) { hydrated.current = true; return; }
-    saveState(encounter);
+    if (suppressNextPersistRef.current) {
+      suppressNextPersistRef.current = false;
+      return;
+    }
+    saveState(encounter, { sourceId: repositorySourceIdRef.current });
   }, [encounter]);
 
   const combatants = encounter.combatants;
