@@ -724,14 +724,24 @@ export default function CharacterBook({
     bio: '',
     image: '',
   });
+  const [charNpcCropOpen, setCharNpcCropOpen] = useState(false);
+  const [charNpcCropSrc, setCharNpcCropSrc] = useState('');
+  const [charNpcCropZoom, setCharNpcCropZoom] = useState(1);
+  const [charNpcCropBaseScale, setCharNpcCropBaseScale] = useState(1);
+  const [charNpcCropOffset, setCharNpcCropOffset] = useState({ x: 0, y: 0 });
+  const charNpcCropImgRef = useRef(null);
+  const charNpcCropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0, iw: 0, ih: 0 });
+  const CHAR_NPC_CROP_BOX = 260;
 
   const closeCharNpcModal = () => {
+    setCharNpcCropOpen(false);
     setCharNpcModalOpen(false);
     setEditingCharNpcId(null);
   };
 
   useEffect(() => {
     const anyModalOpen =
+      charNpcCropOpen ||
       worldNpcCropOpen ||
       charNpcModalOpen ||
       worldNpcModalOpen ||
@@ -741,6 +751,10 @@ export default function CharacterBook({
 
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
+      if (charNpcCropOpen) {
+        setCharNpcCropOpen(false);
+        return;
+      }
       if (worldNpcCropOpen) {
         setWorldNpcCropOpen(false);
         return;
@@ -765,7 +779,7 @@ export default function CharacterBook({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, assignmentModalOpen, connectionWebModalOpen]);
+  }, [charNpcCropOpen, worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, assignmentModalOpen, connectionWebModalOpen]);
 
   const openAddCharNpc = () => {
     if (!selectedChar || !selectedCharCanEdit) return;
@@ -791,6 +805,20 @@ export default function CharacterBook({
     setCharNpcModalOpen(true);
   };
 
+  const clampCharNpcCropOffset = () => {
+    const img = charNpcCropImgRef.current;
+    if (!img) return;
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const base = Math.max(CHAR_NPC_CROP_BOX / iw, CHAR_NPC_CROP_BOX / ih);
+    const scale = base * charNpcCropZoom;
+    const rw = iw * scale;
+    const rh = ih * scale;
+    const maxX = Math.max(0, (rw - CHAR_NPC_CROP_BOX) / 2);
+    const maxY = Math.max(0, (rh - CHAR_NPC_CROP_BOX) / 2);
+    setCharNpcCropOffset((o) => ({ x: clamp(o.x, -maxX, maxX), y: clamp(o.y, -maxY, maxY) }));
+  };
+
   const onCharNpcImagePick = (file) => {
     if (!file) return;
     if (!file.type || !file.type.startsWith('image/')) {
@@ -801,9 +829,49 @@ export default function CharacterBook({
     reader.onload = () => {
       const dataUrl = typeof reader.result === 'string' ? reader.result : '';
       if (!dataUrl) return;
-      setCharNpcDraft((d) => ({ ...d, image: dataUrl }));
+      setCharNpcCropSrc(dataUrl);
+      setCharNpcCropZoom(1);
+      setCharNpcCropBaseScale(1);
+      setCharNpcCropOffset({ x: 0, y: 0 });
+      setCharNpcCropOpen(true);
     };
     reader.readAsDataURL(file);
+  };
+
+  const applyCharNpcCrop = () => {
+    const img = charNpcCropImgRef.current;
+    if (!img) return;
+
+    const iw = img.naturalWidth || 1;
+    const ih = img.naturalHeight || 1;
+    const base = Math.max(CHAR_NPC_CROP_BOX / iw, CHAR_NPC_CROP_BOX / ih);
+    const scale = base * charNpcCropZoom;
+    const rw = iw * scale;
+    const rh = ih * scale;
+    const imgLeft = (CHAR_NPC_CROP_BOX / 2) - (rw / 2) + charNpcCropOffset.x;
+    const imgTop = (CHAR_NPC_CROP_BOX / 2) - (rh / 2) + charNpcCropOffset.y;
+
+    let sx = (-imgLeft) / scale;
+    let sy = (-imgTop) / scale;
+    const sw = CHAR_NPC_CROP_BOX / scale;
+    const sh = CHAR_NPC_CROP_BOX / scale;
+    sx = clamp(sx, 0, Math.max(0, iw - sw));
+    sy = clamp(sy, 0, Math.max(0, ih - sh));
+
+    const out = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out, out);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    setCharNpcDraft((d) => ({ ...d, image: dataUrl }));
+    setCharNpcCropOpen(false);
   };
 
   const saveCharNpc = () => {
@@ -2310,6 +2378,140 @@ export default function CharacterBook({
                   >
                     {editingCharNpcId ? 'Save Changes' : 'Add NPC'}
                   </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CHARACTER NPC IMAGE CROP */}
+        {charNpcCropOpen && (
+          <div className={`${styles.modalOverlay} ${styles.modalZ40}`}>
+            <div className={`${styles.modalShell} ${styles.modalShellCrop}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle16}>Crop Image</div>
+                <button
+                  className={`${styles.backButton} ${styles.backButtonSm}`}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={(e) => { btnDown(e); navClick(); }}
+                  onClick={() => setCharNpcCropOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className={styles.cropMainGrid}>
+                <div className={styles.cropCenter}>
+                  <div
+                    className={styles.cropFrame}
+                    style={{
+                      width: CHAR_NPC_CROP_BOX,
+                      height: CHAR_NPC_CROP_BOX,
+                    }}
+                    onPointerDown={(e) => {
+                      const img = charNpcCropImgRef.current;
+                      if (!img) return;
+                      e.currentTarget.setPointerCapture(e.pointerId);
+                      charNpcCropDragRef.current.dragging = true;
+                      charNpcCropDragRef.current.sx = e.clientX;
+                      charNpcCropDragRef.current.sy = e.clientY;
+                      charNpcCropDragRef.current.ox = charNpcCropOffset.x;
+                      charNpcCropDragRef.current.oy = charNpcCropOffset.y;
+                      e.preventDefault();
+                    }}
+                    onPointerMove={(e) => {
+                      if (!charNpcCropDragRef.current.dragging) return;
+                      const img = charNpcCropImgRef.current;
+                      if (!img) return;
+                      const dx = e.clientX - charNpcCropDragRef.current.sx;
+                      const dy = e.clientY - charNpcCropDragRef.current.sy;
+                      const iw = img.naturalWidth || 1;
+                      const ih = img.naturalHeight || 1;
+                      const base = Math.max(CHAR_NPC_CROP_BOX / iw, CHAR_NPC_CROP_BOX / ih);
+                      const scale = base * charNpcCropZoom;
+                      const rw = iw * scale;
+                      const rh = ih * scale;
+                      const maxX = Math.max(0, (rw - CHAR_NPC_CROP_BOX) / 2);
+                      const maxY = Math.max(0, (rh - CHAR_NPC_CROP_BOX) / 2);
+                      setCharNpcCropOffset({
+                        x: clamp(charNpcCropDragRef.current.ox + dx, -maxX, maxX),
+                        y: clamp(charNpcCropDragRef.current.oy + dy, -maxY, maxY),
+                      });
+                    }}
+                    onPointerUp={(e) => {
+                      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                      charNpcCropDragRef.current.dragging = false;
+                      clampCharNpcCropOffset();
+                    }}
+                    onPointerCancel={(e) => {
+                      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+                      charNpcCropDragRef.current.dragging = false;
+                      clampCharNpcCropOffset();
+                    }}
+                  >
+                    <img
+                      ref={charNpcCropImgRef}
+                      src={charNpcCropSrc}
+                      alt="Crop"
+                      onLoad={() => {
+                        const img = charNpcCropImgRef.current;
+                        if (img) {
+                          const iw = img.naturalWidth || 1;
+                          const ih = img.naturalHeight || 1;
+                          setCharNpcCropBaseScale(Math.max(CHAR_NPC_CROP_BOX / iw, CHAR_NPC_CROP_BOX / ih));
+                        }
+                        clampCharNpcCropOffset();
+                      }}
+                      className={styles.cropImage}
+                      style={{
+                        transform: `translate(-50%, -50%) translate(${charNpcCropOffset.x}px, ${charNpcCropOffset.y}px) scale(${charNpcCropBaseScale * charNpcCropZoom})`,
+                      }}
+                      draggable={false}
+                    />
+                    <div className={styles.cropGuide} />
+                  </div>
+                </div>
+
+                <div className={styles.cropSide}>
+                  <div className={`${styles.darkCard} ${styles.darkCardPad14}`}>
+                    <div className={styles.zoomTitle}>Zoom</div>
+                    <input
+                      className={`${styles.rng} ${styles.cropZoomRng}`}
+                      type="range"
+                      min={1}
+                      max={2.5}
+                      step={0.01}
+                      value={charNpcCropZoom}
+                      onChange={(e) => { setCharNpcCropZoom(parseFloat(e.target.value) || 1); }}
+                      onMouseUp={clampCharNpcCropOffset}
+                      onTouchEnd={clampCharNpcCropOffset}
+                    />
+                    <div className={styles.zoomHint}>
+                      Drag the image to position it inside the frame.
+                    </div>
+                  </div>
+
+                  <div className={styles.cropActionRow}>
+                    <button
+                      className={styles.backButton}
+                      onMouseEnter={btnHover}
+                      onMouseLeave={btnLeave}
+                      onMouseDown={(e) => { btnDown(e); navClick(); }}
+                      onClick={() => setCharNpcCropOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className={styles.goldBtn}
+                      onMouseEnter={btnHover}
+                      onMouseLeave={btnLeave}
+                      onMouseDown={(e) => { btnDown(e); navClick(); }}
+                      onClick={applyCharNpcCrop}
+                    >
+                      Use Cropped Image
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
