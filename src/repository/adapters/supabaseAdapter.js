@@ -73,6 +73,7 @@ export function createSupabaseAdapter() {
   let privateChannel = null;
   let remotePollTimer = null;
   let onlineListenerBound = false;
+  let visibilityListenerBound = false;
 
   const pendingQueue = new Map();
   const status = {
@@ -163,6 +164,26 @@ export function createSupabaseAdapter() {
     });
   }
 
+  function bindVisibilityListener() {
+    if (visibilityListenerBound || typeof document === 'undefined') return;
+    visibilityListenerBound = true;
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState !== 'visible') return;
+      scheduleFlush(10);
+      if (!status.ready || !supabase || !campaignId || !userId) return;
+      try {
+        await loadRemoteDocuments();
+        updateStatus({
+          lastSyncError: '',
+          lastSyncAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Refresh sync failed.';
+        updateStatus({ lastSyncError: msg });
+      }
+    });
+  }
+
   function emitRemoteChange(key, value, meta = {}) {
     try {
       changeHandler(key, value, { source: 'remote', ...meta });
@@ -243,10 +264,6 @@ export function createSupabaseAdapter() {
     const ownScope = getScope(key);
     if (ownScope !== scope) return;
 
-    if (pendingQueue.has(queueKey(scope, key))) {
-      return;
-    }
-
     const payload = normalizePayload(row?.payload);
     writeLocalValue(key, payload.type, payload.value);
     emitRemoteChange(key, payload.value, { type: payload.type, reason });
@@ -255,7 +272,6 @@ export function createSupabaseAdapter() {
   function applyRemoteDelete(scope, row, reason) {
     const key = normalizeText(row?.doc_key);
     if (!key) return;
-    if (pendingQueue.has(queueKey(scope, key))) return;
     removeLocalValue(key);
     emitRemoteChange(key, undefined, { type: 'remove', reason });
   }
@@ -420,6 +436,7 @@ export function createSupabaseAdapter() {
 
   loadQueue();
   bindOnlineListener();
+  bindVisibilityListener();
 
   return {
     name: 'supabase',

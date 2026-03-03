@@ -62,6 +62,12 @@ export default function AuthGate({ children }) {
   const [busy, setBusy] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const sessionRunRef = useRef(0);
+  const phaseRef = useRef(phase);
+  const userIdRef = useRef('');
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const refreshCloudStatus = useCallback(() => {
     setCloudStatus(repository.getCloudStatus());
@@ -96,10 +102,12 @@ export default function AuthGate({ children }) {
   );
 
   const applySession = useCallback(
-    async (nextSession) => {
+    async (nextSession, options = {}) => {
+      const silent = !!options.silent;
       const runId = sessionRunRef.current + 1;
       sessionRunRef.current = runId;
       setSession(nextSession || null);
+      userIdRef.current = String(nextSession?.user?.id || '');
       setAuthError('');
       setStatusMessage('');
 
@@ -117,7 +125,7 @@ export default function AuthGate({ children }) {
         return;
       }
 
-      setPhase('authorizing');
+      if (!silent) setPhase('authorizing');
       const memberResult = await claimCampaignMembership(supabase, campaignId);
       if (sessionRunRef.current !== runId) return;
       if (!memberResult.ok) {
@@ -165,7 +173,7 @@ export default function AuthGate({ children }) {
       }
 
       refreshCloudStatus();
-      setPhase('ready');
+      if (!silent) setPhase('ready');
     },
     [campaignId, enabled, refreshCloudStatus, supabase]
   );
@@ -193,8 +201,14 @@ export default function AuthGate({ children }) {
 
     boot();
 
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      applySession(nextSession);
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      const nextUserId = String(nextSession?.user?.id || '');
+      const sameUser = nextUserId && nextUserId === userIdRef.current;
+      const shouldSilent =
+        phaseRef.current === 'ready' &&
+        sameUser &&
+        (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED');
+      applySession(nextSession, { silent: shouldSilent });
     });
 
     return () => {
@@ -422,6 +436,7 @@ export default function AuthGate({ children }) {
         </span>
       </div>
       {statusMessage && <div className={styles.toast}>{statusMessage}</div>}
+      {cloudStatus?.lastSyncError && <div className={styles.toast}>{cloudStatus.lastSyncError}</div>}
     </AuthContext.Provider>
   );
 }
