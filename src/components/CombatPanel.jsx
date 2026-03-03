@@ -1050,6 +1050,9 @@ function normalize(enc) {
     const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
     return {
       sourceCharacterId: c.sourceCharacterId || '',
+      createdByUserId: cleanText(c.createdByUserId),
+      createdByEmail: cleanText(c.createdByEmail).toLowerCase(),
+      createdByUsername: cleanText(c.createdByUsername),
       id: c.id || uid(),
       name: c.name || 'Unknown',
       role: c.role || '',
@@ -1407,6 +1410,8 @@ export default function CombatPanel({
   cinematicNav,
   characters = [],
   canManageCombat = true,
+  canWriteCombat = true,
+  viewerIdentity = null,
   canControlCharacter = () => true,
   playNav = () => {},
   playHover = () => {},
@@ -1444,6 +1449,23 @@ export default function CombatPanel({
     return out;
   }, [characters]);
 
+  const viewerUserId = useMemo(
+    () => cleanText(viewerIdentity?.userId),
+    [viewerIdentity]
+  );
+  const viewerEmail = useMemo(
+    () => cleanText(viewerIdentity?.email).toLowerCase(),
+    [viewerIdentity]
+  );
+  const viewerUsername = useMemo(
+    () => cleanText(viewerIdentity?.username),
+    [viewerIdentity]
+  );
+  const viewerUsernameKey = useMemo(
+    () => viewerUsername.toLowerCase(),
+    [viewerUsername]
+  );
+
   const resolveCharacterForCombatant = useCallback(
     (combatant) => {
       if (!combatant) return null;
@@ -1457,14 +1479,74 @@ export default function CombatPanel({
     [characterById, characterByName]
   );
 
+  const canControlUnlinkedCombatant = useCallback(
+    (combatant) => {
+      if (!combatant || !canWriteCombat) return false;
+      if (canManageCombat) return true;
+
+      const ownerUserId = cleanText(combatant.createdByUserId);
+      const ownerEmail = cleanText(combatant.createdByEmail).toLowerCase();
+      const ownerUsername = cleanText(combatant.createdByUsername);
+      const ownerUsernameKey = ownerUsername.toLowerCase();
+      const hasOwner = !!(ownerUserId || ownerEmail || ownerUsername);
+      if (!hasOwner) return true;
+
+      if (ownerUserId && viewerUserId && ownerUserId === viewerUserId) return true;
+      if (ownerEmail && viewerEmail && ownerEmail === viewerEmail) return true;
+      if (ownerUsernameKey && viewerUsernameKey && ownerUsernameKey === viewerUsernameKey) return true;
+      return false;
+    },
+    [canManageCombat, canWriteCombat, viewerEmail, viewerUserId, viewerUsernameKey]
+  );
+
   const canControlCombatant = useCallback(
     (combatant) => {
       if (!combatant) return false;
       const linkedCharacter = resolveCharacterForCombatant(combatant);
       if (linkedCharacter) return canControlCharacter(linkedCharacter);
-      return !!canManageCombat;
+      return canControlUnlinkedCombatant(combatant);
     },
-    [canControlCharacter, canManageCombat, resolveCharacterForCombatant]
+    [canControlCharacter, canControlUnlinkedCombatant, resolveCharacterForCombatant]
+  );
+
+  const canRemoveCombatant = useCallback(
+    (combatant) => {
+      if (!combatant || !canWriteCombat) return false;
+      if (canManageCombat) return true;
+      const linkedCharacter = resolveCharacterForCombatant(combatant);
+      if (linkedCharacter) return canControlCharacter(linkedCharacter);
+      return canControlUnlinkedCombatant(combatant);
+    },
+    [
+      canControlCharacter,
+      canControlUnlinkedCombatant,
+      canManageCombat,
+      canWriteCombat,
+      resolveCharacterForCombatant,
+    ]
+  );
+
+  const stampCombatantCreator = useCallback(
+    (combatant) => {
+      if (!combatant || typeof combatant !== 'object') return combatant;
+      const sourceIdKey = tokenKey(combatant.sourceCharacterId);
+      if (sourceIdKey) return combatant;
+
+      const hasCreator = !!(
+        cleanText(combatant.createdByUserId)
+        || cleanText(combatant.createdByEmail)
+        || cleanText(combatant.createdByUsername)
+      );
+      if (hasCreator) return combatant;
+
+      return {
+        ...combatant,
+        createdByUserId: viewerUserId,
+        createdByEmail: viewerEmail,
+        createdByUsername: viewerUsername,
+      };
+    },
+    [viewerEmail, viewerUserId, viewerUsername]
   );
 
   const active = panelType === 'combat';
@@ -1605,6 +1687,10 @@ export default function CombatPanel({
   const selectedCanEdit = useMemo(
     () => (selected ? canControlCombatant(selected) : false),
     [canControlCombatant, selected]
+  );
+  const selectedCanRemove = useMemo(
+    () => (selected ? canRemoveCombatant(selected) : false),
+    [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
   const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
@@ -1889,12 +1975,13 @@ export default function CombatPanel({
   };
 
   const addCombatant = (c) => {
-    if (!canManageCombat) return;
+    if (!canWriteCombat) return;
+    const incomingCombatant = stampCombatantCreator(c);
     setEncounter(prev => {
       const next = normalize(prev);
-      const profileKey = sheetProfileKey(c.sourceCharacterId, c.name);
+      const profileKey = sheetProfileKey(incomingCombatant.sourceCharacterId, incomingCombatant.name);
       const profile = profileKey ? next.sheetProfiles?.[profileKey] : null;
-      const nextCombatant = profile ? applySheetProfileToCombatant(c, profile) : c;
+      const nextCombatant = profile ? applySheetProfileToCombatant(incomingCombatant, profile) : incomingCombatant;
       const activeId = next.combatants[next.activeIndex]?.id || null;
       next.combatants = sortCombatants([...next.combatants, nextCombatant]);
       if (next.combatants.length === 0) next.activeIndex = 0;
@@ -1906,11 +1993,11 @@ export default function CombatPanel({
       }
       return next;
     });
-    setSelectedId(c.id);
+    setSelectedId(incomingCombatant.id);
   };
 
   const addFromDraft = () => {
-    if (!canManageCombat) return;
+    if (!canWriteCombat) return;
     const name = String(draft.name || '').trim();
     if (!name) return;
     addCombatant({
@@ -1952,7 +2039,7 @@ export default function CombatPanel({
   };
 
   const addAdventurer = () => {
-    if (!canManageCombat) return;
+    if (!canWriteCombat) return;
     const adv = adventurers.find(a => a.name === adventurerPick);
     if (!adv) return;
     const existingNames = new Set(combatants.map(x => x.name));
@@ -1991,7 +2078,8 @@ export default function CombatPanel({
   };
 
   const removeCombatant = (id) => {
-    if (!canManageCombat) return;
+    const target = combatants.find((combatant) => combatant.id === id);
+    if (!target || !canRemoveCombatant(target)) return;
     setEncounter(prev => {
       const next = normalize(prev);
       const idx = next.combatants.findIndex(x => x.id === id);
@@ -2014,7 +2102,7 @@ export default function CombatPanel({
   };
 
   const gotoNext = () => {
-    if (!canManageCombat) return;
+    if (!canWriteCombat) return;
     setInitSlideDirection('next');
     setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
@@ -2028,7 +2116,7 @@ export default function CombatPanel({
   };
 
   const gotoPrev = () => {
-    if (!canManageCombat) return;
+    if (!canWriteCombat) return;
     setInitSlideDirection('prev');
     setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
@@ -2587,7 +2675,7 @@ export default function CombatPanel({
                   className={btnClass('gold')}
                   onMouseEnter={playHover}
                   onClick={() => { playNav(); gotoPrev(); }}
-                  disabled={!canManageCombat}
+                  disabled={!canWriteCombat}
                 >
                   ◀ Prev
                 </button>
@@ -2599,7 +2687,7 @@ export default function CombatPanel({
                   className={btnClass('gold')}
                   onMouseEnter={playHover}
                   onClick={() => { playNav(); gotoNext(); }}
-                  disabled={!canManageCombat}
+                  disabled={!canWriteCombat}
                 >
                   Next ▶
                 </button>
@@ -2610,13 +2698,13 @@ export default function CombatPanel({
               <select
                 value={battleBg || ''}
                 onChange={e => {
-                  if (!canManageCombat) return;
+                  if (!canWriteCombat) return;
                   playNav();
                   setBattleBg(e.target.value || null);
                 }}
                 onMouseEnter={playHover}
                 className={styles.sceneSelect}
-                disabled={!canManageCombat}
+                disabled={!canWriteCombat}
               >
                 {BATTLE_BACKGROUNDS.map((b, i) => (
                   <option key={i} value={b.src || ''}>
@@ -2656,7 +2744,7 @@ export default function CombatPanel({
                     <div className={styles.initHeaderCenter}>
                       <div className={styles.initHeading}>Initiative</div>
                       <div className={styles.initButtons}>
-                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canManageCombat}>+ Add</button>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canWriteCombat}>+ Add</button>
                         <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }} disabled={!canManageCombat}>Reset</button>
                         <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }} disabled={!canManageCombat}>Clear</button>
                       </div>
@@ -2734,7 +2822,7 @@ export default function CombatPanel({
                                       onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
                                       onMouseEnter={playHover}
                                       className={iconMiniBtnClass('danger')}
-                                      disabled={!canManageCombat}
+                                      disabled={!canRemoveCombatant(c)}
                                     >
                                       ✕
                                     </button>
@@ -2777,12 +2865,17 @@ export default function CombatPanel({
                 <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
               </div>
 
-              {!canManageCombat && (
+              {!canWriteCombat && (
                 <div className={styles.lockedHint}>
-                  Only the DM can add or remove combatants.
+                  Read-only. You do not have permission to modify combat.
                 </div>
               )}
-              <fieldset className={styles.editorFieldset} disabled={!canManageCombat}>
+              {canWriteCombat && !canManageCombat && (
+                <div className={styles.lockedHint}>
+                  Members can add combatants and manage tokens they control. Reset and Clear are DM-only.
+                </div>
+              )}
+              <fieldset className={styles.editorFieldset} disabled={!canWriteCombat}>
               <div className={`${styles.addModalBody} koa-scrollbar-thin`}>
                 {/* Add Adventurer */}
                 <div>
@@ -2822,7 +2915,7 @@ export default function CombatPanel({
                     className={btnClass('gold', 'md', styles.btnFull)}
                     onMouseEnter={playHover}
                     onClick={() => { playNav(); addAdventurer(); }}
-                    disabled={!canManageCombat}
+                    disabled={!canWriteCombat}
                   >
                     + Add Adventurer
                   </button>
@@ -2867,7 +2960,7 @@ export default function CombatPanel({
                     className={btnClass('gold', 'md', styles.btnFull)}
                     onMouseEnter={playHover}
                     onClick={() => { playNav(); addFromDraft(); }}
-                    disabled={!canManageCombat}
+                    disabled={!canWriteCombat}
                   >
                     + Add Custom
                   </button>
@@ -2947,7 +3040,7 @@ export default function CombatPanel({
 
               {selectedReadOnly && (
                 <div className={styles.lockedHint}>
-                  Read-only. Only this character's assigned player or the DM can edit this token.
+                  Read-only. You can only edit combatants assigned to you or custom combatants you own.
                 </div>
               )}
 
@@ -3443,7 +3536,7 @@ export default function CombatPanel({
 
                 <div className={styles.divider}/>
                 <div className={styles.actionRow}>
-                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }} disabled={!canManageCombat}>
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }} disabled={!selectedCanRemove}>
                     Remove
                   </button>
                   <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }} disabled={!selectedCanEdit}>

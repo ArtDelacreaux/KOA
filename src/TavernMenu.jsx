@@ -609,6 +609,8 @@ export default function TavernMenu() {
           cinematicNav={cinematicNav}
           characters={characters}
           canManageCombat={canManageCharacterAccess}
+          canWriteCombat={canEditCampaignData}
+          viewerIdentity={viewerIdentity}
           canControlCharacter={canControlCharacter}
           playNav={playNavClick}
           playHover={playHover}
