@@ -20,6 +20,7 @@ import CharacterBook from './components/CharacterBook';
 import VideoPanel from './components/VideoPanel';
 import WorldLore from './components/WorldLore';
 import CombatPanel from './components/CombatPanel';
+import PlayerChatDock from './components/PlayerChatDock';
 
 //Assets
 import background from './assets/background.jpeg';
@@ -673,6 +674,10 @@ export default function TavernMenu() {
           setSelectedNpc={setSelectedNpc}
           characters={characters}
         />
+      </div>
+
+      <div className={styles.chatLayer}>
+        <PlayerChatDock panelType={panelType} />
       </div>
     </div>
   );

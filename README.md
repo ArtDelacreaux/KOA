@@ -57,6 +57,7 @@ This creates:
 - `campaign_members`
 - `shared_docs`
 - `private_docs`
+- `chat_messages`
 - RPCs:
   - `claim_campaign_membership(p_campaign_id text)`
   - `seed_campaign_once(p_campaign_id text, p_docs jsonb)`
@@ -110,9 +111,10 @@ After owner/DM signs in:
 
 - Shared data: synced through `shared_docs`.
 - Private data: session notes only, synced through `private_docs`.
+- Party chat: synced through `chat_messages` with realtime inserts.
 - Offline writes: queued locally and retried automatically.
 - Conflict strategy: last write wins.
-- Realtime: Supabase Realtime subscriptions for shared/private docs.
+- Realtime: Supabase Realtime subscriptions for shared/private docs and chat.
 
 ## Notes
 
