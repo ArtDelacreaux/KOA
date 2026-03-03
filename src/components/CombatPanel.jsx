@@ -3042,14 +3042,13 @@ export default function CombatPanel({
                 </div>
               </div>
 
-              {selectedReadOnly && (
-                <div className={styles.lockedHint}>
-                  Read-only. You can only edit combatants assigned to you or custom combatants you own.
-                </div>
-              )}
-
               {editorMode === 'sheet' && (
                 <fieldset className={styles.editorFieldset} aria-disabled={selectedReadOnly}>
+                {selectedReadOnly && (
+                  <div className={styles.lockedHint}>
+                    Read-only. You can only edit combatants assigned to you or custom combatants you own.
+                  </div>
+                )}
                 <div className={`${styles.sheetView} koa-scrollbar-thin`}>
                   <div className={styles.sheetTopRow}>
                     <div className={styles.sheetHero}>
@@ -3351,6 +3350,11 @@ export default function CombatPanel({
 
               {editorMode !== 'sheet' && (
               <fieldset className={styles.editorFieldset} disabled={selectedReadOnly}>
+              {selectedReadOnly && (
+                <div className={styles.lockedHint}>
+                  Read-only. You can only edit combatants assigned to you or custom combatants you own.
+                </div>
+              )}
               <div className={`${styles.editorBody} koa-scrollbar-thin`}>
                 
                 {/* Appearance section */}
