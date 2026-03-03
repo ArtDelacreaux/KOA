@@ -1,0 +1,172 @@
+.authShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 20% 20%, #5a4324 0%, #1f1712 45%, #0e0b09 100%);
+  padding: 16px;
+}
+
+.card {
+  width: min(420px, 100%);
+  background: rgba(25, 20, 14, 0.92);
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  border-radius: 14px;
+  padding: 22px 20px;
+  color: #f4e6d1;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+  letter-spacing: 0.03em;
+}
+
+.copy {
+  margin: 0 0 14px;
+  color: rgba(244, 230, 209, 0.85);
+  line-height: 1.4;
+}
+
+.label {
+  display: block;
+  margin: 12px 0 5px;
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(244, 230, 209, 0.8);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  background: rgba(12, 10, 8, 0.9);
+  color: #f6eada;
+  border-radius: 8px;
+  padding: 10px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: rgba(230, 189, 125, 0.75);
+}
+
+.primaryBtn {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid rgba(232, 196, 143, 0.8);
+  background: linear-gradient(180deg, #cda86d, #9c7343);
+  color: #171108;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: rgba(244, 230, 209, 0.74);
+  font-size: 0.82rem;
+}
+
+.error {
+  margin: 10px 0 0;
+  color: #ffb5a8;
+  font-size: 0.86rem;
+}
+
+.authHud {
+  position: fixed;
+  top: 10px;
+  right: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(14, 11, 9, 0.86);
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #f4e6d1;
+  backdrop-filter: blur(4px);
+}
+
+.hudLabel {
+  font-size: 0.8rem;
+}
+
+.hudBtn,
+.hudBtnGhost {
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.hudBtn {
+  border: 1px solid rgba(232, 196, 143, 0.7);
+  background: rgba(212, 170, 111, 0.95);
+  color: #1c150d;
+}
+
+.hudBtnGhost {
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  background: rgba(36, 28, 20, 0.92);
+  color: #f4e6d1;
+}
+
+.hudForm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hudInput {
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  background: rgba(12, 10, 8, 0.9);
+  color: #f4e6d1;
+  border-radius: 999px;
+  padding: 5px 10px;
+  min-width: 160px;
+}
+
+.syncLabel {
+  font-size: 0.72rem;
+  opacity: 0.78;
+}
+
+.toast {
+  position: fixed;
+  top: 58px;
+  right: 12px;
+  z-index: 1000;
+  font-size: 0.75rem;
+  background: rgba(14, 11, 9, 0.9);
+  border: 1px solid rgba(230, 189, 125, 0.35);
+  border-radius: 8px;
+  color: #f4e6d1;
+  padding: 6px 10px;
+}
+
+@media (max-width: 760px) {
+  .authHud {
+    left: 10px;
+    right: 10px;
+    border-radius: 12px;
+    flex-wrap: wrap;
+  }
+
+  .hudForm {
+    width: 100%;
+  }
+
+  .hudInput {
+    flex: 1;
+    min-width: 0;
+  }
+}

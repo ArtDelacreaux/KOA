@@ -3,9 +3,11 @@ import ShellLayout from './ShellLayout';
 import styles from './CampaignHub.module.css';
 import owlbearLogo from '../assets/logo/owl.svg';
 import watchPartyLogo from '../assets/logo/watch.webp';
+import { useAuth } from '../auth/AuthContext';
 import { createId } from '../domain/ids';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import useLocalStorageState from '../lib/useLocalStorageState';
+import { repository } from '../repository';
 import {
   applySnapshot,
   buildMigrationSnapshot,
@@ -16,6 +18,8 @@ import {
 } from '../migration/backupService';
 
 export default function CampaignHub(props) {
+  const { enabled: authEnabled, isOwner } = useAuth();
+
   const {
     panelType,
     cinematicNav,
@@ -109,19 +113,29 @@ export default function CampaignHub(props) {
     watchUrl: 'https://w2g.tv/en/room/?room_id=h2rq2xmdrlzdlyolcu',
     owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul',
     recap: '',
-    notes: '',
     timerRunning: false,
     elapsedMs: 0,
     lastTick: Date.now(),
   };
 
   const [launcherState, setLauncherState] = useLocalStorageState(STORAGE_KEYS.launcher, defaultLauncherState);
+  const [launcherNotes, setLauncherNotes] = useLocalStorageState(STORAGE_KEYS.launcherNotes, '');
 
   useEffect(() => {
-    setLauncherState((prev) => ({
-      ...defaultLauncherState,
-      ...(prev && typeof prev === 'object' ? prev : {}),
-    }));
+    setLauncherState((prev) => {
+      const source = prev && typeof prev === 'object' ? prev : {};
+      const legacyNotes = typeof source.notes === 'string' ? source.notes : '';
+      if (legacyNotes && !String(launcherNotes || '').trim()) {
+        setLauncherNotes(legacyNotes);
+      }
+
+      const normalized = {
+        ...defaultLauncherState,
+        ...source,
+      };
+      if (Object.prototype.hasOwnProperty.call(normalized, 'notes')) delete normalized.notes;
+      return normalized;
+    });
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -140,6 +154,13 @@ export default function CampaignHub(props) {
   const backupFileRef = useRef(null);
   const [backupStatus, setBackupStatus] = useState('');
   const [backupBusy, setBackupBusy] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
+
+  const cloudStatus = repository.getCloudStatus();
+  const usingSupabase = authEnabled && repository.adapterName === 'supabase';
+  const canSeedCloud = usingSupabase && isOwner;
+  const cloudPendingWrites = Number(cloudStatus?.queueSize || 0);
+  const cloudError = String(cloudStatus?.lastSyncError || '');
 
   const exportBackup = () => {
     const snapshot = buildMigrationSnapshot();
@@ -182,6 +203,27 @@ export default function CampaignHub(props) {
     } finally {
       setBackupBusy(false);
       if (backupFileRef.current) backupFileRef.current.value = '';
+    }
+  };
+
+  const seedCloudFromThisDevice = async () => {
+    if (!canSeedCloud || seedBusy) return;
+    const ok = confirm('Seed shared cloud state from this device now? This should be done once by the campaign owner.');
+    if (!ok) return;
+
+    setSeedBusy(true);
+    setBackupStatus('');
+    try {
+      const snapshot = buildMigrationSnapshot();
+      const summary = summarizeSnapshot(snapshot);
+      await repository.seedCampaignFromSnapshot(snapshot);
+      setBackupStatus(`Cloud seed complete (${formatSnapshotSummary(summary)}).`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cloud seed failed.';
+      setBackupStatus(msg);
+      alert(msg);
+    } finally {
+      setSeedBusy(false);
     }
   };
 
@@ -443,11 +485,11 @@ export default function CampaignHub(props) {
                 <div className={styles.softCard}>
                   <div>
                     <div className={styles.blockTitle}>Session Notes</div>
-                    <div className={styles.blockSub}>Saved locally.</div>
+                    <div className={styles.blockSub}>Saved privately to your account.</div>
                   </div>
                   <textarea
-                    value={launcherState.notes || ''}
-                    onChange={(e) => setLauncherState((s) => ({ ...s, notes: e.target.value }))}
+                    value={launcherNotes || ''}
+                    onChange={(e) => setLauncherNotes(e.target.value)}
                     placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
                     rows={10}
                     className={`${styles.inputBase} ${styles.textarea}`}
@@ -456,14 +498,14 @@ export default function CampaignHub(props) {
                 <div className={styles.softCard}>
                   <div>
                     <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                    <div className={styles.blockSub}>Download a backup now so future Supabase migration is one-click.</div>
+                    <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner.</div>
                   </div>
                   <div className={styles.toolActions}>
                     <button
                       className={smallBtnClass('gold')}
                       onMouseEnter={smallBtnHover}
                       onClick={exportBackup}
-                      disabled={backupBusy}
+                      disabled={backupBusy || seedBusy}
                     >
                       Download Backup
                     </button>
@@ -471,10 +513,20 @@ export default function CampaignHub(props) {
                       className={smallBtnClass('ghost')}
                       onMouseEnter={smallBtnHover}
                       onClick={openRestorePicker}
-                      disabled={backupBusy}
+                      disabled={backupBusy || seedBusy}
                     >
                       Restore Backup
                     </button>
+                    {canSeedCloud && (
+                      <button
+                        className={smallBtnClass('gold')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={seedCloudFromThisDevice}
+                        disabled={backupBusy || seedBusy}
+                      >
+                        {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                      </button>
+                    )}
                   </div>
                   <input
                     ref={backupFileRef}
@@ -485,7 +537,17 @@ export default function CampaignHub(props) {
                   />
                   <div className={styles.backupHint}>
                     Each person should download their own backup from their own device/browser profile.
+                    {usingSupabase && (
+                      <>
+                        {' '}
+                        Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
+                      </>
+                    )}
+                    {usingSupabase && !canSeedCloud && (
+                      <> Cloud seed is owner-only.</>
+                    )}
                   </div>
+                  {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
                   {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
                 </div>
               </div>

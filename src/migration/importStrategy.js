@@ -480,9 +480,16 @@ export function buildSupabaseImportPlan(snapshot, options = {}) {
   const relationships = dedupeRelationships(payload.relationships);
   const combat = dedupeCombat(payload.combat);
 
+  const launcherPayload = asObject(payload.launcher);
+  const legacyLauncherNotes = cleanText(launcherPayload.notes);
+  if (Object.prototype.hasOwnProperty.call(launcherPayload, 'notes')) {
+    delete launcherPayload.notes;
+  }
+  const launcherNotes = cleanText(payload.launcherNotes || legacyLauncherNotes);
+
   const launcherRow = {
     upsert_key: 'launcher_state:party',
-    payload: asObject(payload.launcher),
+    payload: launcherPayload,
   };
   const menuMetaRow = {
     upsert_key: 'menu_meta:party',
@@ -492,6 +499,9 @@ export function buildSupabaseImportPlan(snapshot, options = {}) {
         characters: cleanText(payload.menuNoteCharacters),
         video: cleanText(payload.menuNoteVideo),
         lore: cleanText(payload.menuNoteLore),
+      },
+      privateNotes: {
+        session: launcherNotes,
       },
     },
   };

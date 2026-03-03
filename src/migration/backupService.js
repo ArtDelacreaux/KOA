@@ -7,14 +7,27 @@ function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+function stripLauncherPrivateFields(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const out = { ...value };
+  if (hasOwn(out, 'notes')) delete out.notes;
+  return out;
+}
+
 function readValueBySpec(spec) {
   if (spec.type === 'text') return repository.readText(spec.key, spec.fallback ?? '');
-  return repository.readJson(spec.key, spec.fallback);
+  const value = repository.readJson(spec.key, spec.fallback);
+  if (spec.id === 'launcher') return stripLauncherPrivateFields(value);
+  return value;
 }
 
 function writeValueBySpec(spec, value) {
   if (spec.type === 'text') {
     repository.writeText(spec.key, typeof value === 'string' ? value : '');
+    return;
+  }
+  if (spec.id === 'launcher') {
+    repository.writeJson(spec.key, stripLauncherPrivateFields(value ?? spec.fallback));
     return;
   }
   repository.writeJson(spec.key, value ?? spec.fallback);
@@ -76,7 +89,7 @@ export function summarizeSnapshot(snapshot) {
     characterNpcBuckets: countKeys(payload.charNpcs),
     bagItems: countArray(bag.items),
     hasRecap: !!String(launcher.recap || '').trim(),
-    hasNotes: !!String(launcher.notes || '').trim(),
+    hasNotes: !!String(payload.launcherNotes || launcher.notes || '').trim(),
     hasCampaignBrief: !!String(menuBrief.location || menuBrief.objective || '').trim(),
   };
 }
@@ -154,8 +167,13 @@ export async function parseSnapshotFile(file) {
 
 export function applySnapshot(snapshot) {
   const payload = toSafeObject(snapshot?.payload);
+  const legacyLauncherNotes = String(toSafeObject(payload.launcher).notes || '');
+
   MIGRATION_KEY_SPECS.forEach((spec) => {
-    const incoming = hasOwn(payload, spec.id) ? payload[spec.id] : spec.fallback;
+    let incoming = hasOwn(payload, spec.id) ? payload[spec.id] : spec.fallback;
+    if (spec.id === 'launcherNotes' && !hasOwn(payload, spec.id) && legacyLauncherNotes) {
+      incoming = legacyLauncherNotes;
+    }
     writeValueBySpec(spec, incoming);
   });
 

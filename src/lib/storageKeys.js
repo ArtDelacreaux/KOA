@@ -3,6 +3,7 @@ export const STORAGE_KEYS = {
   quests: 'koa:quests:v2',
   relationships: 'koa:relationships:v1',
   launcher: 'koa:launcher:v1',
+  launcherNotes: 'koa:launcher:notes:v1',
   bag: 'koa:bagofholding:v1',
   worldNpcs: 'koa:worldnpcs:v1',
   worldNpcDeepLink: 'koa:worldnpcs:deeplink:v1',

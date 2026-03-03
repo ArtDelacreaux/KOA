@@ -1,12 +1,13 @@
 import { STORAGE_KEYS, menuNoteKey } from '../lib/storageKeys';
 
-export const MIGRATION_SCHEMA_VERSION = 1;
+export const MIGRATION_SCHEMA_VERSION = 2;
 
 export const MIGRATION_KEY_SPECS = [
   { id: 'characters', key: STORAGE_KEYS.characters, type: 'json', fallback: [] },
   { id: 'quests', key: STORAGE_KEYS.quests, type: 'json', fallback: [] },
   { id: 'relationships', key: STORAGE_KEYS.relationships, type: 'json', fallback: {} },
   { id: 'launcher', key: STORAGE_KEYS.launcher, type: 'json', fallback: {} },
+  { id: 'launcherNotes', key: STORAGE_KEYS.launcherNotes, type: 'text', fallback: '' },
   { id: 'bag', key: STORAGE_KEYS.bag, type: 'json', fallback: { currency: {}, items: [] } },
   { id: 'worldNpcs', key: STORAGE_KEYS.worldNpcs, type: 'json', fallback: [] },
   { id: 'charNpcs', key: STORAGE_KEYS.charNpcs, type: 'json', fallback: {} },
