@@ -402,6 +402,7 @@ export default function CharacterBook({
   }, [worldNpcTotalPages]);
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [connectionWebModalOpen, setConnectionWebModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
   const [worldNpcDraft, setWorldNpcDraft] = useState({
@@ -716,6 +717,7 @@ export default function CharacterBook({
       worldNpcCropOpen ||
       charNpcModalOpen ||
       worldNpcModalOpen ||
+      assignmentModalOpen ||
       connectionWebModalOpen;
     if (!anyModalOpen) return;
 
@@ -734,6 +736,10 @@ export default function CharacterBook({
         setWorldNpcModalOpen(false);
         return;
       }
+      if (assignmentModalOpen) {
+        setAssignmentModalOpen(false);
+        return;
+      }
       if (connectionWebModalOpen) {
         setConnectionWebModalOpen(false);
       }
@@ -741,7 +747,7 @@ export default function CharacterBook({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, connectionWebModalOpen]);
+  }, [worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, assignmentModalOpen, connectionWebModalOpen]);
 
   const openAddCharNpc = () => {
     if (!selectedChar || !selectedCharCanEdit) return;
@@ -1251,61 +1257,69 @@ export default function CharacterBook({
     [canControlCharacter, selectedChar]
   );
 
-  const selectedCharController = useMemo(
-    () => (selectedChar ? getCharacterController(selectedChar) : null),
-    [selectedChar, getCharacterController, characterControllers]
+  const formatControllerLabel = (assignment) => (
+    assignment?.ownerUsername
+    || assignment?.ownerEmail
+    || assignment?.ownerUserId
+    || 'Unassigned'
   );
 
-  const selectedCharControllerLabel = useMemo(() => {
-    if (!selectedCharController) return 'Unassigned';
-    return (
-      selectedCharController.ownerUsername
-      || selectedCharController.ownerEmail
-      || selectedCharController.ownerUserId
-      || 'Unassigned'
-    );
-  }, [selectedCharController]);
-
-  const hasSelectedCharController = !!(
-    selectedCharController?.ownerUserId
-    || selectedCharController?.ownerEmail
-    || selectedCharController?.ownerUsername
-  );
-
-  const promptAssignCharacterController = () => {
-    if (!selectedChar || !canAssignCharacterController) return;
-    const currentEmail = String(selectedCharController?.ownerEmail || '');
+  const promptAssignControllerForCharacter = (character) => {
+    if (!character || !canAssignCharacterController) return;
+    const currentAssignment = getCharacterController(character);
+    const currentEmail = String(currentAssignment?.ownerEmail || '');
     const entry = window.prompt(
-      `Assign controller email for ${selectedChar.name}. Leave blank to clear assignment.`,
+      `Assign controller email for ${character.name}. Leave blank to clear assignment.`,
       currentEmail
     );
     if (entry == null) return;
 
     const nextEmail = String(entry || '').trim().toLowerCase();
     if (!nextEmail) {
-      clearCharacterController(selectedChar);
+      clearCharacterController(character);
       return;
     }
 
     const matchesViewer = nextEmail === String(viewerIdentity?.email || '').trim().toLowerCase();
-    assignCharacterController(selectedChar, {
+    assignCharacterController(character, {
       ownerUserId: matchesViewer ? String(viewerIdentity?.userId || '') : '',
       ownerEmail: nextEmail,
       ownerUsername: matchesViewer ? String(viewerIdentity?.username || '') : '',
     });
   };
 
-  const assignSelectedCharacterToViewer = () => {
-    if (!selectedChar || !canAssignCharacterController) return;
+  const assignCharacterToViewer = (character) => {
+    if (!character || !canAssignCharacterController) return;
     const email = String(viewerIdentity?.email || '').trim().toLowerCase();
     if (!email) return;
 
-    assignCharacterController(selectedChar, {
+    assignCharacterController(character, {
       ownerUserId: String(viewerIdentity?.userId || ''),
       ownerEmail: email,
       ownerUsername: String(viewerIdentity?.username || ''),
     });
   };
+
+  const assignmentRows = useMemo(
+    () => (characters || []).map((character) => {
+      const assignment = getCharacterController(character);
+      const hasAssignment = !!(
+        assignment
+        && (
+          assignment.ownerUserId
+          || assignment.ownerEmail
+          || assignment.ownerUsername
+        )
+      );
+      return {
+        character,
+        assignment,
+        hasAssignment,
+        label: formatControllerLabel(assignment),
+      };
+    }),
+    [characters, characterControllers, getCharacterController]
+  );
 
   const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
   const showRelationsTab = !!selectedChar && (charView === 'relations' || charView === 'npc' || charView === 'detail');
@@ -1411,6 +1425,19 @@ export default function CharacterBook({
                 </button>
               )}
 
+              {canAssignCharacterController && (
+                <button
+                  type="button"
+                  className={`${styles.tabPill} ${assignmentModalOpen ? styles.tabPillActive : styles.tabPillInactive}`}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={navClick}
+                  onClick={() => setAssignmentModalOpen(true)}
+                >
+                  Assignments
+                </button>
+              )}
+
               {!!selectedChar && (charView === 'relations' || charView === 'npc') && (
                 <button
                   type="button"
@@ -1432,30 +1459,21 @@ export default function CharacterBook({
             {/* GRID */}
             {charView === 'grid' && (
               <div className={styles.charGrid}>
-                {characters.map((char) => {
-                  const assigned = getCharacterController(char);
-                  const assignedLabel =
-                    assigned?.ownerUsername
-                    || assigned?.ownerEmail
-                    || assigned?.ownerUserId
-                    || 'Unassigned';
-                  return (
-                    <div
-                      key={char.name}
-                      className={`${styles.charGridCard} ${styles.cardHover}`}
-                      onMouseDown={navClick}
-                      onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
-                      onMouseEnter={() => setHoveredCharName(char.name)}
-                      onMouseLeave={() => setHoveredCharName(null)}
-                    >
-                      <img src={getCharPortrait(char)} alt={char.name}
-                        className={styles.charCardImage} />
-                      <div className={styles.charCardName}>{char.name}</div>
-                      <div className={styles.charCardSynopsis}>{char.synopsis}</div>
-                      <div className={styles.charCardController}>Controller: {assignedLabel}</div>
-                    </div>
-                  );
-                })}
+                {characters.map((char) => (
+                  <div
+                    key={char.name}
+                    className={`${styles.charGridCard} ${styles.cardHover}`}
+                    onMouseDown={navClick}
+                    onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
+                    onMouseEnter={() => setHoveredCharName(char.name)}
+                    onMouseLeave={() => setHoveredCharName(null)}
+                  >
+                    <img src={getCharPortrait(char)} alt={char.name}
+                      className={styles.charCardImage} />
+                    <div className={styles.charCardName}>{char.name}</div>
+                    <div className={styles.charCardSynopsis}>{char.synopsis}</div>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1652,54 +1670,6 @@ export default function CharacterBook({
                   <div className={styles.detailHeader}>
                     <div className={styles.detailName}>{selectedChar.name}</div>
                     <div className={styles.detailSynopsis}>{selectedChar.synopsis}</div>
-                    <div className={styles.controllerInfoRow}>
-                      <div className={styles.controllerInfoText}>
-                        Controller: {selectedCharControllerLabel}
-                      </div>
-                      {canAssignCharacterController && (
-                        <div className={styles.controllerInfoActions}>
-                          <button
-                            type="button"
-                            className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
-                            onMouseEnter={tinyBtnHover}
-                            onMouseLeave={tinyBtnLeave}
-                            onMouseDown={navClick}
-                            onClick={promptAssignCharacterController}
-                          >
-                            Assign
-                          </button>
-                          {!!viewerIdentity?.email && (
-                            <button
-                              type="button"
-                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
-                              onMouseEnter={tinyBtnHover}
-                              onMouseLeave={tinyBtnLeave}
-                              onMouseDown={navClick}
-                              onClick={assignSelectedCharacterToViewer}
-                            >
-                              Assign To Me
-                            </button>
-                          )}
-                          {hasSelectedCharController && (
-                            <button
-                              type="button"
-                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
-                              onMouseEnter={tinyBtnHover}
-                              onMouseLeave={tinyBtnLeave}
-                              onMouseDown={navClick}
-                              onClick={() => clearCharacterController(selectedChar)}
-                            >
-                              Clear
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    {!selectedCharCanEdit && (
-                      <div className={styles.controllerLockNote}>
-                        Read-only for this account. Only the assigned controller or DM can edit this character's relationship data.
-                      </div>
-                    )}
                     <div className={styles.divider} />
                     <div className={styles.detailStatsGrid}>
                       {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
@@ -2010,6 +1980,79 @@ export default function CharacterBook({
             )}
           </div>
         </div>
+
+        {/* ASSIGNMENTS MODAL */}
+        {assignmentModalOpen && canAssignCharacterController && (
+          <div className={`${styles.modalOverlay} ${styles.modalZ33}`}>
+            <div className={`${styles.modalShell} ${styles.modalShellAssign}`}>
+              <div className={styles.modalHeader}>
+                <div>
+                  <div className={styles.modalTitle17}>Character Assignments</div>
+                  <div className={styles.modalSub11}>Manage which account can control each character.</div>
+                </div>
+                <button
+                  className={`${styles.backButton} ${styles.backButtonSm}`}
+                  onMouseEnter={btnHover}
+                  onMouseLeave={btnLeave}
+                  onMouseDown={btnDown}
+                  onClick={() => setAssignmentModalOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className={styles.modalBodyPad}>
+                <div className={styles.assignmentList}>
+                  {assignmentRows.map((row) => {
+                    return (
+                      <div key={row.character.name} className={styles.assignmentRow}>
+                        <div className={styles.assignmentMain}>
+                          <div className={styles.assignmentName}>{row.character.name}</div>
+                          <div className={styles.assignmentControllerText}>Controller: {row.label}</div>
+                        </div>
+                        <div className={styles.assignmentActions}>
+                          <button
+                            type="button"
+                            className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                            onMouseEnter={tinyBtnHover}
+                            onMouseLeave={tinyBtnLeave}
+                            onMouseDown={navClick}
+                            onClick={() => promptAssignControllerForCharacter(row.character)}
+                          >
+                            Assign
+                          </button>
+                          {!!viewerIdentity?.email && (
+                            <button
+                              type="button"
+                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                              onMouseEnter={tinyBtnHover}
+                              onMouseLeave={tinyBtnLeave}
+                              onMouseDown={navClick}
+                              onClick={() => assignCharacterToViewer(row.character)}
+                            >
+                              Assign To Me
+                            </button>
+                          )}
+                          {row.hasAssignment && (
+                            <button
+                              type="button"
+                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                              onMouseEnter={tinyBtnHover}
+                              onMouseLeave={tinyBtnLeave}
+                              onMouseDown={navClick}
+                              onClick={() => clearCharacterController(row.character)}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CONNECTION WEB MODAL */}
         {connectionWebModalOpen && (
