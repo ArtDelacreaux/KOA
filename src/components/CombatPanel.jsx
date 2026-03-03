@@ -1697,6 +1697,20 @@ export default function CombatPanel({
   }, []);
 
   useEffect(() => {
+    const id = window.setInterval(() => {
+      const incoming = normalize(loadState()) || defaultEncounter();
+      setEncounter((prev) => {
+        try {
+          if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
+        } catch {}
+        suppressNextPersistRef.current = true;
+        return incoming;
+      });
+    }, 1200);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     if (!hydrated.current) { hydrated.current = true; return; }
     if (suppressNextPersistRef.current) {
       suppressNextPersistRef.current = false;

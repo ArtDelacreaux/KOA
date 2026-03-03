@@ -6,7 +6,8 @@ import { createLocalAdapter } from './localAdapter';
 const QUEUE_STORAGE_KEY = 'koa:supabase:queue:v1';
 const RETRY_BASE_MS = 900;
 const RETRY_MAX_MS = 15000;
-const REMOTE_POLL_MS = 5000;
+// Keep remote state snappy even when realtime subscriptions are unavailable.
+const REMOTE_POLL_MS = 1000;
 
 const PRIVATE_KEYS = new Set([STORAGE_KEYS.launcherNotes].filter(Boolean));
 const LOCAL_ONLY_KEYS = new Set([STORAGE_KEYS.worldNpcDeepLink].filter(Boolean));
