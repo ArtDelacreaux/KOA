@@ -83,6 +83,11 @@ export default function TavernMenu() {
   const [questDraft, setQuestDraft] = useState({
     title: '',
     type: 'Side',
+    board: 'party',
+    assignedUserId: '',
+    assignedEmail: '',
+    assignedUsername: '',
+    assignedLabel: '',
     giver: '',
     location: '',
     description: '',

@@ -334,6 +334,38 @@
   gap: 14px;
 }
 
+.questBoardStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.questBoardSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.questBoardHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.questBoardTitle {
+  font-size: 18px;
+  font-weight: 950;
+  color: rgba(255, 245, 220, 0.96);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9), 0 1px 4px rgba(0, 0, 0, 1);
+}
+
+.questBoardSub {
+  font-weight: 550;
+  font-size: 12px;
+  opacity: 0.84;
+  line-height: 1.5;
+}
+
 .timerValue {
   margin-top: 12px;
   font-family: "Courier New", monospace;
@@ -880,6 +912,13 @@
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.modalHint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  opacity: 0.82;
 }
 
 @media (max-width: 1040px) {

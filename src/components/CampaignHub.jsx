@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { createId } from '../domain/ids';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import useLocalStorageState from '../lib/useLocalStorageState';
+import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import { repository } from '../repository';
 import {
   applySnapshot,
@@ -17,8 +18,47 @@ import {
   summarizeSnapshot,
 } from '../migration/backupService';
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeText(value) {
+  return String(value ?? '').trim();
+}
+
+function questBoardType(quest) {
+  const explicit = normalizeText(quest?.board).toLowerCase();
+  if (explicit === 'personal') return 'personal';
+  if (explicit === 'party') return 'party';
+
+  if (normalizeText(quest?.assignedUserId) || normalizeEmail(quest?.assignedEmail)) {
+    return 'personal';
+  }
+  return 'party';
+}
+
+function questStatusType(quest) {
+  return normalizeText(quest?.status).toLowerCase() === 'completed' ? 'completed' : 'active';
+}
+
+function questAssigneeLabel(quest) {
+  return normalizeText(quest?.assignedLabel || quest?.assignedUsername || quest?.assignedEmail || 'Unassigned');
+}
+
+function emailLocalPart(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return '';
+  return normalized.split('@')[0] || '';
+}
+
 export default function CampaignHub(props) {
-  const { enabled: authEnabled, canManageCampaign, canWriteData } = useAuth();
+  const {
+    enabled: authEnabled,
+    canManageCampaign,
+    canWriteData,
+    session,
+    profile,
+  } = useAuth();
 
   const {
     panelType,
@@ -72,39 +112,285 @@ export default function CampaignHub(props) {
   /* =========================
      Quests helpers
   ========================= */
-  const activeQuests    = useMemo(() => (quests || []).filter((q) => q.status === 'active'),    [quests]);
-  const completedQuests = useMemo(() => (quests || []).filter((q) => q.status === 'completed'), [quests]);
+  const currentUserId = normalizeText(session?.user?.id);
+  const currentUserEmail = normalizeEmail(session?.user?.email);
+  const currentUsername = normalizeText(profile?.username).toLowerCase();
+  const canManageQuests = authEnabled ? (canManageCampaign && canEditCampaignData) : canEditCampaignData;
+  const managerOnlyQuestMessage = 'Only owner/DM accounts can create and manage quests.';
+  const [assignablePlayers, setAssignablePlayers] = useState([]);
+  const [playersLoading, setPlayersLoading] = useState(false);
+  const [playersError, setPlayersError] = useState('');
+
+  useEffect(() => {
+    if (!authEnabled || !canManageCampaign) {
+      setAssignablePlayers([]);
+      setPlayersLoading(false);
+      setPlayersError('');
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      setAssignablePlayers([]);
+      setPlayersLoading(false);
+      setPlayersError('Unable to load campaign players.');
+      return;
+    }
+
+    let cancelled = false;
+    const loadPlayers = async () => {
+      setPlayersLoading(true);
+      setPlayersError('');
+      try {
+        const { data, error } = await supabase
+          .from('campaign_members')
+          .select('user_id,email,role,joined_at')
+          .eq('campaign_id', campaignId)
+          .order('joined_at', { ascending: true });
+
+        if (error) throw error;
+
+        const memberRows = (Array.isArray(data) ? data : [])
+          .filter((row) => normalizeText(row?.role || 'member').toLowerCase() === 'member');
+        const memberUserIds = memberRows
+          .map((row) => normalizeText(row?.user_id))
+          .filter(Boolean);
+
+        const usernameByUserId = new Map();
+        if (memberUserIds.length > 0) {
+          const { data: profileRows, error: profilesError } = await supabase
+            .from('profiles')
+            .select('user_id,username')
+            .in('user_id', memberUserIds);
+
+          if (!profilesError && Array.isArray(profileRows)) {
+            profileRows.forEach((row) => {
+              const userId = normalizeText(row?.user_id);
+              const username = normalizeText(row?.username);
+              if (userId && username) usernameByUserId.set(userId, username);
+            });
+          }
+        }
+
+        const seen = new Set();
+        const nextPlayers = memberRows
+          .map((row, idx) => {
+            const userId = normalizeText(row?.user_id);
+            const email = normalizeEmail(row?.email);
+            if (!userId && !email) return null;
+            const key = userId || email;
+            if (seen.has(key)) return null;
+            seen.add(key);
+
+            const username = normalizeText(usernameByUserId.get(userId));
+            const fallbackName = emailLocalPart(email);
+            const label = username || fallbackName || `Player ${idx + 1}`;
+            return { userId, email, username, label };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.label.localeCompare(b.label));
+
+        if (!cancelled) {
+          setAssignablePlayers(nextPlayers);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err instanceof Error ? err.message : 'Failed to load player assignments.';
+          setPlayersError(msg);
+          setAssignablePlayers([]);
+        }
+      } finally {
+        if (!cancelled) setPlayersLoading(false);
+      }
+    };
+
+    loadPlayers();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, canManageCampaign]);
+
+  const canViewPersonalQuest = useMemo(
+    () => (q) => {
+      if (!authEnabled || canManageCampaign) return true;
+      const assignedUserId = normalizeText(q?.assignedUserId);
+      const assignedEmail = normalizeEmail(q?.assignedEmail);
+      const assignedUsername = normalizeText(q?.assignedUsername).toLowerCase();
+
+      if (assignedUserId && currentUserId && assignedUserId === currentUserId) return true;
+      if (assignedEmail && currentUserEmail && assignedEmail === currentUserEmail) return true;
+      if (assignedUsername && currentUsername && assignedUsername === currentUsername) return true;
+      return false;
+    },
+    [authEnabled, canManageCampaign, currentUserEmail, currentUserId, currentUsername]
+  );
+
+  const partyQuests = useMemo(
+    () => (quests || []).filter((q) => questBoardType(q) === 'party'),
+    [quests]
+  );
+  const visiblePersonalQuests = useMemo(
+    () => (quests || []).filter((q) => questBoardType(q) === 'personal' && canViewPersonalQuest(q)),
+    [canViewPersonalQuest, quests]
+  );
+
+  const activePartyQuests = useMemo(
+    () => partyQuests.filter((q) => questStatusType(q) === 'active'),
+    [partyQuests]
+  );
+  const completedPartyQuests = useMemo(
+    () => partyQuests.filter((q) => questStatusType(q) === 'completed'),
+    [partyQuests]
+  );
+  const activePersonalQuests = useMemo(
+    () => visiblePersonalQuests.filter((q) => questStatusType(q) === 'active'),
+    [visiblePersonalQuests]
+  );
+  const completedPersonalQuests = useMemo(
+    () => visiblePersonalQuests.filter((q) => questStatusType(q) === 'completed'),
+    [visiblePersonalQuests]
+  );
 
   const newId = () => createId('quest');
 
+  const ensureQuestManagePermission = () => {
+    if (canManageQuests) return true;
+    alert(canEditCampaignData ? managerOnlyQuestMessage : readOnlyStatusMessage);
+    return false;
+  };
+
   const openAddQuest = () => {
+    if (!ensureQuestManagePermission()) return;
     setEditingQuestId(null);
-    setQuestDraft({ title: '', type: 'Side', giver: '', location: '', description: '' });
+    setQuestDraft({
+      title: '',
+      type: 'Side',
+      board: 'party',
+      assignedUserId: '',
+      assignedEmail: '',
+      assignedUsername: '',
+      assignedLabel: '',
+      giver: '',
+      location: '',
+      description: '',
+    });
     setQuestModalOpen(true);
   };
 
   const openEditQuest = (q) => {
+    if (!ensureQuestManagePermission()) return;
     setEditingQuestId(q.id);
-    setQuestDraft({ title: q.title || '', type: q.type || 'Side', giver: q.giver || '', location: q.location || '', description: q.description || '' });
+    setQuestDraft({
+      title: q.title || '',
+      type: q.type || 'Side',
+      board: questBoardType(q),
+      assignedUserId: normalizeText(q.assignedUserId),
+      assignedEmail: normalizeEmail(q.assignedEmail),
+      assignedUsername: normalizeText(q.assignedUsername),
+      assignedLabel: questAssigneeLabel(q),
+      giver: q.giver || '',
+      location: q.location || '',
+      description: q.description || '',
+    });
     setQuestModalOpen(true);
   };
 
   const saveQuest = () => {
+    if (!ensureQuestManagePermission()) return;
+
     const title = (questDraft.title || '').trim();
     if (!title) { alert('Quest needs a title.'); return; }
+
+    const board = questBoardType(questDraft);
+    let assignedUserId = '';
+    let assignedEmail = '';
+    let assignedUsername = '';
+    let assignedLabel = '';
+    if (board === 'personal') {
+      assignedUserId = normalizeText(questDraft.assignedUserId);
+      assignedEmail = normalizeEmail(questDraft.assignedEmail);
+      assignedUsername = normalizeText(questDraft.assignedUsername);
+      const selected = assignablePlayers.find((player) => {
+        const playerValue = player.userId || player.email;
+        return playerValue && playerValue === (assignedUserId || assignedEmail);
+      });
+      if (selected) {
+        assignedUserId = selected.userId;
+        assignedEmail = selected.email;
+        assignedUsername = normalizeText(selected.username || selected.label);
+        assignedLabel = normalizeText(selected.username || selected.label);
+      } else {
+        assignedUsername = normalizeText(questDraft.assignedUsername);
+        assignedLabel = normalizeText(questDraft.assignedLabel);
+      }
+
+      if (!assignedUserId && !assignedEmail) {
+        alert('Personal quests must be assigned to a player.');
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const questPayload = {
+      title,
+      type: questDraft.type || 'Side',
+      board,
+      assignedUserId: board === 'personal' ? assignedUserId : '',
+      assignedEmail: board === 'personal' ? assignedEmail : '',
+      assignedUsername: board === 'personal' ? assignedUsername : '',
+      assignedLabel: board === 'personal' ? assignedLabel : '',
+      giver: (questDraft.giver || '').trim(),
+      location: (questDraft.location || '').trim(),
+      description: (questDraft.description || '').trim(),
+      updatedAt: now,
+    };
+
     if (!editingQuestId) {
-      const q = { id: newId(), title, type: questDraft.type || 'Side', giver: (questDraft.giver || '').trim(), location: (questDraft.location || '').trim(), description: (questDraft.description || '').trim(), status: 'active', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const q = {
+        id: newId(),
+        ...questPayload,
+        status: 'active',
+        createdAt: now,
+      };
       setQuests((prev) => [q, ...(prev || [])]);
     } else {
-      setQuests((prev) => (prev || []).map((q) => q.id === editingQuestId ? { ...q, title, type: questDraft.type || q.type, giver: (questDraft.giver || '').trim(), location: (questDraft.location || '').trim(), description: (questDraft.description || '').trim(), updatedAt: new Date().toISOString() } : q));
+      setQuests((prev) => (
+        prev || []
+      ).map((q) => (
+        q.id === editingQuestId
+          ? { ...q, ...questPayload }
+          : q
+      )));
     }
+
     setQuestModalOpen(false);
     setEditingQuestId(null);
   };
 
-  const deleteQuest   = (id) => { if (!confirm('Delete this quest?')) return; setQuests((prev) => (prev || []).filter((q) => q.id !== id)); };
-  const completeQuest = (id) => { setQuests((prev) => (prev || []).map((q) => (q.id === id ? { ...q, status: 'completed', updatedAt: new Date().toISOString() } : q))); };
-  const reopenQuest   = (id) => { setQuests((prev) => (prev || []).map((q) => (q.id === id ? { ...q, status: 'active',    updatedAt: new Date().toISOString() } : q))); };
+  const deleteQuest = (id) => {
+    if (!ensureQuestManagePermission()) return;
+    if (!confirm('Delete this quest?')) return;
+    setQuests((prev) => (prev || []).filter((q) => q.id !== id));
+  };
+
+  const completeQuest = (id) => {
+    if (!ensureQuestManagePermission()) return;
+    setQuests((prev) => (
+      prev || []
+    ).map((q) => (
+      q.id === id ? { ...q, status: 'completed', updatedAt: new Date().toISOString() } : q
+    )));
+  };
+
+  const reopenQuest = (id) => {
+    if (!ensureQuestManagePermission()) return;
+    setQuests((prev) => (
+      prev || []
+    ).map((q) => (
+      q.id === id ? { ...q, status: 'active', updatedAt: new Date().toISOString() } : q
+    )));
+  };
 
   useEffect(() => {
     if (!questModalOpen) return;
@@ -361,6 +647,10 @@ export default function CampaignHub(props) {
     else items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return items;
   }, [bag.items, invQuery, invCat, invRar, invSort]);
+  const selectedQuestAssigneeValue = normalizeText(questDraft.assignedUserId || questDraft.assignedEmail);
+  const selectedQuestAssigneeMissing =
+    !!selectedQuestAssigneeValue &&
+    !assignablePlayers.some((player) => (player.userId || player.email) === selectedQuestAssigneeValue);
 
   /* =========================
      RENDER
@@ -390,7 +680,7 @@ export default function CampaignHub(props) {
 
         <div className={styles.bodyContent}>
           <div className={styles.actionRow}>
-            {(campaignTab === 'quests' || campaignTab === 'inventory') && (
+            {((campaignTab === 'quests' && canManageQuests) || campaignTab === 'inventory') && (
               <button
                 type="button"
                 onMouseEnter={smallBtnHover}
@@ -576,83 +866,213 @@ export default function CampaignHub(props) {
 
           {/* ========== QUEST BOARD ========== */}
           {campaignTab === 'quests' && (
-            <div className={styles.questGrid}>
-              <div>
-                <div className={styles.sectionHeader}>
-                  <div className={styles.sectionHeaderTitle}>Active Quests</div>
-                  <div className={styles.sectionHeaderCount}>{activeQuests.length} active</div>
+            <div className={styles.questBoardStack}>
+              {!canManageQuests && (
+                <div className={`${styles.softCard} ${styles.softCardMuted}`}>
+                  <div className={styles.blockTitle}>Quest Board is read-only.</div>
+                  <div className={styles.bodyCopy}>Only owner/DM accounts can create or manage quests.</div>
                 </div>
-                <div className={styles.listCol}>
-                  {activeQuests.length === 0 ? (
-                    <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                      <div className={styles.blockTitle}>No active quests.</div>
-                      <div className={styles.bodyCopy}>Hit <strong>+ Add Quest</strong> to start tracking hooks.</div>
+              )}
+
+              <div className={styles.questBoardSection}>
+                <div className={styles.questBoardHeader}>
+                  <div className={styles.questBoardTitle}>Party Quest Board</div>
+                  <div className={styles.questBoardSub}>Shared with the whole party.</div>
+                </div>
+                <div className={styles.questGrid}>
+                  <div>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionHeaderTitle}>Active Quests</div>
+                      <div className={styles.sectionHeaderCount}>{activePartyQuests.length} active</div>
                     </div>
-                  ) : (
-                    activeQuests.map((q) => (
-                      <div key={q.id} className={styles.softCard} onMouseEnter={() => playHover()}>
-                        <div className={styles.questRow}>
-                          <div className={styles.questBody}>
-                            <div className={styles.questTitleRow}>
-                              <div className={styles.questTitle}>{q.title}</div>
-                              <span className={pillClass(q.type)}>{q.type}</span>
-                            </div>
-                            {(q.giver || q.location) && (
-                              <div className={styles.questMeta}>
-                                {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
-                                {q.location && <div><strong>Location:</strong> {q.location}</div>}
-                              </div>
-                            )}
-                            {q.description && <div className={styles.questDesc}>{q.description}</div>}
-                          </div>
-                          <div className={styles.actionsRow}>
-                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openEditQuest(q)}>Edit</button>
-                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => completeQuest(q.id)}>Complete</button>
-                            <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                    <div className={styles.listCol}>
+                      {activePartyQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
+                          <div className={styles.blockTitle}>No active party quests.</div>
+                          <div className={styles.bodyCopy}>
+                            {canManageQuests
+                              ? <>Hit <strong>+ Add Quest</strong> to start tracking hooks.</>
+                              : 'Party quests created by your owner/DM will appear here.'}
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
+                      ) : (
+                        activePartyQuests.map((q) => (
+                          <div key={q.id} className={styles.softCard} onMouseEnter={() => playHover()}>
+                            <div className={styles.questRow}>
+                              <div className={styles.questBody}>
+                                <div className={styles.questTitleRow}>
+                                  <div className={styles.questTitle}>{q.title}</div>
+                                  <span className={pillClass(q.type)}>{q.type}</span>
+                                </div>
+                                {(q.giver || q.location) && (
+                                  <div className={styles.questMeta}>
+                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
+                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
+                                  </div>
+                                )}
+                                {q.description && <div className={styles.questDesc}>{q.description}</div>}
+                              </div>
+                              {canManageQuests && (
+                                <div className={styles.actionsRow}>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openEditQuest(q)}>Edit</button>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => completeQuest(q.id)}>Complete</button>
+                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionHeaderTitle}>Completed</div>
+                      <div className={styles.sectionHeaderCount}>{completedPartyQuests.length} done</div>
+                    </div>
+                    <div className={styles.listCol}>
+                      {completedPartyQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
+                          <div className={styles.blockTitle}>Nothing completed yet.</div>
+                          <div className={styles.bodyCopy}>Completed party quests appear here.</div>
+                        </div>
+                      ) : (
+                        completedPartyQuests.map((q) => (
+                          <div key={q.id} className={`${styles.softCard} ${styles.completedCard}`} onMouseEnter={() => playHover()}>
+                            <div className={styles.questRow}>
+                              <div className={styles.questBody}>
+                                <div className={styles.questTitleRow}>
+                                  <div className={`${styles.questTitle} ${styles.questTitleDone}`}>{q.title}</div>
+                                  <span className={pillClass(q.type)}>{q.type}</span>
+                                </div>
+                                {(q.giver || q.location) && (
+                                  <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
+                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
+                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
+                                  </div>
+                                )}
+                                {q.description && <div className={`${styles.questDesc} ${styles.questMetaMuted}`}>{q.description}</div>}
+                              </div>
+                              {canManageQuests && (
+                                <div className={styles.actionsRow}>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => reopenQuest(q.id)}>Reopen</button>
+                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <div className={styles.sectionHeader}>
-                  <div className={styles.sectionHeaderTitle}>Completed</div>
-                  <div className={styles.sectionHeaderCount}>{completedQuests.length} done</div>
+              <div className={styles.questBoardSection}>
+                <div className={styles.questBoardHeader}>
+                  <div className={styles.questBoardTitle}>Personal Quest Board</div>
+                  <div className={styles.questBoardSub}>
+                    {canManageCampaign
+                      ? 'Assign quests to specific players. Only they can view them.'
+                      : 'Only quests assigned to your account show here.'}
+                  </div>
                 </div>
-                <div className={styles.listCol}>
-                  {completedQuests.length === 0 ? (
-                    <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                      <div className={styles.blockTitle}>Nothing completed yet.</div>
-                      <div className={styles.bodyCopy}>Completed quests appear here.</div>
+                <div className={styles.questGrid}>
+                  <div>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionHeaderTitle}>Active Quests</div>
+                      <div className={styles.sectionHeaderCount}>{activePersonalQuests.length} active</div>
                     </div>
-                  ) : (
-                    completedQuests.map((q) => (
-                      <div key={q.id} className={`${styles.softCard} ${styles.completedCard}`} onMouseEnter={() => playHover()}>
-                        <div className={styles.questRow}>
-                          <div className={styles.questBody}>
-                            <div className={styles.questTitleRow}>
-                              <div className={`${styles.questTitle} ${styles.questTitleDone}`}>{q.title}</div>
-                              <span className={pillClass(q.type)}>{q.type}</span>
-                            </div>
-                            {(q.giver || q.location) && (
-                              <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
-                                {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
-                                {q.location && <div><strong>Location:</strong> {q.location}</div>}
-                              </div>
-                            )}
-                            {q.description && <div className={`${styles.questDesc} ${styles.questMetaMuted}`}>{q.description}</div>}
-                          </div>
-                          <div className={styles.actionsRow}>
-                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => reopenQuest(q.id)}>Reopen</button>
-                            <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                    <div className={styles.listCol}>
+                      {activePersonalQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
+                          <div className={styles.blockTitle}>No active personal quests.</div>
+                          <div className={styles.bodyCopy}>
+                            {canManageCampaign
+                              ? <>Hit <strong>+ Add Quest</strong> and assign it to a player.</>
+                              : (authEnabled && !currentUserId && !currentUserEmail)
+                                ? 'Sign in to view personal quests.'
+                                : 'Your assigned personal quests will appear here.'}
                           </div>
                         </div>
-                      </div>
-                    ))
-                  )}
+                      ) : (
+                        activePersonalQuests.map((q) => (
+                          <div key={q.id} className={styles.softCard} onMouseEnter={() => playHover()}>
+                            <div className={styles.questRow}>
+                              <div className={styles.questBody}>
+                                <div className={styles.questTitleRow}>
+                                  <div className={styles.questTitle}>{q.title}</div>
+                                  <span className={pillClass(q.type)}>{q.type}</span>
+                                </div>
+                                <div className={styles.questMeta}>
+                                  <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
+                                </div>
+                                {(q.giver || q.location) && (
+                                  <div className={styles.questMeta}>
+                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
+                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
+                                  </div>
+                                )}
+                                {q.description && <div className={styles.questDesc}>{q.description}</div>}
+                              </div>
+                              {canManageQuests && (
+                                <div className={styles.actionsRow}>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openEditQuest(q)}>Edit</button>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => completeQuest(q.id)}>Complete</button>
+                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className={styles.sectionHeader}>
+                      <div className={styles.sectionHeaderTitle}>Completed</div>
+                      <div className={styles.sectionHeaderCount}>{completedPersonalQuests.length} done</div>
+                    </div>
+                    <div className={styles.listCol}>
+                      {completedPersonalQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
+                          <div className={styles.blockTitle}>No completed personal quests.</div>
+                          <div className={styles.bodyCopy}>Completed personal quests appear here.</div>
+                        </div>
+                      ) : (
+                        completedPersonalQuests.map((q) => (
+                          <div key={q.id} className={`${styles.softCard} ${styles.completedCard}`} onMouseEnter={() => playHover()}>
+                            <div className={styles.questRow}>
+                              <div className={styles.questBody}>
+                                <div className={styles.questTitleRow}>
+                                  <div className={`${styles.questTitle} ${styles.questTitleDone}`}>{q.title}</div>
+                                  <span className={pillClass(q.type)}>{q.type}</span>
+                                </div>
+                                <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
+                                  <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
+                                </div>
+                                {(q.giver || q.location) && (
+                                  <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
+                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
+                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
+                                  </div>
+                                )}
+                                {q.description && <div className={`${styles.questDesc} ${styles.questMetaMuted}`}>{q.description}</div>}
+                              </div>
+                              {canManageQuests && (
+                                <div className={styles.actionsRow}>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => reopenQuest(q.id)}>Reopen</button>
+                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -844,7 +1264,7 @@ export default function CampaignHub(props) {
         </div>{/* end body content */}
 
         {/* ========== QUEST MODAL ========== */}
-        {questModalOpen && (
+        {questModalOpen && canManageQuests && (
           <div className={styles.modalOverlay}>
             <div className={`${styles.modalCard} ${styles.questModal}`}>
               <div className={styles.modalHeader}>
@@ -859,6 +1279,66 @@ export default function CampaignHub(props) {
                     <input type={type} value={questDraft[key] || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, [key]: e.target.value }))} placeholder={ph} className={styles.inputBase} />
                   </div>
                 ))}
+                <div>
+                  <div className={styles.inputLabel}>Board</div>
+                  <select
+                    value={questBoardType(questDraft)}
+                    onChange={(e) => {
+                      const nextBoard = e.target.value === 'personal' ? 'personal' : 'party';
+                      setQuestDraft((d) => (
+                        nextBoard === 'personal'
+                          ? { ...d, board: 'personal' }
+                          : { ...d, board: 'party', assignedUserId: '', assignedEmail: '', assignedUsername: '', assignedLabel: '' }
+                      ));
+                    }}
+                    className={styles.inputBase}
+                  >
+                    <option value="party">Party Board</option>
+                    <option value="personal">Personal Board</option>
+                  </select>
+                </div>
+                {questBoardType(questDraft) === 'personal' && (
+                  <div>
+                    <div className={styles.inputLabel}>Assign To Player *</div>
+                    <select
+                      value={selectedQuestAssigneeValue}
+                      onChange={(e) => {
+                        const selectedValue = e.target.value;
+                        const selectedPlayer = assignablePlayers.find(
+                          (player) => (player.userId || player.email) === selectedValue
+                        );
+                        setQuestDraft((d) => ({
+                          ...d,
+                          assignedUserId: selectedPlayer?.userId || '',
+                          assignedEmail: selectedPlayer?.email || '',
+                          assignedUsername: normalizeText(selectedPlayer?.username || ''),
+                          assignedLabel: normalizeText(selectedPlayer?.username || selectedPlayer?.label || ''),
+                        }));
+                      }}
+                      className={styles.inputBase}
+                    >
+                      <option value="">Select player...</option>
+                      {selectedQuestAssigneeMissing && (
+                        <option value={selectedQuestAssigneeValue}>
+                          {questDraft.assignedLabel || questDraft.assignedUsername || questDraft.assignedEmail || questDraft.assignedUserId}
+                        </option>
+                      )}
+                      {assignablePlayers.map((player) => {
+                        const value = player.userId || player.email;
+                        return (
+                          <option key={value} value={value}>
+                            {player.label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {playersLoading && <div className={styles.modalHint}>Loading campaign players...</div>}
+                    {playersError && <div className={styles.modalHint}>{playersError}</div>}
+                    {!playersLoading && !playersError && assignablePlayers.length === 0 && (
+                      <div className={styles.modalHint}>No player accounts found yet.</div>
+                    )}
+                  </div>
+                )}
                 <div>
                   <div className={styles.inputLabel}>Type</div>
                   <select value={questDraft.type || 'Side'} onChange={(e) => setQuestDraft((d) => ({ ...d, type: e.target.value }))} className={styles.inputBase}>
