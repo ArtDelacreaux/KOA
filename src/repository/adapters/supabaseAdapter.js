@@ -6,6 +6,7 @@ import { createLocalAdapter } from './localAdapter';
 const QUEUE_STORAGE_KEY = 'koa:supabase:queue:v1';
 const RETRY_BASE_MS = 900;
 const RETRY_MAX_MS = 15000;
+const REMOTE_POLL_MS = 5000;
 
 const PRIVATE_KEYS = new Set([STORAGE_KEYS.launcherNotes].filter(Boolean));
 const LOCAL_ONLY_KEYS = new Set([STORAGE_KEYS.worldNpcDeepLink].filter(Boolean));
@@ -70,6 +71,7 @@ export function createSupabaseAdapter() {
   let isFlushing = false;
   let sharedChannel = null;
   let privateChannel = null;
+  let remotePollTimer = null;
   let onlineListenerBound = false;
 
   const pendingQueue = new Map();
@@ -209,6 +211,29 @@ export function createSupabaseAdapter() {
       privateChannel = null;
     }
     updateStatus({ connected: false });
+  }
+
+  function stopPolling() {
+    if (!remotePollTimer) return;
+    clearInterval(remotePollTimer);
+    remotePollTimer = null;
+  }
+
+  function startPolling() {
+    stopPolling();
+    remotePollTimer = setInterval(async () => {
+      if (!status.ready || !supabase || !campaignId || !userId) return;
+      try {
+        await loadRemoteDocuments();
+        updateStatus({
+          lastSyncError: '',
+          lastSyncAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Background sync failed.';
+        updateStatus({ lastSyncError: msg });
+      }
+    }, REMOTE_POLL_MS);
   }
 
   function applyRemoteRow(scope, row, reason) {
@@ -451,6 +476,7 @@ export function createSupabaseAdapter() {
       });
 
       teardownRealtime();
+      stopPolling();
 
       if (!userId || !campaignId) {
         updateStatus({ ready: false });
@@ -466,11 +492,13 @@ export function createSupabaseAdapter() {
 
       startRealtime();
       updateStatus({ ready: true });
+      startPolling();
       await flushPendingWrites();
       return this.getCloudStatus();
     },
     async clearSession() {
       teardownRealtime();
+      stopPolling();
       userId = '';
       role = 'member';
       updateStatus({

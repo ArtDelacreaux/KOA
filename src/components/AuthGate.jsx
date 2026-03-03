@@ -414,7 +414,11 @@ export default function AuthGate({ children }) {
           </>
         )}
         <span className={styles.syncLabel}>
-          {cloudStatus?.queueSize ? `${cloudStatus.queueSize} pending` : 'Synced'}
+          {cloudStatus?.queueSize
+            ? `${cloudStatus.queueSize} pending`
+            : cloudStatus?.connected
+              ? 'Synced (realtime)'
+              : 'Synced (polling)'}
         </span>
       </div>
       {statusMessage && <div className={styles.toast}>{statusMessage}</div>}
