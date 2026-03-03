@@ -285,6 +285,25 @@
   transform: none;
 }
 
+.editorFieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+.lockedHint {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 120, 80, 0.3);
+  background: linear-gradient(180deg, rgba(64, 28, 20, 0.34), rgba(40, 16, 12, 0.46));
+  color: rgba(255, 220, 190, 0.88);
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 900;
+}
+
 .importStatusBar {
   border: 1px solid rgba(255, 220, 160, 0.18);
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.44), rgba(0, 0, 0, 0.26));

@@ -1,5 +1,5 @@
 ﻿// ===== COMBAT PANEL — with Battle Background Selector =====
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ShellLayout from './ShellLayout';
 import styles from './CombatPanel.module.css';
@@ -1402,7 +1402,15 @@ function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEdito
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CombatPanel({ panelType, cinematicNav, characters = [], playNav = () => {}, playHover = () => {} }) {
+export default function CombatPanel({
+  panelType,
+  cinematicNav,
+  characters = [],
+  canManageCombat = true,
+  canControlCharacter = () => true,
+  playNav = () => {},
+  playHover = () => {},
+}) {
 
   // ✅ Adventurers are now derived from the shared Character Book roster (single source of truth)
   const adventurers = useMemo(() => {
@@ -1417,6 +1425,47 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
         maxHP: typeof c.maxHP === 'number' ? c.maxHP : (typeof c.hp === 'number' ? c.hp : 0),
       }));
   }, [characters]);
+
+  const characterById = useMemo(() => {
+    const out = {};
+    (characters || []).forEach((character) => {
+      const idKey = tokenKey(character?.id);
+      if (idKey) out[idKey] = character;
+    });
+    return out;
+  }, [characters]);
+
+  const characterByName = useMemo(() => {
+    const out = {};
+    (characters || []).forEach((character) => {
+      const nameKey = tokenKey(character?.name);
+      if (nameKey) out[nameKey] = character;
+    });
+    return out;
+  }, [characters]);
+
+  const resolveCharacterForCombatant = useCallback(
+    (combatant) => {
+      if (!combatant) return null;
+      const idKey = tokenKey(combatant.sourceCharacterId);
+      if (idKey && characterById[idKey]) return characterById[idKey];
+      if ((combatant.side || 'Enemy') === 'Enemy') return null;
+      const nameKey = tokenKey(combatant.name);
+      if (nameKey && characterByName[nameKey]) return characterByName[nameKey];
+      return null;
+    },
+    [characterById, characterByName]
+  );
+
+  const canControlCombatant = useCallback(
+    (combatant) => {
+      if (!combatant) return false;
+      const linkedCharacter = resolveCharacterForCombatant(combatant);
+      if (linkedCharacter) return canControlCharacter(linkedCharacter);
+      return !!canManageCombat;
+    },
+    [canControlCharacter, canManageCombat, resolveCharacterForCombatant]
+  );
 
   const active = panelType === 'combat';
 
@@ -1553,6 +1602,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
+  const selectedCanEdit = useMemo(
+    () => (selected ? canControlCombatant(selected) : false),
+    [canControlCombatant, selected]
+  );
+  const selectedReadOnly = !!selected && !selectedCanEdit;
   const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
   const selectedCastorWilliamRole = useMemo(() => castorWilliamSyncRole(selected), [selected]);
   const castorWilliamResourceSyncAvailable = !!castorWilliamPair.castor && !!castorWilliamPair.william;
@@ -1810,6 +1864,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   }, []);
 
   const toggleCastorWilliamResourceSync = () => {
+    if (!canManageCombat) return;
     setEncounter((prev) => {
       const next = normalize(prev);
       const enabling = !next.castorWilliamResourceSync;
@@ -1834,6 +1889,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const addCombatant = (c) => {
+    if (!canManageCombat) return;
     setEncounter(prev => {
       const next = normalize(prev);
       const profileKey = sheetProfileKey(c.sourceCharacterId, c.name);
@@ -1854,6 +1910,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const addFromDraft = () => {
+    if (!canManageCombat) return;
     const name = String(draft.name || '').trim();
     if (!name) return;
     addCombatant({
@@ -1895,6 +1952,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const addAdventurer = () => {
+    if (!canManageCombat) return;
     const adv = adventurers.find(a => a.name === adventurerPick);
     if (!adv) return;
     const existingNames = new Set(combatants.map(x => x.name));
@@ -1933,6 +1991,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const removeCombatant = (id) => {
+    if (!canManageCombat) return;
     setEncounter(prev => {
       const next = normalize(prev);
       const idx = next.combatants.findIndex(x => x.id === id);
@@ -1945,6 +2004,8 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const toggleDead = (id) => {
+    const target = combatants.find((combatant) => combatant.id === id);
+    if (!target || !canControlCombatant(target)) return;
     setEncounter(prev => {
       const next = normalize(prev);
       next.combatants = next.combatants.map(x => x.id === id ? { ...x, dead: !x.dead } : x);
@@ -1953,6 +2014,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoNext = () => {
+    if (!canManageCombat) return;
     setInitSlideDirection('next');
     setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
@@ -1966,6 +2028,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const gotoPrev = () => {
+    if (!canManageCombat) return;
     setInitSlideDirection('prev');
     setInitSlideTick((t) => t + 1);
     setEncounter(prev => {
@@ -1979,7 +2042,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const setSelectedField = (patch) => {
-    if (!selected) return;
+    if (!selected || !selectedCanEdit) return;
     setEncounter(prev => {
       const next = normalize(prev);
       const previousProfileKey = sheetProfileKey(selected.sourceCharacterId, selected.name);
@@ -2166,6 +2229,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const resetEncounter = () => {
+    if (!canManageCombat) return;
     setEncounter(prev => {
       const next = normalize(prev);
       next.round=1; next.activeIndex=0;
@@ -2175,6 +2239,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const clearEncounter = () => {
+    if (!canManageCombat) return;
     setEncounter((prev) => {
       const next = defaultEncounter();
       const prior = normalize(prev);
@@ -2193,7 +2258,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
   const triggerSheetImport = (targetId, replacing = false) => {
     const target = combatants.find((c) => c.id === targetId);
-    if (!target) return;
+    if (!target || !canControlCombatant(target)) return;
     if (replacing && target.sourceSheet) {
       const ok = window.confirm(`Replace imported sheet for ${target.name}?`);
       if (!ok) return;
@@ -2222,7 +2287,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
     if (!file || !targetId) return;
 
     const target = combatants.find((c) => c.id === targetId);
-    if (!target) return;
+    if (!target || !canControlCombatant(target)) return;
 
     if (sheetImportAbortRef.current) sheetImportAbortRef.current.abort();
     const controller = new AbortController();
@@ -2319,12 +2384,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   });
 
   const addSpellbookDraftEntry = (level = null) => {
+    if (!selectedCanEdit) return;
     const entry = createSpellbookDraftEntry(level);
     setSpellbookDraftEntries((prev) => [...prev, entry]);
     setActiveSpellDraftId(entry.id);
   };
 
   const updateSpellbookDraftEntry = (id, patch) => {
+    if (!selectedCanEdit) return;
     setSpellbookDraftEntries((prev) => prev.map((entry) => {
       if (entry.id !== id) return entry;
       const next = { ...entry, ...patch };
@@ -2344,12 +2411,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   };
 
   const removeSpellbookDraftEntry = (id) => {
+    if (!selectedCanEdit) return;
     setSpellbookDraftEntries((prev) => prev.filter((entry) => entry.id !== id));
     setActiveSpellDraftId((prev) => (prev === id ? '' : prev));
   };
 
   const saveListEditor = () => {
-    if (!selected || !listEditorMode) return;
+    if (!selected || !listEditorMode || !selectedCanEdit) return;
     if (listEditorMode === 'spellbook') {
       const normalizedEntries = normalizeSpellbookEntries(spellbookDraftEntries);
       const spellList = normalizeStringList(normalizedEntries.map((entry) => entry.name));
@@ -2364,7 +2432,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
   // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
-    if (!file || !selected) return;
+    if (!file || !selected || !selectedCanEdit) return;
     if (!file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -2519,6 +2587,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   className={btnClass('gold')}
                   onMouseEnter={playHover}
                   onClick={() => { playNav(); gotoPrev(); }}
+                  disabled={!canManageCombat}
                 >
                   ◀ Prev
                 </button>
@@ -2530,6 +2599,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                   className={btnClass('gold')}
                   onMouseEnter={playHover}
                   onClick={() => { playNav(); gotoNext(); }}
+                  disabled={!canManageCombat}
                 >
                   Next ▶
                 </button>
@@ -2539,9 +2609,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
               <label className={styles.sceneLabel}>Scene</label>
               <select
                 value={battleBg || ''}
-                onChange={e => { playNav(); setBattleBg(e.target.value || null); }}
+                onChange={e => {
+                  if (!canManageCombat) return;
+                  playNav();
+                  setBattleBg(e.target.value || null);
+                }}
                 onMouseEnter={playHover}
                 className={styles.sceneSelect}
+                disabled={!canManageCombat}
               >
                 {BATTLE_BACKGROUNDS.map((b, i) => (
                   <option key={i} value={b.src || ''}>
@@ -2581,9 +2656,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     <div className={styles.initHeaderCenter}>
                       <div className={styles.initHeading}>Initiative</div>
                       <div className={styles.initButtons}>
-                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }}>+ Add</button>
-                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }}>Reset</button>
-                        <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }}>Clear</button>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canManageCombat}>+ Add</button>
+                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }} disabled={!canManageCombat}>Reset</button>
+                        <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }} disabled={!canManageCombat}>Clear</button>
                       </div>
                     </div>
                     <div />
@@ -2650,6 +2725,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                                       onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
                                       onMouseEnter={playHover}
                                       className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
+                                      disabled={!canControlCombatant(c)}
                                     >
                                       ☠
                                     </button>
@@ -2658,6 +2734,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                                       onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
                                       onMouseEnter={playHover}
                                       className={iconMiniBtnClass('danger')}
+                                      disabled={!canManageCombat}
                                     >
                                       ✕
                                     </button>
@@ -2700,6 +2777,12 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(false); }}>Close</button>
               </div>
 
+              {!canManageCombat && (
+                <div className={styles.lockedHint}>
+                  Only the DM can add or remove combatants.
+                </div>
+              )}
+              <fieldset className={styles.editorFieldset} disabled={!canManageCombat}>
               <div className={`${styles.addModalBody} koa-scrollbar-thin`}>
                 {/* Add Adventurer */}
                 <div>
@@ -2739,6 +2822,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     className={btnClass('gold', 'md', styles.btnFull)}
                     onMouseEnter={playHover}
                     onClick={() => { playNav(); addAdventurer(); }}
+                    disabled={!canManageCombat}
                   >
                     + Add Adventurer
                   </button>
@@ -2783,11 +2867,13 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                     className={btnClass('gold', 'md', styles.btnFull)}
                     onMouseEnter={playHover}
                     onClick={() => { playNav(); addFromDraft(); }}
+                    disabled={!canManageCombat}
                   >
                     + Add Custom
                   </button>
                 </div>
               </div>
+              </fieldset>
             </div>
           </div>
         )}
@@ -2816,7 +2902,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                       }`}
                       onMouseEnter={playHover}
                       onClick={() => { playNav(); toggleCastorWilliamResourceSync(); }}
-                      disabled={!castorWilliamResourceSyncAvailable && !castorWilliamResourceSyncEnabled}
+                      disabled={
+                        (!castorWilliamResourceSyncAvailable && !castorWilliamResourceSyncEnabled)
+                        || !canManageCombat
+                        || selectedReadOnly
+                      }
                     >
                       <span className={styles.castorWilliamSyncToggleLabel}>Castor + William Sync</span>
                       <span className={styles.castorWilliamSyncToggleTrack}>
@@ -2834,9 +2924,9 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           Pop Out
                         </button>
                       )}
-                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }}>Spellbook</button>
-                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }}>Class Features</button>
-                      <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }}>Long Rest</button>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }} disabled={selectedReadOnly}>Spellbook</button>
+                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }} disabled={selectedReadOnly}>Class Features</button>
+                      <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }} disabled={selectedReadOnly}>Long Rest</button>
                       <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   ) : (
@@ -2846,7 +2936,7 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                           Character Sheet
                         </button>
                       )}
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }} disabled={selectedReadOnly}>
                         {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
                       </button>
                       <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
@@ -2855,7 +2945,14 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
                 </div>
               </div>
 
+              {selectedReadOnly && (
+                <div className={styles.lockedHint}>
+                  Read-only. Only this character's assigned player or the DM can edit this token.
+                </div>
+              )}
+
               {editorMode === 'sheet' && (
+                <fieldset className={styles.editorFieldset} disabled={selectedReadOnly}>
                 <div className={`${styles.sheetView} koa-scrollbar-thin`}>
                   <div className={styles.sheetTopRow}>
                     <div className={styles.sheetHero}>
@@ -3152,9 +3249,11 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
                   </div>
                 </div>
+                </fieldset>
               )}
 
               {editorMode !== 'sheet' && (
+              <fieldset className={styles.editorFieldset} disabled={selectedReadOnly}>
               <div className={`${styles.editorBody} koa-scrollbar-thin`}>
                 
                 {/* Appearance section */}
@@ -3344,14 +3443,15 @@ export default function CombatPanel({ panelType, cinematicNav, characters = [], 
 
                 <div className={styles.divider}/>
                 <div className={styles.actionRow}>
-                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }}>
+                  <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); removeCombatant(selected.id); }} disabled={!canManageCombat}>
                     Remove
                   </button>
-                  <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }}>
+                  <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); toggleDead(selected.id); }} disabled={!selectedCanEdit}>
                     {selected.dead ? 'Revive' : 'Mark dead'}
                   </button>
                 </div>
               </div>
+              </fieldset>
               )}
             </div>
           </div>

@@ -38,6 +38,7 @@ const CHAR_MUSIC_MAP = {
 export default function CharacterBook({
   panelType,
   cinematicNav,
+  characters = [],
 
   selectedChar,
   setSelectedChar,
@@ -53,6 +54,13 @@ export default function CharacterBook({
 
   clamp0100,
   heatColor,
+  characterControllers = {},
+  canControlCharacter = () => true,
+  canAssignCharacterController = false,
+  getCharacterController = () => null,
+  assignCharacterController = () => false,
+  clearCharacterController = () => false,
+  viewerIdentity = {},
 
   // navigation-only click (Button.mp3)
   playNav = null,
@@ -279,6 +287,15 @@ export default function CharacterBook({
     return arlisFrame === 0 ? arlisImgA : arlisImgB;
   };
 
+  const findCharacterFromName = (name) => (
+    (Array.isArray(characters) ? characters : []).find((char) => char?.name === name) || null
+  );
+
+  const canEditCharacterByName = (name) => {
+    const match = findCharacterFromName(name);
+    return canControlCharacter(match || { name });
+  };
+
   /* ---------- Relationship value helpers ---------- */
   const getRelObj = (fromName, toName) => {
     const raw = relationshipValues?.[fromName]?.[toName];
@@ -292,6 +309,7 @@ export default function CharacterBook({
   };
 
   const setRelObj = (fromName, toName, patch) => {
+    if (!canEditCharacterByName(fromName)) return;
     setRelationshipValues((prev) => {
       const cur = (() => {
         const raw = prev?.[fromName]?.[toName];
@@ -585,116 +603,6 @@ export default function CharacterBook({
     setWorldNpcs((prev) => (prev || []).filter((n) => n.id !== id));
   };
 
-  /* ---------- Data: characters ---------- */
-  const characters = [
-    {
-      name: 'William Spicer',
-      image: '/characters/Will.png',
-      synopsis: 'I will bring down a god.',
-      age: '22', height: "5'11\"", class: 'Fiend Warlock',
-      lore: 'Once a frail and broken child, William survived tragedy and entered a dark pact that reshaped his destiny. Haunted by loss and guided by unseen forces, he walks the line between salvation and damnation.',
-      goals: 'Break the Pact that binds Ryken to him and Arlis.',
-      npcs: [
-        { name: 'Darius Blanc', relation: 'Father', bio: 'A strict man who despised magic. His death during the Oakhaven raid left a scar on William that never healed.' },
-        { name: 'Eleanore VanFalen', relation: 'Mother', bio: 'William was told she died in childbirth. Ryken had promised to uncover his past, but has yet to do so.' },
-        { name: 'Tarzos Spicer', relation: 'Savior / Mentor', bio: 'The one man who saved William during the raid, thought to be dead. Now he has reappeared in Williams life as one of the main members of the Velvet Rose.' },
-        { name: 'Ryken', relation: 'Patron', bio: "A force of bargain and consequence. The god of misery, his followers believe that misery is a truth that should be spread." },
-        { name: 'Liranda', relation: 'The Hag', bio: "At first glance, she was a sweet old lady looking to help. That all changed when she tricked him and split his mind, forever altering his and Castors future." },
-      ],
-    },
-    {
-      name: 'Arlis Ghoth',
-      image: arlisImgA,
-      synopsis: 'A cunning and graceful adventurer.',
-      age: '24', height: "5'8\"", class: 'Cleric',
-      lore: 'A childhood friend thought lost, Arlis carries quiet feelings and a sharp mind. Her path has always curved back toward William.',
-      goals: 'Reveal the truth of her heart—and survive the journey.',
-      npcs: [
-        { name: 'House Ghoth', relation: 'Family', bio: 'A respected family with expectations that never stop. Arlis learned early: appearances are armor.' },
-      ],
-    },
-    {
-      name: 'Thryvaris Bria',
-      image: '/characters/3V.png',
-      synopsis: 'A mysterious mage with that lives in a cave.',
-      age: "Early 20's", height: "6'1\"",
-      class: 'Sorcerer',
-      lore: 'Little is known of Thryvaris beyond his mysterious paintbrush.',
-      goals: 'Live in peace in the mountains',
-      npcs: [{ name: 'Mezzarack', relation: 'Professor', bio: 'The man who has lost his family to time. Had a hand in kicking a certain sorcerer out of the academy.' }],
-    },
-    {
-      name: 'Fen', image: '/characters/Fen.png',
-      synopsis: 'A 1 armed goliath, that also wields a flail attached. ',
-      age: 'Late-20s', height: "6'7\"", class: 'Barbarian',
-      lore: 'Exiled from her tribe, Fen walks a lonely path back to redemption.',
-      goals: 'Become the new chief of the Uk\'Vahlee',
-      npcs: [
-        { name: 'Warchief Jovan', relation: 'Leaders of the Uk\'Vahlee', bio: 'Little is known about the Warchief. But the rumors are true that he belives in taking blood no matter the cost.' },
-        { name: 'Warchieftess Threna', relation: 'Leaders of the Uk\'Vahlee', bio: 'Banished Fen after her bout with her brother for not obeying tradition.' },
-      ],
-    },
-    {
-      name: "Von'Ghul", image: '/characters/Ghuli.png',
-      synopsis: 'Selfish, cunning, and brilliant. He makes sure to get the job done.',
-      age: "Late 20's", height: "6'2\"", class: 'Artificer',
-      lore: 'A half orc inventor that uses his mysterious artifact dubbed as "Stryker". He joined the group with Castor on their way to Avalon.',
-      goals: 'Unknown',
-      npcs: [
-        { name: 'The Valkesh', relation: 'Clan',   bio: 'The village that VonGhul originally hailed from. He said he left on bad terms, and is now making his way back to redemption.' },
-        { name: 'Velo',        relation: 'Friend', bio: 'Little is known about the mysterious goblin hailed from Skolak. Von\'Ghul seemed upset at the news of his passing.' },
-        { name: 'Steely',        relation: 'Servant', bio: 'The automaton that was handbuilt from the genius himself. Steely has been a loyal protector and sidekick.' }
-
-      ],
-    },
-    {
-      name: 'Castor', image: '/characters/Castor.png',
-      synopsis: 'Split from Williams mind, he knows more than he lets others on.',
-      age: '21', height: "5'10\"", class: 'Warlock',
-      lore: 'Born from fractured identity and dark magic, Castor walks as his own person—protective, intense, and deeply loyal to the few he trusts.',
-      goals: 'Protect his friends and prove he deserves to exist.',
-      npcs: [
-        { name: 'Vykell', relation: 'Mentor', bio: 'Taught Castor how to survive when survival was all he had. Practical lessons, brutal honesty.' },
-      ],
-    },
-    {
-      name: 'Cerci VonDonovon',
-      image: '/characters/Cerci.png',
-      synopsis: 'Once a nimble and agile circus performer, now hero.',
-      age: 'Appears early-20s', height: "5'6\"", class: 'Monk, Rougue',
-      lore: 'Having spent decades in isolation and survival, Cerci hides decades of pain beneath quiet shadows. Her bond with the party is seemingly the only thing keeping her from returning to a life of solitude and cruelty.',
-      goals: 'To end her family bloodline and find solace for the Salvatores.',
-      npcs: [
-        { name: 'Bingo', relation: 'Ex-Boss', bio: "A familiar face from Cerci's circus years—past comfort, part reminder that her debt will hang over head until fulfilled." },
-        { name: 'Von\'Donovons', relation: 'Family', bio: 'An extremely powerful family that resides in the the Forest. Much is to be said of their influence anywhere, but everyone knows that will just get you killed.' },
-      ],
-    },
-    {
-      name: 'Jasper Delancey',
-      image: '/characters/Jasper.png',
-      synopsis: 'A cleric hailing from the Golden Isles.',
-      age: '30',
-      height: "6'1\"",
-      class: 'Cleric',
-      lore: 'Joined the Envoy of Avalon entourage much later.',
-      goals: 'Unknown',
-      npcs: [
-
-      ],
-    },
-    {
-      name: 'DM',
-      image: '/characters/DM.png',
-      synopsis: 'One Who Rules All',
-      age: '??',
-      height: '??',
-      class: 'Everything',
-      lore: 'An omnipotent god that creates and destroys at will. Able to displace time and remove it completely.',
-      goals: 'World Destruction',
-      npcs: [],
-    },
-  ];
-
   const [charNpcByCharacter, setCharNpcByCharacter] = useLocalStorageState(STORAGE_KEYS.charNpcs, {});
 
   useEffect(() => {
@@ -836,14 +744,14 @@ export default function CharacterBook({
   }, [worldNpcCropOpen, charNpcModalOpen, worldNpcModalOpen, connectionWebModalOpen]);
 
   const openAddCharNpc = () => {
-    if (!selectedChar) return;
+    if (!selectedChar || !selectedCharCanEdit) return;
     setEditingCharNpcId(null);
     setCharNpcDraft({ name: '', relation: '', age: '', faction: '', occupation: '', summary: '', bio: '', image: '' });
     setCharNpcModalOpen(true);
   };
 
   const openEditCharNpc = (npc) => {
-    if (!selectedChar || !npc) return;
+    if (!selectedChar || !npc || !selectedCharCanEdit) return;
     const normalized = normalizeRelatedNpc(npc, selectedChar.name, 0);
     setEditingCharNpcId(normalized.id);
     setCharNpcDraft({
@@ -875,7 +783,7 @@ export default function CharacterBook({
   };
 
   const saveCharNpc = () => {
-    if (!selectedChar) return;
+    if (!selectedChar || !selectedCharCanEdit) return;
     const name = (charNpcDraft.name || '').trim();
     if (!name) {
       alert('NPC needs a name.');
@@ -907,7 +815,7 @@ export default function CharacterBook({
   };
 
   const deleteCharNpc = () => {
-    if (!selectedChar || !editingCharNpcId) return;
+    if (!selectedChar || !editingCharNpcId || !selectedCharCanEdit) return;
     if (!confirm('Delete this NPC?')) return;
 
     setCharNpcByCharacter((prev) => {
@@ -1147,6 +1055,7 @@ export default function CharacterBook({
   }, [worldNpcs]);
 
   const openNpcEditorFromRelation = (npc) => {
+    if (!selectedCharCanEdit) return;
     if (!npc) return;
     if (npc.source === 'world' || npc.worldNpcId) {
       const target = (worldNpcs || []).find((w) => w.id === npc.worldNpcId) || (worldNpcs || []).find((w) => w.id === npc.id);
@@ -1337,6 +1246,67 @@ export default function CharacterBook({
     return characters.map((c) => c.name).filter((n) => n !== selectedChar.name);
   }, [selectedChar, characters]);
 
+  const selectedCharCanEdit = useMemo(
+    () => (selectedChar ? canControlCharacter(selectedChar) : true),
+    [canControlCharacter, selectedChar]
+  );
+
+  const selectedCharController = useMemo(
+    () => (selectedChar ? getCharacterController(selectedChar) : null),
+    [selectedChar, getCharacterController, characterControllers]
+  );
+
+  const selectedCharControllerLabel = useMemo(() => {
+    if (!selectedCharController) return 'Unassigned';
+    return (
+      selectedCharController.ownerUsername
+      || selectedCharController.ownerEmail
+      || selectedCharController.ownerUserId
+      || 'Unassigned'
+    );
+  }, [selectedCharController]);
+
+  const hasSelectedCharController = !!(
+    selectedCharController?.ownerUserId
+    || selectedCharController?.ownerEmail
+    || selectedCharController?.ownerUsername
+  );
+
+  const promptAssignCharacterController = () => {
+    if (!selectedChar || !canAssignCharacterController) return;
+    const currentEmail = String(selectedCharController?.ownerEmail || '');
+    const entry = window.prompt(
+      `Assign controller email for ${selectedChar.name}. Leave blank to clear assignment.`,
+      currentEmail
+    );
+    if (entry == null) return;
+
+    const nextEmail = String(entry || '').trim().toLowerCase();
+    if (!nextEmail) {
+      clearCharacterController(selectedChar);
+      return;
+    }
+
+    const matchesViewer = nextEmail === String(viewerIdentity?.email || '').trim().toLowerCase();
+    assignCharacterController(selectedChar, {
+      ownerUserId: matchesViewer ? String(viewerIdentity?.userId || '') : '',
+      ownerEmail: nextEmail,
+      ownerUsername: matchesViewer ? String(viewerIdentity?.username || '') : '',
+    });
+  };
+
+  const assignSelectedCharacterToViewer = () => {
+    if (!selectedChar || !canAssignCharacterController) return;
+    const email = String(viewerIdentity?.email || '').trim().toLowerCase();
+    if (!email) return;
+
+    assignCharacterController(selectedChar, {
+      ownerUserId: String(viewerIdentity?.userId || ''),
+      ownerEmail: email,
+      ownerUsername: String(viewerIdentity?.username || ''),
+    });
+  };
+
   const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
   const showRelationsTab = !!selectedChar && (charView === 'relations' || charView === 'npc' || charView === 'detail');
   const showNpcTab = !!selectedNpc;
@@ -1462,21 +1432,30 @@ export default function CharacterBook({
             {/* GRID */}
             {charView === 'grid' && (
               <div className={styles.charGrid}>
-                {characters.map((char) => (
-                  <div
-                    key={char.name}
-                    className={`${styles.charGridCard} ${styles.cardHover}`}
-                    onMouseDown={navClick}
-                    onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
-                    onMouseEnter={() => setHoveredCharName(char.name)}
-                    onMouseLeave={() => setHoveredCharName(null)}
-                  >
-                    <img src={getCharPortrait(char)} alt={char.name}
-                      className={styles.charCardImage} />
-                    <div className={styles.charCardName}>{char.name}</div>
-                    <div className={styles.charCardSynopsis}>{char.synopsis}</div>
-                  </div>
-                ))}
+                {characters.map((char) => {
+                  const assigned = getCharacterController(char);
+                  const assignedLabel =
+                    assigned?.ownerUsername
+                    || assigned?.ownerEmail
+                    || assigned?.ownerUserId
+                    || 'Unassigned';
+                  return (
+                    <div
+                      key={char.name}
+                      className={`${styles.charGridCard} ${styles.cardHover}`}
+                      onMouseDown={navClick}
+                      onClick={() => { setSelectedChar(char); setSelectedNpc(null); setCharView('detail'); }}
+                      onMouseEnter={() => setHoveredCharName(char.name)}
+                      onMouseLeave={() => setHoveredCharName(null)}
+                    >
+                      <img src={getCharPortrait(char)} alt={char.name}
+                        className={styles.charCardImage} />
+                      <div className={styles.charCardName}>{char.name}</div>
+                      <div className={styles.charCardSynopsis}>{char.synopsis}</div>
+                      <div className={styles.charCardController}>Controller: {assignedLabel}</div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -1673,6 +1652,54 @@ export default function CharacterBook({
                   <div className={styles.detailHeader}>
                     <div className={styles.detailName}>{selectedChar.name}</div>
                     <div className={styles.detailSynopsis}>{selectedChar.synopsis}</div>
+                    <div className={styles.controllerInfoRow}>
+                      <div className={styles.controllerInfoText}>
+                        Controller: {selectedCharControllerLabel}
+                      </div>
+                      {canAssignCharacterController && (
+                        <div className={styles.controllerInfoActions}>
+                          <button
+                            type="button"
+                            className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                            onMouseEnter={tinyBtnHover}
+                            onMouseLeave={tinyBtnLeave}
+                            onMouseDown={navClick}
+                            onClick={promptAssignCharacterController}
+                          >
+                            Assign
+                          </button>
+                          {!!viewerIdentity?.email && (
+                            <button
+                              type="button"
+                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                              onMouseEnter={tinyBtnHover}
+                              onMouseLeave={tinyBtnLeave}
+                              onMouseDown={navClick}
+                              onClick={assignSelectedCharacterToViewer}
+                            >
+                              Assign To Me
+                            </button>
+                          )}
+                          {hasSelectedCharController && (
+                            <button
+                              type="button"
+                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                              onMouseEnter={tinyBtnHover}
+                              onMouseLeave={tinyBtnLeave}
+                              onMouseDown={navClick}
+                              onClick={() => clearCharacterController(selectedChar)}
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {!selectedCharCanEdit && (
+                      <div className={styles.controllerLockNote}>
+                        Read-only for this account. Only the assigned controller or DM can edit this character's relationship data.
+                      </div>
+                    )}
                     <div className={styles.divider} />
                     <div className={styles.detailStatsGrid}>
                       {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
@@ -1807,14 +1834,22 @@ export default function CharacterBook({
                               <div className={styles.relationName}>{otherName}</div>
                               <div className={styles.relationValueRow}>
                                 <div className={styles.relationValue} style={{ color: relTempColor(value) }}>{value}</div>
-                                <button className={styles.tinyBtn} onMouseEnter={tinyBtnHover} onMouseLeave={tinyBtnLeave}
-                                  onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}>✎</button>
+                                <button
+                                  className={styles.tinyBtn}
+                                  onMouseEnter={tinyBtnHover}
+                                  onMouseLeave={tinyBtnLeave}
+                                  onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}
+                                  disabled={!selectedCharCanEdit}
+                                >
+                                  ✎
+                                </button>
                               </div>
                             </div>
 
                             <input className={styles.rng}
                               style={{ color: relTempColor(value), accentColor: relTempColor(value), background: relTempTrack(value), marginTop: 10 }}
                               type="range" min={0} max={100} value={value}
+                              disabled={!selectedCharCanEdit}
                               onChange={(e) => setRelObj(selectedChar.name, otherName, { score: clamp0100(parseInt(e.target.value, 10) || 0) })}
                             />
 
@@ -1823,6 +1858,7 @@ export default function CharacterBook({
                                 <textarea value={note || ''} placeholder={`Write a note about ${otherName}...`}
                                   onChange={(e) => setRelObj(selectedChar.name, otherName, { note: e.target.value })}
                                   onBlur={() => setRelObj(selectedChar.name, otherName, { editing: false })}
+                                  readOnly={!selectedCharCanEdit}
                                   rows={2}
                                   className={`${styles.inputBase} ${styles.relationTextarea}`}
                                 />
@@ -1854,6 +1890,7 @@ export default function CharacterBook({
                       onMouseLeave={tinyBtnLeave}
                       onMouseDown={navClick}
                       onClick={openAddCharNpc}
+                      disabled={!selectedCharCanEdit}
                     >
                       + Add NPC
                     </button>
@@ -1898,6 +1935,7 @@ export default function CharacterBook({
                             e.stopPropagation();
                             openNpcEditorFromRelation(npc);
                           }}
+                          disabled={!selectedCharCanEdit}
                         >
                           Edit
                         </button>
@@ -1962,6 +2000,7 @@ export default function CharacterBook({
                       onMouseLeave={btnLeave}
                       onMouseDown={(e) => { btnDown(e); navClick(); }}
                       onClick={() => openNpcEditorFromRelation(activeSelectedNpc)}
+                      disabled={!selectedCharCanEdit}
                     >
                       View / Edit NPC
                     </button>
@@ -2181,6 +2220,7 @@ export default function CharacterBook({
                       onMouseLeave={btnLeave}
                       onMouseDown={btnDown}
                       onClick={deleteCharNpc}
+                      disabled={!selectedCharCanEdit}
                     >
                       Delete NPC
                     </button>
@@ -2202,6 +2242,7 @@ export default function CharacterBook({
                     onMouseLeave={btnLeave}
                     onMouseDown={btnDown}
                     onClick={saveCharNpc}
+                    disabled={!selectedCharCanEdit}
                   >
                     {editingCharNpcId ? 'Save Changes' : 'Add NPC'}
                   </button>

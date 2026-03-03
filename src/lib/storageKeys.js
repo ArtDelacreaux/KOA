@@ -1,5 +1,6 @@
 export const STORAGE_KEYS = {
   characters: 'koa:characters:v2',
+  characterAccess: 'koa:character:access:v1',
   quests: 'koa:quests:v2',
   relationships: 'koa:relationships:v1',
   launcher: 'koa:launcher:v1',

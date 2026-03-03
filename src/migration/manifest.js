@@ -4,6 +4,7 @@ export const MIGRATION_SCHEMA_VERSION = 2;
 
 export const MIGRATION_KEY_SPECS = [
   { id: 'characters', key: STORAGE_KEYS.characters, type: 'json', fallback: [] },
+  { id: 'characterAccess', key: STORAGE_KEYS.characterAccess, type: 'json', fallback: {} },
   { id: 'quests', key: STORAGE_KEYS.quests, type: 'json', fallback: [] },
   { id: 'relationships', key: STORAGE_KEYS.relationships, type: 'json', fallback: {} },
   { id: 'launcher', key: STORAGE_KEYS.launcher, type: 'json', fallback: {} },

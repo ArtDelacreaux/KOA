@@ -3,6 +3,14 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import styles from './TavernMenu.module.css';
 import useLocalStorageState from './lib/useLocalStorageState';
 import { STORAGE_KEYS } from './lib/storageKeys';
+import { useAuth } from './auth/AuthContext';
+import {
+  canUserControlCharacter,
+  characterAccessKey,
+  getCharacterAccessEntry,
+  normalizeCharacterAccessEntry,
+  normalizeCharacterAccessMap,
+} from './lib/characterAccess';
 
 //Components Pages
 import AudioHUD from './components/AudioHUD';
@@ -43,6 +51,8 @@ function useAudioLoop(ref, { volume, loop = true }) {
 
 /* ---------- component ---------- */
 export default function TavernMenu() {
+  const { enabled: authEnabled, session, profile, canManageCampaign } = useAuth();
+
   /* ================= STATE ================= */
   const [musicOn, setMusicOn] = useState(false);
   const [panelType, setPanelType] = useState('menu');
@@ -59,6 +69,7 @@ export default function TavernMenu() {
 
   // ✅ Shared party roster (single source of truth)
   const [characters, setCharacters] = useLocalStorageState(STORAGE_KEYS.characters, DEFAULT_CHARACTERS);
+  const [characterAccess, setCharacterAccess] = useLocalStorageState(STORAGE_KEYS.characterAccess, {});
 
   const [quests, setQuests] = useLocalStorageState(STORAGE_KEYS.quests, []);
   const [questModalOpen, setQuestModalOpen] = useState(false);
@@ -79,6 +90,86 @@ export default function TavernMenu() {
   const [musicVol, setMusicVol] = useState(0.06);
   const [fireVol, setFireVol] = useState(0.07);
   const [showMix, setShowMix] = useState(false);
+
+  const currentUserId = String(session?.user?.id || '');
+  const currentUserEmail = String(session?.user?.email || '').trim().toLowerCase();
+  const currentUsername = String(profile?.username || '').trim();
+  const canManageCharacterAccess = authEnabled ? canManageCampaign : true;
+
+  useEffect(() => {
+    setCharacterAccess((prev) => normalizeCharacterAccessMap(prev));
+    // Normalize persisted shape once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const viewerIdentity = useMemo(
+    () => ({
+      userId: currentUserId,
+      email: currentUserEmail,
+      username: currentUsername,
+    }),
+    [currentUserEmail, currentUserId, currentUsername]
+  );
+
+  const getCharacterController = useMemo(
+    () => (character) => getCharacterAccessEntry(characterAccess, character),
+    [characterAccess]
+  );
+
+  const canControlCharacter = useMemo(
+    () => (character) =>
+      canUserControlCharacter({
+        accessMap: characterAccess,
+        character,
+        authEnabled,
+        isManager: canManageCharacterAccess,
+        userId: currentUserId,
+        email: currentUserEmail,
+      }),
+    [authEnabled, canManageCharacterAccess, characterAccess, currentUserEmail, currentUserId]
+  );
+
+  const assignCharacterController = useMemo(
+    () => (character, assignment = {}) => {
+      if (!canManageCharacterAccess) return false;
+      const key = characterAccessKey(character);
+      if (!key) return false;
+
+      const nextEntry = normalizeCharacterAccessEntry({
+        ...assignment,
+        updatedAt: new Date().toISOString(),
+        updatedByUserId: currentUserId,
+        updatedByEmail: currentUserEmail,
+      });
+
+      if (!nextEntry.ownerUserId && !nextEntry.ownerEmail && !nextEntry.ownerUsername) return false;
+
+      setCharacterAccess((prev) => {
+        const normalized = normalizeCharacterAccessMap(prev);
+        return { ...normalized, [key]: nextEntry };
+      });
+      return true;
+    },
+    [canManageCharacterAccess, currentUserEmail, currentUserId, setCharacterAccess]
+  );
+
+  const clearCharacterController = useMemo(
+    () => (character) => {
+      if (!canManageCharacterAccess) return false;
+      const key = characterAccessKey(character);
+      if (!key) return false;
+
+      setCharacterAccess((prev) => {
+        const normalized = normalizeCharacterAccessMap(prev);
+        if (!Object.prototype.hasOwnProperty.call(normalized, key)) return normalized;
+        const next = { ...normalized };
+        delete next[key];
+        return next;
+      });
+      return true;
+    },
+    [canManageCharacterAccess, setCharacterAccess]
+  );
 
   // ✅ SFX volumes
   const [hoverVol] = useState(0.22);
@@ -501,6 +592,8 @@ export default function TavernMenu() {
           panelType={panelType}
           cinematicNav={cinematicNav}
           characters={characters}
+          canManageCombat={canManageCharacterAccess}
+          canControlCharacter={canControlCharacter}
           playNav={playNavClick}
           playHover={playHover}
         />
@@ -521,6 +614,13 @@ export default function TavernMenu() {
             setRelationshipValues,
             clamp0100,
             heatColor,
+            characterControllers: characterAccess,
+            canControlCharacter,
+            canAssignCharacterController: canManageCharacterAccess,
+            getCharacterController,
+            assignCharacterController,
+            clearCharacterController,
+            viewerIdentity,
             playNav: playNavClick,
             playSilent: silentClick,
             playHover,

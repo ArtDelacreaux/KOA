@@ -420,6 +420,14 @@
   color: rgba(255, 245, 220, 0.72);
 }
 
+.charCardController {
+  margin-top: 7px;
+  font-size: 10.5px;
+  font-weight: 900;
+  color: rgba(255, 220, 160, 0.74);
+  opacity: 0.9;
+}
+
 .worldNpcStack {
   display: grid;
   grid-template-columns: 1fr;
@@ -615,6 +623,38 @@
   line-height: 1.5;
   font-size: 13px;
   color: rgba(255, 245, 220, 0.72);
+}
+
+.controllerInfoRow {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.controllerInfoText {
+  font-size: 11.5px;
+  font-weight: 900;
+  color: rgba(255, 220, 160, 0.82);
+}
+
+.controllerInfoActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.controllerLockNote {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(220, 120, 80, 0.28);
+  background: linear-gradient(180deg, rgba(64, 28, 20, 0.36), rgba(40, 16, 12, 0.46));
+  color: rgba(255, 220, 190, 0.88);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .detailStatsGrid {
