@@ -62,14 +62,12 @@ export default function AuthGate({ children }) {
   const [profile, setProfile] = useState(null);
   const [role, setRole] = useState('member');
   const [cloudStatus, setCloudStatus] = useState(repository.getCloudStatus());
-  const [statusMessage, setStatusMessage] = useState('');
   const [authError, setAuthError] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
   const [guestMode, setGuestMode] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [editingUsername, setEditingUsername] = useState(false);
   const sessionRunRef = useRef(0);
   const phaseRef = useRef(phase);
   const userIdRef = useRef('');
@@ -135,7 +133,6 @@ export default function AuthGate({ children }) {
       setSession(nextSession || null);
       userIdRef.current = String(nextSession?.user?.id || '');
       setAuthError('');
-      setStatusMessage('');
 
       if (!enabled) {
         setPhase('ready');
@@ -296,9 +293,7 @@ export default function AuthGate({ children }) {
     userIdRef.current = '';
     setProfile(GUEST_PROFILE);
     setRole('guest');
-    setEditingUsername(false);
     setUsernameDraft('Guest');
-    setStatusMessage('');
     setAuthError('');
     await repository.clearSupabaseSession();
     refreshCloudStatus();
@@ -315,9 +310,7 @@ export default function AuthGate({ children }) {
     await repository.clearSupabaseSession();
     setProfile(null);
     setRole('member');
-    setEditingUsername(false);
     setUsernameDraft('');
-    setStatusMessage('');
     refreshCloudStatus();
     setPhase(enabled ? 'signed_out' : 'ready');
   }, [enabled, guestMode, refreshCloudStatus, supabase]);
@@ -329,7 +322,6 @@ export default function AuthGate({ children }) {
     try {
       const nextProfile = await updateUsername(usernameDraft);
       setProfile(nextProfile);
-      setStatusMessage('Username saved.');
       if (phase === 'username' && session?.user?.id) {
         await repository.configureSupabaseSession({
           campaignId,
@@ -339,8 +331,6 @@ export default function AuthGate({ children }) {
         });
         refreshCloudStatus();
         setPhase('ready');
-      } else {
-        setEditingUsername(false);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to save username.';
@@ -482,55 +472,6 @@ export default function AuthGate({ children }) {
   return (
     <AuthContext.Provider value={authValue}>
       {children}
-      <div className={styles.authHud}>
-        {editingUsername && !guestMode ? (
-          <form className={styles.hudForm} onSubmit={saveUsername}>
-            <input
-              className={styles.hudInput}
-              value={usernameDraft}
-              onChange={(e) => setUsernameDraft(e.target.value)}
-              maxLength={40}
-              required
-            />
-            <button className={styles.hudBtn} type="submit" disabled={busy}>Save</button>
-            <button
-              className={styles.hudBtnGhost}
-              type="button"
-              onClick={() => {
-                setUsernameDraft(String(profile?.username || ''));
-                setEditingUsername(false);
-              }}
-            >
-              Cancel
-            </button>
-          </form>
-        ) : (
-          <>
-            <span className={styles.hudLabel}>
-              {profile?.username || (guestMode ? 'Guest' : 'Unknown')} ({role})
-            </span>
-            {!guestMode && (
-              <button className={styles.hudBtnGhost} type="button" onClick={() => setEditingUsername(true)}>
-                Edit Username
-              </button>
-            )}
-            <button className={styles.hudBtn} type="button" onClick={signOut}>
-              {guestMode ? 'Exit Guest' : 'Sign Out'}
-            </button>
-          </>
-        )}
-        <span className={styles.syncLabel}>
-          {guestMode
-            ? 'Guest view (read-only)'
-            : cloudStatus?.queueSize
-              ? `${cloudStatus.queueSize} pending`
-              : cloudStatus?.connected
-                ? 'Synced (realtime)'
-                : 'Synced (polling)'}
-        </span>
-      </div>
-      {statusMessage && <div className={styles.toast}>{statusMessage}</div>}
-      {cloudStatus?.lastSyncError && <div className={styles.toast}>{cloudStatus.lastSyncError}</div>}
     </AuthContext.Provider>
   );
 }

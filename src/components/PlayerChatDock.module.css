@@ -6,6 +6,19 @@
   z-index: 1;
 }
 
+.dockPopout {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  right: auto;
+  bottom: auto;
+  z-index: 120;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
 .toggleButton {
   display: inline-flex;
   align-items: center;
@@ -47,6 +60,15 @@
   overflow: hidden;
 }
 
+.panelPopout {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+}
+
 .panelResizing {
   user-select: none;
 }
@@ -60,20 +82,85 @@
   border-bottom: 1px solid rgba(244, 197, 129, 0.24);
 }
 
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .title {
   margin: 0;
   font-size: 0.95rem;
   letter-spacing: 0.04em;
 }
 
+.accountBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(244, 197, 129, 0.4);
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(17, 10, 6, 0.75);
+}
+
+.accountLabel {
+  font-size: 0.72rem;
+  color: #f2dfc6;
+}
+
+.accountNameButton {
+  border: none;
+  background: transparent;
+  color: #f2dfc6;
+  font-size: 0.72rem;
+  padding: 0 2px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(244, 197, 129, 0.6);
+}
+
+.accountNameButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.accountInput {
+  border: 1px solid rgba(244, 197, 129, 0.38);
+  border-radius: 999px;
+  background: rgba(22, 13, 8, 0.8);
+  color: #f6eada;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  min-width: 120px;
+  max-width: 180px;
+}
+
+.accountButton,
+.accountButtonGhost,
+.popoutButton,
 .closeButton {
   border: 1px solid rgba(244, 197, 129, 0.42);
   border-radius: 9px;
   background: rgba(51, 31, 19, 0.86);
   color: #f2dfc6;
-  font-size: 0.78rem;
-  padding: 5px 9px;
+  font-size: 0.72rem;
+  padding: 4px 8px;
   cursor: pointer;
+}
+
+.accountButton {
+  background: rgba(143, 90, 51, 0.85);
+}
+
+.accountButtonGhost {
+  background: rgba(51, 31, 19, 0.86);
+}
+
+.popoutButton {
+  background: rgba(81, 48, 28, 0.86);
 }
 
 .workspace {
@@ -84,11 +171,41 @@
 
 .threadList {
   border-right: 1px solid rgba(244, 197, 129, 0.24);
-  overflow: auto;
   padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.threadScrollArea {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   display: grid;
   gap: 6px;
   align-content: start;
+  padding-right: 2px;
+}
+
+.threadAccountFooter {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(244, 197, 129, 0.18);
+}
+
+.accountBarSidebar {
+  width: 100%;
+  border-radius: 10px;
+  padding: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.accountBarSidebar .accountInput {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .threadButton {
@@ -321,8 +438,8 @@
 
 .resizeHandle {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  left: 6px;
+  top: 6px;
   width: 18px;
   height: 18px;
   border: none;
@@ -330,9 +447,9 @@
   padding: 0;
   cursor: nwse-resize;
   background:
-    linear-gradient(135deg, transparent 48%, rgba(248, 207, 142, 0.6) 49%, rgba(248, 207, 142, 0.6) 52%, transparent 53%),
-    linear-gradient(135deg, transparent 63%, rgba(248, 207, 142, 0.5) 64%, rgba(248, 207, 142, 0.5) 67%, transparent 68%),
-    linear-gradient(135deg, transparent 78%, rgba(248, 207, 142, 0.4) 79%, rgba(248, 207, 142, 0.4) 82%, transparent 83%);
+    linear-gradient(315deg, transparent 48%, rgba(248, 207, 142, 0.6) 49%, rgba(248, 207, 142, 0.6) 52%, transparent 53%),
+    linear-gradient(315deg, transparent 63%, rgba(248, 207, 142, 0.5) 64%, rgba(248, 207, 142, 0.5) 67%, transparent 68%),
+    linear-gradient(315deg, transparent 78%, rgba(248, 207, 142, 0.4) 79%, rgba(248, 207, 142, 0.4) 82%, transparent 83%);
   opacity: 0.9;
 }
 
@@ -344,6 +461,10 @@
   .dock {
     right: 10px;
     bottom: 10px;
+  }
+
+  .dockPopout {
+    padding: 0;
   }
 
   .panel {
@@ -359,11 +480,35 @@
   .threadList {
     border-right: none;
     border-bottom: 1px solid rgba(244, 197, 129, 0.24);
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 8px;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .threadScrollArea {
     display: flex;
     gap: 8px;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 8px;
+    padding-right: 0;
+  }
+
+  .threadAccountFooter {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+
+  .accountBarSidebar {
+    width: max-content;
+    min-width: 220px;
+  }
+
+  .accountBarSidebar .accountInput {
+    width: 220px;
+    min-width: 220px;
   }
 
   .threadButton {

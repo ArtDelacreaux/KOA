@@ -1,0 +1,10 @@
+.root {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top right, rgba(88, 54, 28, 0.24), transparent 46%),
+    linear-gradient(180deg, rgba(24, 14, 9, 0.98), rgba(14, 8, 5, 0.98));
+}

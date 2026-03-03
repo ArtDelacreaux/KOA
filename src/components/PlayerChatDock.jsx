@@ -90,9 +90,11 @@ function loadStoredPanelSize() {
   }
 }
 
-export default function PlayerChatDock() {
-  const { enabled, session, profile, canWriteData } = useAuth();
-  const [open, setOpen] = useState(false);
+export default function PlayerChatDock({ mode = 'dock' }) {
+  const isPopoutMode = mode === 'popout';
+  const canResizePanel = !isPopoutMode;
+  const { enabled, session, profile, canWriteData, isGuest, signOut, updateUsername } = useAuth();
+  const [open, setOpen] = useState(() => isPopoutMode);
   const [messages, setMessages] = useState([]);
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -100,6 +102,9 @@ export default function PlayerChatDock() {
   const [unreadByThread, setUnreadByThread] = useState({});
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [accountBusy, setAccountBusy] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState('');
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [panelSize, setPanelSize] = useState(() => loadStoredPanelSize());
@@ -121,6 +126,12 @@ export default function PlayerChatDock() {
     if (username) return username;
     return 'Player';
   }, [profile?.username]);
+
+  const accountLabel = useMemo(() => {
+    const username = normalizeText(profile?.username);
+    if (username) return username;
+    return isGuest ? 'Guest' : 'Unknown';
+  }, [isGuest, profile?.username]);
 
   const clampPanelSize = useCallback((size) => {
     const maxWidth = Math.max(300, window.innerWidth - PANEL_MARGIN);
@@ -147,7 +158,16 @@ export default function PlayerChatDock() {
   }, [open]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (isPopoutMode) setOpen(true);
+  }, [isPopoutMode]);
+
+  useEffect(() => {
+    if (editingUsername) return;
+    setUsernameDraft(normalizeText(profile?.username));
+  }, [editingUsername, profile?.username]);
+
+  useEffect(() => {
+    if (!canResizePanel || typeof window === 'undefined') return;
     setPanelSize((prev) => clampPanelSize(prev));
     const onWindowResize = () => {
       setPanelSize((prev) => clampPanelSize(prev));
@@ -156,25 +176,25 @@ export default function PlayerChatDock() {
     return () => {
       window.removeEventListener('resize', onWindowResize);
     };
-  }, [clampPanelSize]);
+  }, [canResizePanel, clampPanelSize]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (!canResizePanel || typeof window === 'undefined') return;
     try {
       localStorage.setItem(CHAT_PANEL_SIZE_KEY, JSON.stringify(panelSize));
     } catch {}
-  }, [panelSize]);
+  }, [canResizePanel, panelSize]);
 
   useEffect(() => {
-    if (!isResizing) return () => {};
+    if (!canResizePanel || !isResizing) return () => {};
     const onPointerMove = (event) => {
       const start = resizeStartRef.current;
       if (!start) return;
       const dx = event.clientX - start.x;
       const dy = event.clientY - start.y;
       const next = clampPanelSize({
-        width: start.width + dx,
-        height: start.height + dy,
+        width: start.width - dx,
+        height: start.height - dy,
       });
       setPanelSize(next);
     };
@@ -190,7 +210,7 @@ export default function PlayerChatDock() {
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
     };
-  }, [clampPanelSize, isResizing]);
+  }, [canResizePanel, clampPanelSize, isResizing]);
 
   useEffect(() => {
     selectedThreadRef.current = selectedThreadId;
@@ -416,6 +436,64 @@ export default function PlayerChatDock() {
     });
   };
 
+  const requestPopout = () => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('chat', 'popout');
+    const popout = window.open(
+      url.toString(),
+      'koa-chat-popout',
+      'popup=yes,width=980,height=760,resizable=yes,scrollbars=no'
+    );
+    if (popout) {
+      // Minimize in-app chat once popout is active.
+      setOpen(false);
+      setIsResizing(false);
+      popout.focus();
+      return;
+    }
+    setError('Popout window was blocked by the browser.');
+  };
+
+  const closePopoutWindow = () => {
+    if (typeof window === 'undefined') return;
+    window.close();
+    if (!window.closed) setError('Close this chat tab/window manually.');
+  };
+
+  const saveHeaderUsername = async (event) => {
+    event.preventDefault();
+    const nextUsername = normalizeText(usernameDraft);
+    if (!nextUsername) {
+      setError('Username is required.');
+      return;
+    }
+    setAccountBusy(true);
+    setError('');
+    try {
+      await updateUsername(nextUsername);
+      setEditingUsername(false);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save username.';
+      setError(msg);
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
+  const handleHeaderSignOut = async () => {
+    setAccountBusy(true);
+    setError('');
+    try {
+      await signOut();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to sign out.';
+      setError(msg);
+    } finally {
+      setAccountBusy(false);
+    }
+  };
+
   const sendMessage = async () => {
     const body = normalizeText(draft);
     const targetUserId = selectedThreadId === PARTY_THREAD_ID ? '' : normalizeText(selectedRecipientId);
@@ -463,6 +541,7 @@ export default function PlayerChatDock() {
   };
 
   const beginResize = (event) => {
+    if (!canResizePanel) return;
     if (event.button !== 0) return;
     if (!panelRef.current) return;
     event.preventDefault();
@@ -477,15 +556,15 @@ export default function PlayerChatDock() {
   };
 
   const panelInlineStyle = {
-    width: `${panelSize.width}px`,
-    height: `${panelSize.height}px`,
+    width: canResizePanel ? `${panelSize.width}px` : '100%',
+    height: canResizePanel ? `${panelSize.height}px` : '100%',
   };
 
   if (!enabled) return null;
 
   return (
-    <div className={styles.dock}>
-      {!open ? (
+    <div className={`${styles.dock}${isPopoutMode ? ` ${styles.dockPopout}` : ''}`}>
+      {!open && !isPopoutMode ? (
         <button type="button" className={styles.toggleButton} onClick={toggleOpen}>
           Chats
           {totalUnread > 0 ? <span className={styles.unreadBadge}>{totalUnread}</span> : null}
@@ -493,48 +572,113 @@ export default function PlayerChatDock() {
       ) : (
         <section
           ref={panelRef}
-          className={`${styles.panel}${isResizing ? ` ${styles.panelResizing}` : ''}`}
+          className={`${styles.panel}${isResizing ? ` ${styles.panelResizing}` : ''}${isPopoutMode ? ` ${styles.panelPopout}` : ''}`}
           style={panelInlineStyle}
           aria-label="Party chat"
         >
           <header className={styles.header}>
-            <h2 className={styles.title}>Campaign Chat</h2>
-            <button type="button" className={styles.closeButton} onClick={toggleOpen}>Close</button>
+            <h2 className={styles.title}>{isPopoutMode ? 'Campaign Chat Popout' : 'Campaign Chat'}</h2>
+            <div className={styles.headerActions}>
+              {!isPopoutMode ? (
+                <button type="button" className={styles.popoutButton} onClick={requestPopout}>
+                  Popout
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={styles.closeButton}
+                onClick={isPopoutMode ? closePopoutWindow : toggleOpen}
+              >
+                {isPopoutMode ? 'Close Window' : 'Close'}
+              </button>
+            </div>
           </header>
 
           <div className={styles.workspace}>
             <aside className={styles.threadList} aria-label="Chat threads">
-              {threadItems.map((thread) => {
-                const unread = unreadByThread[thread.id] || 0;
-                return (
-                  <button
-                    key={thread.id}
-                    type="button"
-                    className={`${styles.threadButton}${thread.id === selectedThreadId ? ` ${styles.threadButtonActive}` : ''}`}
-                    onClick={() => {
-                      setSelectedThreadId(thread.id);
-                      setUnreadByThread((prev) => {
-                        if (!prev[thread.id]) return prev;
-                        const next = { ...prev };
-                        delete next[thread.id];
-                        return next;
-                      });
-                    }}
-                  >
-                    <span className={styles.threadTop}>
-                      <span className={styles.threadName}>{thread.label}</span>
-                      {unread > 0 ? <span className={styles.threadUnread}>{unread}</span> : null}
-                    </span>
-                    <span className={styles.threadSubtitle}>{thread.subtitle}</span>
-                    <span className={styles.threadPreview}>{previewText(thread.latest?.body)}</span>
-                    {thread.latest?.created_at ? (
-                      <time className={styles.threadTime} dateTime={thread.latest.created_at}>
-                        {formatTime(thread.latest.created_at)}
-                      </time>
-                    ) : null}
-                  </button>
-                );
-              })}
+              <div className={styles.threadScrollArea}>
+                {threadItems.map((thread) => {
+                  const unread = unreadByThread[thread.id] || 0;
+                  return (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      className={`${styles.threadButton}${thread.id === selectedThreadId ? ` ${styles.threadButtonActive}` : ''}`}
+                      onClick={() => {
+                        setSelectedThreadId(thread.id);
+                        setUnreadByThread((prev) => {
+                          if (!prev[thread.id]) return prev;
+                          const next = { ...prev };
+                          delete next[thread.id];
+                          return next;
+                        });
+                      }}
+                    >
+                      <span className={styles.threadTop}>
+                        <span className={styles.threadName}>{thread.label}</span>
+                        {unread > 0 ? <span className={styles.threadUnread}>{unread}</span> : null}
+                      </span>
+                      <span className={styles.threadSubtitle}>{thread.subtitle}</span>
+                      <span className={styles.threadPreview}>{previewText(thread.latest?.body)}</span>
+                      {thread.latest?.created_at ? (
+                        <time className={styles.threadTime} dateTime={thread.latest.created_at}>
+                          {formatTime(thread.latest.created_at)}
+                        </time>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {!isPopoutMode ? (
+                <div className={styles.threadAccountFooter}>
+                  {editingUsername ? (
+                    <form className={`${styles.accountBar} ${styles.accountBarSidebar}`} onSubmit={saveHeaderUsername}>
+                      <input
+                        className={styles.accountInput}
+                        value={usernameDraft}
+                        onChange={(event) => setUsernameDraft(event.target.value)}
+                        maxLength={40}
+                        required
+                      />
+                      <button type="submit" className={styles.accountButton} disabled={accountBusy}>Save</button>
+                      <button
+                        type="button"
+                        className={styles.accountButtonGhost}
+                        onClick={() => {
+                          setUsernameDraft(normalizeText(profile?.username));
+                          setEditingUsername(false);
+                        }}
+                        disabled={accountBusy}
+                      >
+                        Cancel
+                      </button>
+                    </form>
+                  ) : (
+                    <div className={`${styles.accountBar} ${styles.accountBarSidebar}`}>
+                      {!isGuest ? (
+                        <button
+                          type="button"
+                          className={styles.accountNameButton}
+                          onClick={() => setEditingUsername(true)}
+                          disabled={accountBusy}
+                        >
+                          {accountLabel}
+                        </button>
+                      ) : (
+                        <span className={styles.accountLabel}>{accountLabel}</span>
+                      )}
+                      <button
+                        type="button"
+                        className={styles.accountButton}
+                        onClick={handleHeaderSignOut}
+                        disabled={accountBusy}
+                      >
+                        {isGuest ? 'Exit Guest' : 'Sign Out'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </aside>
 
             <section className={styles.conversation}>
@@ -607,12 +751,14 @@ export default function PlayerChatDock() {
               </div>
             </section>
           </div>
-          <button
-            type="button"
-            className={styles.resizeHandle}
-            aria-label="Resize chat window"
-            onPointerDown={beginResize}
-          />
+          {canResizePanel ? (
+            <button
+              type="button"
+              className={styles.resizeHandle}
+              aria-label="Resize chat window"
+              onPointerDown={beginResize}
+            />
+          ) : null}
         </section>
       )}
     </div>
