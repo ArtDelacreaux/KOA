@@ -5,6 +5,7 @@ import styles from './PlayerChatDock.module.css';
 import chatNotifSfx from '../assets/Sound Effects/chatnotif.mp3';
 import dmNotifSfx from '../assets/Sound Effects/dmnotif.mp3';
 import arlisChatGif from '../assets/Chat Anim/arlisChat.gif';
+import ghuliChatGif from '../assets/Chat Anim/ghuliChat.gif';
 import willChatGif from '../assets/Chat Anim/willChat.gif';
 
 const INITIAL_LOAD_LIMIT = 120;
@@ -19,6 +20,9 @@ const PANEL_DEFAULT_SIZE = { width: 680, height: 620 };
 const CHAT_ANIM_BY_NAME_KEY = {
   arlis: arlisChatGif,
   arlisghoth: arlisChatGif,
+  ghul: ghuliChatGif,
+  vonghul: ghuliChatGif,
+  ghulichat: ghuliChatGif,
   william: willChatGif,
   will: willChatGif,
   williamspicer: willChatGif,
@@ -43,6 +47,7 @@ function getChatAnimForName(value) {
   if (!key) return '';
   if (CHAT_ANIM_BY_NAME_KEY[key]) return CHAT_ANIM_BY_NAME_KEY[key];
   if (key.includes('arlis')) return CHAT_ANIM_BY_NAME_KEY.arlis;
+  if (key.includes('ghul')) return CHAT_ANIM_BY_NAME_KEY.vonghul;
   if (key.includes('william') || key.includes('will')) return CHAT_ANIM_BY_NAME_KEY.william;
   return '';
 }
