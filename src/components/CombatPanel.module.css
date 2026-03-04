@@ -951,6 +951,11 @@
   max-height: 86vh;
   display: grid;
   grid-template-rows: auto 1fr;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(202, 142, 60, 0.12), rgba(8, 6, 4, 0) 58%),
+    linear-gradient(180deg, rgba(10, 8, 6, 0.98), rgba(4, 3, 2, 0.92));
 }
 
 .restrictedModalBody {
@@ -966,6 +971,32 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 228, 176, 0.06), rgba(255, 245, 220, 0.01)),
+    rgba(0, 0, 0, 0.24);
+  padding: 12px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 232, 198, 0.1),
+    0 16px 28px rgba(0, 0, 0, 0.34);
+  position: relative;
+  animation: restrictedRiseIn 280ms ease both;
+}
+
+.restrictedProfileTop::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 220px;
+  height: 110px;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(198, 142, 62, 0.2), rgba(198, 142, 62, 0));
+  pointer-events: none;
+  z-index: 0;
 }
 
 .restrictedHeroRow {
@@ -973,7 +1004,29 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.restrictedHeroHp {
+  position: relative;
+  z-index: 1;
+  min-width: 132px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(44, 28, 12, 0.58), rgba(12, 8, 4, 0.48));
+  padding: 7px 12px;
+  text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 240, 212, 0.1);
+  animation: restrictedRiseIn 300ms ease both;
+  animation-delay: 70ms;
+}
+
+.restrictedHeroHp .restrictedStatValue {
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 950;
 }
 
 .restrictedSideStack {
@@ -1001,6 +1054,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transform: translateY(-1px);
 }
 
 .restrictedPortraitImg {
@@ -1018,13 +1072,13 @@
 
 .restrictedNameBlock {
   width: 100%;
-  max-width: 360px;
   border-radius: 10px;
   border: 1px solid rgba(255, 220, 160, 0.16);
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.02));
+  background: linear-gradient(180deg, rgba(255, 220, 160, 0.1), rgba(255, 245, 220, 0.03));
   padding: 8px 10px;
   text-align: center;
   font-size: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 206, 0.1);
 }
 
 .restrictedNameValue {
@@ -1042,9 +1096,10 @@
 .restrictedIdentityField {
   border-radius: 10px;
   border: 1px solid rgba(255, 220, 160, 0.16);
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.02));
+  background: linear-gradient(180deg, rgba(255, 233, 190, 0.08), rgba(255, 245, 220, 0.02));
   padding: 7px 9px;
   text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 206, 0.08);
 }
 
 .restrictedClassField {
@@ -1062,23 +1117,77 @@
 }
 
 .restrictedStatsGrid {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .restrictedStatRow {
   border-radius: 10px;
   border: 1px solid rgba(255, 220, 160, 0.12);
-  background: rgba(0, 0, 0, 0.28);
+  background: linear-gradient(180deg, rgba(20, 14, 10, 0.52), rgba(4, 3, 2, 0.42));
   padding: 8px 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 236, 206, 0.05);
 }
+
+.restrictedModalBody > .restrictedStatRow {
+  background: linear-gradient(180deg, rgba(32, 20, 10, 0.48), rgba(8, 6, 4, 0.4));
+  border-color: rgba(255, 210, 145, 0.2);
+  animation: restrictedRiseIn 340ms ease both;
+}
+
+.restrictedStatsGrid .restrictedStatRow:last-child {
+  grid-column: 1 / -1;
+}
+
+.restrictedStatsGrid .restrictedStatRow {
+  animation: restrictedRiseIn 360ms ease both;
+}
+
+.restrictedStatsGrid .restrictedStatRow:nth-child(1) { animation-delay: 40ms; }
+.restrictedStatsGrid .restrictedStatRow:nth-child(2) { animation-delay: 80ms; }
+.restrictedStatsGrid .restrictedStatRow:nth-child(3) { animation-delay: 120ms; }
+.restrictedStatsGrid .restrictedStatRow:nth-child(4) { animation-delay: 160ms; }
 
 .restrictedStatValue {
   color: rgba(255, 238, 210, 0.92);
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.restrictedHpHealthy {
+  color: rgba(170, 255, 198, 0.96);
+  text-shadow: 0 0 10px rgba(98, 220, 146, 0.3);
+}
+
+.restrictedHpWounded {
+  color: rgba(255, 219, 160, 0.96);
+  text-shadow: 0 0 10px rgba(224, 168, 82, 0.3);
+}
+
+.restrictedHpCritical {
+  color: rgba(255, 165, 165, 0.98);
+  text-shadow: 0 0 11px rgba(220, 70, 70, 0.45);
+}
+
+.restrictedEquipPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.restrictedEquipPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 210, 145, 0.3);
+  background: linear-gradient(180deg, rgba(64, 42, 20, 0.55), rgba(24, 15, 8, 0.55));
+  color: rgba(255, 236, 210, 0.94);
+  font-size: 12px;
+  line-height: 1.25;
 }
 
 .restrictedHiddenValue {
@@ -1100,6 +1209,26 @@
   font-weight: 950;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+@keyframes restrictedRiseIn {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restrictedProfileTop,
+  .restrictedHeroHp,
+  .restrictedModalBody > .restrictedStatRow,
+  .restrictedStatsGrid .restrictedStatRow {
+    animation: none !important;
+  }
 }
 
 .editorModal {
@@ -3678,12 +3807,21 @@
     height: 96px;
   }
 
+  .restrictedHeroHp {
+    min-width: 110px;
+    padding: 6px 10px;
+  }
+
   .restrictedNameValue {
     font-size: 17px;
   }
 
   .restrictedIdentityField {
     padding: 6px 8px;
+  }
+
+  .restrictedStatsGrid {
+    grid-template-columns: 1fr;
   }
 
   .sheetAbilityChipMod {

@@ -2013,6 +2013,16 @@ export default function CombatPanel({
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
   }, [selected]);
+  const selectedHpToneClass = useMemo(() => {
+    if (!selected || selectedSensitiveStatsHidden) return '';
+    const hp = toInt(selected.hp, null);
+    const maxHP = toInt(selected.maxHP, null);
+    if (hp == null || maxHP == null || maxHP <= 0) return '';
+    const ratio = hp / maxHP;
+    if (ratio <= 0.25) return styles.restrictedHpCritical;
+    if (ratio <= 0.6) return styles.restrictedHpWounded;
+    return styles.restrictedHpHealthy;
+  }, [selected, selectedSensitiveStatsHidden]);
   const selectedNotableFeature = useMemo(
     () => cleanText(selected?.notableFeature),
     [selected]
@@ -3586,6 +3596,16 @@ export default function CombatPanel({
                       </div>
                     </div>
                   </div>
+                  <div className={styles.restrictedHeroHp}>
+                    <div className={styles.label}>Current HP</div>
+                    <div className={styles.restrictedStatValue}>
+                      {selectedSensitiveStatsHidden ? (
+                        <span className={styles.restrictedHiddenValue}>Hidden</span>
+                      ) : (
+                        <span className={selectedHpToneClass}>{selectedCurrentHp}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className={styles.restrictedStatRow}>
@@ -3596,16 +3616,6 @@ export default function CombatPanel({
                 </div>
 
                 <div className={styles.restrictedStatsGrid}>
-                  <div className={styles.restrictedStatRow}>
-                    <div className={styles.label}>Current HP</div>
-                    <div className={styles.restrictedStatValue}>
-                      {selectedSensitiveStatsHidden ? (
-                        <span className={styles.restrictedHiddenValue}>Hidden</span>
-                      ) : (
-                        selectedCurrentHp
-                      )}
-                    </div>
-                  </div>
                   <div className={styles.restrictedStatRow}>
                     <div className={styles.label}>Status Conditions</div>
                     <div className={styles.restrictedStatValue}>
@@ -3632,7 +3642,13 @@ export default function CombatPanel({
                       {selectedSensitiveStatsHidden ? (
                         <span className={styles.restrictedHiddenValue}>Hidden</span>
                       ) : (
-                        selectedSensitiveEquipment.length ? selectedSensitiveEquipment.join(', ') : 'None listed'
+                        selectedSensitiveEquipment.length ? (
+                          <div className={styles.restrictedEquipPills}>
+                            {selectedSensitiveEquipment.map((item) => (
+                              <span key={`restricted-equip-${tokenKey(item)}`} className={styles.restrictedEquipPill}>{item}</span>
+                            ))}
+                          </div>
+                        ) : 'None listed'
                       )}
                     </div>
                   </div>
