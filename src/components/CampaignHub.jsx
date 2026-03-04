@@ -42,13 +42,13 @@ function questStatusType(quest) {
 }
 
 function questAssigneeLabel(quest) {
-  return normalizeText(quest?.assignedLabel || quest?.assignedUsername || quest?.assignedEmail || 'Unassigned');
+  return normalizeText(quest?.assignedLabel || quest?.assignedUsername || 'Unassigned');
 }
 
-function emailLocalPart(email) {
-  const normalized = normalizeEmail(email);
-  if (!normalized) return '';
-  return normalized.split('@')[0] || '';
+function fallbackPlayerLabel(index, prefix = 'Player') {
+  const parsed = Number(index);
+  const position = Number.isFinite(parsed) ? parsed + 1 : 1;
+  return `${prefix} ${position}`;
 }
 
 function playerPresenceKey({ userId = '', email = '', label = '' }) {
@@ -270,50 +270,24 @@ export default function CampaignHub(props) {
       setPlayersLoading(true);
       setPlayersError('');
       try {
-        const { data, error } = await supabase
-          .from('campaign_members')
-          .select('user_id,email,role,joined_at')
-          .eq('campaign_id', campaignId)
-          .order('joined_at', { ascending: true });
-
+        const { data, error } = await supabase.rpc('list_campaign_member_directory', {
+          p_campaign_id: campaignId,
+        });
         if (error) throw error;
 
-        const memberRows = (Array.isArray(data) ? data : [])
-          .filter((row) => normalizeText(row?.role || 'member').toLowerCase() === 'member');
-        const memberUserIds = memberRows
-          .map((row) => normalizeText(row?.user_id))
-          .filter(Boolean);
-
-        const usernameByUserId = new Map();
-        if (memberUserIds.length > 0) {
-          const { data: profileRows, error: profilesError } = await supabase
-            .from('profiles')
-            .select('user_id,username')
-            .in('user_id', memberUserIds);
-
-          if (!profilesError && Array.isArray(profileRows)) {
-            profileRows.forEach((row) => {
-              const userId = normalizeText(row?.user_id);
-              const username = normalizeText(row?.username);
-              if (userId && username) usernameByUserId.set(userId, username);
-            });
-          }
-        }
-
         const seen = new Set();
-        const nextPlayers = memberRows
+        const nextPlayers = (Array.isArray(data) ? data : [])
+          .filter((row) => normalizeText(row?.role || 'member').toLowerCase() === 'member')
           .map((row, idx) => {
             const userId = normalizeText(row?.user_id);
-            const email = normalizeEmail(row?.email);
-            if (!userId && !email) return null;
-            const key = userId || email;
+            if (!userId) return null;
+            const key = userId;
             if (seen.has(key)) return null;
             seen.add(key);
 
-            const username = normalizeText(usernameByUserId.get(userId));
-            const fallbackName = emailLocalPart(email);
-            const label = username || fallbackName || `Player ${idx + 1}`;
-            return { userId, email, username, label };
+            const username = normalizeText(row?.username);
+            const label = username || fallbackPlayerLabel(idx);
+            return { userId, email: '', username, label };
           })
           .filter(Boolean)
           .sort((a, b) => a.label.localeCompare(b.label));
@@ -384,7 +358,7 @@ export default function CampaignHub(props) {
           .sort((a, b) => a.label.localeCompare(b.label));
 
         if (!nextDirectory.some((member) => normalizeText(member.userId) === currentUserId)) {
-          const selfLabel = normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You');
+          const selfLabel = normalizeText(profile?.username || 'You');
           nextDirectory.push({
             userId: currentUserId,
             email: currentUserEmail,
@@ -397,7 +371,7 @@ export default function CampaignHub(props) {
         if (!cancelled) setPlayerDirectory(nextDirectory);
       } catch {
         if (cancelled) return;
-        const fallbackLabel = normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You');
+        const fallbackLabel = normalizeText(profile?.username || 'You');
         setPlayerDirectory(currentUserId ? [{
           userId: currentUserId,
           email: currentUserEmail,
@@ -538,20 +512,17 @@ export default function CampaignHub(props) {
 
     const board = questBoardType(questDraft);
     let assignedUserId = '';
-    let assignedEmail = '';
     let assignedUsername = '';
     let assignedLabel = '';
     if (board === 'personal') {
       assignedUserId = normalizeText(questDraft.assignedUserId);
-      assignedEmail = normalizeEmail(questDraft.assignedEmail);
       assignedUsername = normalizeText(questDraft.assignedUsername);
       const selected = assignablePlayers.find((player) => {
-        const playerValue = player.userId || player.email;
-        return playerValue && playerValue === (assignedUserId || assignedEmail);
+        const playerValue = player.userId;
+        return playerValue && playerValue === assignedUserId;
       });
       if (selected) {
         assignedUserId = selected.userId;
-        assignedEmail = selected.email;
         assignedUsername = normalizeText(selected.username || selected.label);
         assignedLabel = normalizeText(selected.username || selected.label);
       } else {
@@ -559,7 +530,7 @@ export default function CampaignHub(props) {
         assignedLabel = normalizeText(questDraft.assignedLabel);
       }
 
-      if (!assignedUserId && !assignedEmail) {
+      if (!assignedUserId) {
         alert('Personal quests must be assigned to a player.');
         return;
       }
@@ -571,7 +542,7 @@ export default function CampaignHub(props) {
       type: questDraft.type || 'Side',
       board,
       assignedUserId: board === 'personal' ? assignedUserId : '',
-      assignedEmail: board === 'personal' ? assignedEmail : '',
+      assignedEmail: '',
       assignedUsername: board === 'personal' ? assignedUsername : '',
       assignedLabel: board === 'personal' ? assignedLabel : '',
       giver: (questDraft.giver || '').trim(),
@@ -746,7 +717,7 @@ export default function CampaignHub(props) {
   const setHubTimeOfDay = (nextTime) => {
     if (!canManageHubTime) return;
     const normalizedTime = normalizeText(nextTime) || 'Morning';
-    const updatedBy = normalizeText(profile?.username || emailLocalPart(session?.user?.email) || 'DM');
+    const updatedBy = normalizeText(profile?.username || 'DM');
     const updatedAt = new Date().toISOString();
     setLauncherState((current) => {
       const base = sanitizeLauncherState(current, defaultLauncherState);
@@ -779,7 +750,7 @@ export default function CampaignHub(props) {
     const selfPresenceKey = playerPresenceKey({
       userId: currentUserId,
       email: currentUserEmail,
-      label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'you'),
+      label: normalizeText(profile?.username || 'You'),
     });
 
     const channel = supabase.channel(`koa-hub-presence:${campaignId}`, {
@@ -794,7 +765,7 @@ export default function CampaignHub(props) {
       userId: currentUserId,
       email: currentUserEmail,
       username: normalizeText(profile?.username),
-      label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You'),
+      label: normalizeText(profile?.username || 'You'),
       status: document.hidden ? 'away' : 'online',
       updatedAt: new Date().toISOString(),
     });
@@ -808,7 +779,7 @@ export default function CampaignHub(props) {
         (Array.isArray(entries) ? entries : []).forEach((entry) => {
           const userId = normalizeText(entry?.userId || entry?.user_id);
           const email = normalizeEmail(entry?.email);
-          const label = normalizeText(entry?.label || entry?.username || emailLocalPart(email) || '');
+          const label = normalizeText(entry?.label || entry?.username || 'Player');
           const key = playerPresenceKey({ userId, email, label });
           if (!key) return;
 
@@ -871,7 +842,7 @@ export default function CampaignHub(props) {
   const playerPresenceMembers = useMemo(() => {
     const unique = new Map();
     const pushMember = (member) => {
-      const label = normalizeText(member?.label || member?.username || emailLocalPart(member?.email) || 'Player');
+      const label = normalizeText(member?.label || member?.username || 'Player');
       const entry = {
         userId: normalizeText(member?.userId || member?.user_id),
         email: normalizeEmail(member?.email),
@@ -890,7 +861,7 @@ export default function CampaignHub(props) {
         userId: currentUserId,
         email: currentUserEmail,
         username: normalizeText(profile?.username),
-        label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You'),
+        label: normalizeText(profile?.username || 'You'),
       });
     }
 
@@ -1030,6 +1001,12 @@ export default function CampaignHub(props) {
   const defaultBagState = {
     currency: { pp: 0, gp: 0, sp: 0, cp: 0 },
     items: [],
+    ownerUserId: '',
+    ownerEmail: '',
+    ownerUsername: '',
+    ownerUpdatedAt: '',
+    ownerUpdatedByUserId: '',
+    ownerUpdatedByUsername: '',
   };
 
   const [bag, setBag] = useLocalStorageState(STORAGE_KEYS.bag, defaultBagState);
@@ -1043,6 +1020,12 @@ export default function CampaignHub(props) {
         cp: prev?.currency?.cp ?? 0,
       },
       items: Array.isArray(prev?.items) ? prev.items : [],
+      ownerUserId: normalizeText(prev?.ownerUserId),
+      ownerEmail: normalizeEmail(prev?.ownerEmail),
+      ownerUsername: normalizeText(prev?.ownerUsername),
+      ownerUpdatedAt: normalizeText(prev?.ownerUpdatedAt),
+      ownerUpdatedByUserId: normalizeText(prev?.ownerUpdatedByUserId),
+      ownerUpdatedByUsername: normalizeText(prev?.ownerUpdatedByUsername),
     }));
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1057,6 +1040,78 @@ export default function CampaignHub(props) {
   const [invModalOpen, setInvModalOpen] = useState(false);
   const [invEditingId, setInvEditingId] = useState(null);
   const [dangerOpen,   setDangerOpen]   = useState(false);
+  const [bagTransferTargetUserId, setBagTransferTargetUserId] = useState('');
+
+  const bagOwnerUserId = normalizeText(bag?.ownerUserId);
+  const bagOwnerEmail = normalizeEmail(bag?.ownerEmail);
+  const bagOwnerUsername = normalizeText(bag?.ownerUsername);
+  const bagOwnerUsernameKey = bagOwnerUsername.toLowerCase();
+  const canManageInventory = authEnabled ? (canManageCampaign && canEditCampaignData) : canEditCampaignData;
+  const isBagOwner = !authEnabled || (
+    (bagOwnerUserId && currentUserId && bagOwnerUserId === currentUserId)
+    || (bagOwnerEmail && currentUserEmail && bagOwnerEmail === currentUserEmail)
+    || (bagOwnerUsernameKey && currentUsername && bagOwnerUsernameKey === currentUsername)
+  );
+  const canEditInventory = canManageInventory || (canEditCampaignData && isBagOwner);
+  const canTransferBagOwnership = canEditCampaignData && (canManageInventory || isBagOwner);
+  const inventoryReadOnlyMessage = !canEditCampaignData
+    ? readOnlyStatusMessage
+    : 'Only the DM or current Bag of Holding owner can edit inventory.';
+
+  const inventoryOwnerChoices = useMemo(() => (
+    (playerDirectory || [])
+      .filter((member) => normalizeText(member?.role || 'member').toLowerCase() === 'member')
+      .map((member, idx) => ({
+        userId: normalizeText(member?.userId || member?.user_id),
+        username: normalizeText(member?.username),
+        label: normalizeText(member?.label || member?.username || fallbackPlayerLabel(idx)),
+      }))
+      .filter((member) => !!member.userId)
+  ), [playerDirectory]);
+
+  useEffect(() => {
+    if (!bagTransferTargetUserId) return;
+    if (inventoryOwnerChoices.some((player) => player.userId === bagTransferTargetUserId)) return;
+    setBagTransferTargetUserId('');
+  }, [bagTransferTargetUserId, inventoryOwnerChoices]);
+
+  const bagOwnerLabel = useMemo(() => {
+    const byUserId = inventoryOwnerChoices.find((player) => player.userId === bagOwnerUserId);
+    if (byUserId?.label) return byUserId.label;
+    if (bagOwnerUsername) return bagOwnerUsername;
+    return 'Unassigned';
+  }, [bagOwnerUserId, bagOwnerUsername, inventoryOwnerChoices]);
+
+  const ensureInventoryEditPermission = () => {
+    if (canEditInventory) return true;
+    alert(inventoryReadOnlyMessage);
+    return false;
+  };
+
+  const transferBagOwnership = () => {
+    if (!canTransferBagOwnership) {
+      alert(inventoryReadOnlyMessage);
+      return;
+    }
+
+    const target = inventoryOwnerChoices.find((player) => player.userId === bagTransferTargetUserId);
+    if (!target) {
+      alert('Select a player to transfer inventory control.');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    setBag((prev) => ({
+      ...prev,
+      ownerUserId: target.userId,
+      ownerEmail: '',
+      ownerUsername: normalizeText(target.username || target.label),
+      ownerUpdatedAt: now,
+      ownerUpdatedByUserId: currentUserId,
+      ownerUpdatedByUsername: normalizeText(profile?.username || 'DM'),
+    }));
+    setBagTransferTargetUserId('');
+  };
 
   useEffect(() => {
     if (!invModalOpen) return;
@@ -1068,14 +1123,21 @@ export default function CampaignHub(props) {
   const invEmptyDraft = { name: '', qty: 1, category: 'Gear', rarity: 'Common', value: '', weight: '', notes: '', tags: '', assignedTo: '', equipped: false };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
 
-  const invOpenAdd  = () => { setInvEditingId(null); setInvDraft(invEmptyDraft); setInvModalOpen(true); };
+  const invOpenAdd  = () => {
+    if (!ensureInventoryEditPermission()) return;
+    setInvEditingId(null);
+    setInvDraft(invEmptyDraft);
+    setInvModalOpen(true);
+  };
   const invOpenEdit = (item) => {
+    if (!ensureInventoryEditPermission()) return;
     setInvEditingId(item.id);
     setInvDraft({ name: item.name || '', qty: typeof item.qty === 'number' ? item.qty : 1, category: item.category || 'Gear', rarity: item.rarity || 'Common', value: item.value ?? '', weight: item.weight ?? '', notes: item.notes || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : '', assignedTo: item.assignedTo || '', equipped: !!item.equipped });
     setInvModalOpen(true);
   };
 
   const invSaveDraft = () => {
+    if (!ensureInventoryEditPermission()) return;
     const name = (invDraft.name || '').trim();
     if (!name) { alert('Item needs a name.'); return; }
     const qty    = clampInt(parseInt(invDraft.qty, 10) || 1, 1, 9999);
@@ -1097,10 +1159,21 @@ export default function CampaignHub(props) {
     setInvEditingId(null);
   };
 
-  const invDeleteItem     = (id) => { if (!confirm('Delete this item?')) return; setBag((prev) => ({ ...prev, items: (prev.items || []).filter((it) => it.id !== id) })); };
-  const invBumpQty        = (id, delta) => { setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, qty: clampInt((it.qty || 1) + delta, 1, 9999) } : it) })); };
-  const invToggleEquipped = (id) => { setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, equipped: !it.equipped } : it) })); };
+  const invDeleteItem     = (id) => {
+    if (!ensureInventoryEditPermission()) return;
+    if (!confirm('Delete this item?')) return;
+    setBag((prev) => ({ ...prev, items: (prev.items || []).filter((it) => it.id !== id) }));
+  };
+  const invBumpQty        = (id, delta) => {
+    if (!ensureInventoryEditPermission()) return;
+    setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, qty: clampInt((it.qty || 1) + delta, 1, 9999) } : it) }));
+  };
+  const invToggleEquipped = (id) => {
+    if (!ensureInventoryEditPermission()) return;
+    setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, equipped: !it.equipped } : it) }));
+  };
   const applyCurrencyDelta = (key, direction) => {
+    if (!ensureInventoryEditPermission()) return;
     const delta = parseInt(currencyDelta[key], 10);
     if (!Number.isFinite(delta) || delta <= 0) return;
     setBag((prev) => ({
@@ -1125,10 +1198,10 @@ export default function CampaignHub(props) {
     else items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return items;
   }, [bag.items, invQuery, invCat, invRar, invSort]);
-  const selectedQuestAssigneeValue = normalizeText(questDraft.assignedUserId || questDraft.assignedEmail);
+  const selectedQuestAssigneeValue = normalizeText(questDraft.assignedUserId);
   const selectedQuestAssigneeMissing =
     !!selectedQuestAssigneeValue &&
-    !assignablePlayers.some((player) => (player.userId || player.email) === selectedQuestAssigneeValue);
+    !assignablePlayers.some((player) => player.userId === selectedQuestAssigneeValue);
 
   /* =========================
      RENDER
@@ -1164,6 +1237,7 @@ export default function CampaignHub(props) {
                 onMouseEnter={smallBtnHover}
                 onClick={campaignTab === 'quests' ? openAddQuest : invOpenAdd}
                 className={smallBtnClass('gold', styles.actionAddBtn)}
+                disabled={campaignTab === 'inventory' && !canEditInventory}
               >
                 {campaignTab === 'quests' ? '+ Add Quest' : '+ Add Item'}
               </button>
@@ -1624,7 +1698,7 @@ export default function CampaignHub(props) {
                     <div className={styles.questBoardTitle}>Party Inventory Board</div>
                     <div className={styles.questBoardSub}>Track shared loot, valuables, and artifacts across the campaign.</div>
                   </div>
-                  <span className={styles.boardStatusPill}>Shared Access</span>
+                  <span className={styles.boardStatusPill}>{canEditInventory ? 'DM / Owner Edit' : 'Read Only'}</span>
                 </div>
 
                 <div className={styles.inventoryGrid}>
@@ -1634,6 +1708,10 @@ export default function CampaignHub(props) {
                         <div>
                           <div className={styles.cardTitle}>Bag of Holding</div>
                           <div className={styles.cardSub}>Shared party inventory - loot, gold totals, quest items, and artifacts.</div>
+                          <div className={styles.modalHint}>Current Owner: <strong>{bagOwnerLabel}</strong></div>
+                          {!canEditInventory && (
+                            <div className={styles.modalHint}>{inventoryReadOnlyMessage}</div>
+                          )}
                         </div>
                       </div>
                       <div className={styles.sectionDivider} />
@@ -1667,7 +1745,36 @@ export default function CampaignHub(props) {
                       </div>
 
                       <div className={styles.controlsFooter}>
-                        <button className={smallBtnClass('gold', styles.addItemBtn)} onMouseEnter={smallBtnHover} onClick={invOpenAdd}>
+                        {canTransferBagOwnership && inventoryOwnerChoices.length > 0 && (
+                          <div className={styles.inventoryOwnerControls}>
+                            <select
+                              value={bagTransferTargetUserId}
+                              onChange={(e) => setBagTransferTargetUserId(e.target.value)}
+                              className={styles.inputBase}
+                            >
+                              <option value="">Transfer control to...</option>
+                              {inventoryOwnerChoices.map((player) => (
+                                <option key={player.userId} value={player.userId}>
+                                  {player.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className={smallBtnClass('ghost')}
+                              onMouseEnter={smallBtnHover}
+                              onClick={transferBagOwnership}
+                              disabled={!bagTransferTargetUserId}
+                            >
+                              Transfer
+                            </button>
+                          </div>
+                        )}
+                        <button
+                          className={smallBtnClass('gold', styles.addItemBtn)}
+                          onMouseEnter={smallBtnHover}
+                          onClick={invOpenAdd}
+                          disabled={!canEditInventory}
+                        >
                           + Add Item
                         </button>
                       </div>
@@ -1709,6 +1816,7 @@ export default function CampaignHub(props) {
                                 className={`${styles.smallBtn} ${styles.btnGhost} ${styles.currencyStepBtn}`}
                                 onMouseEnter={smallBtnHover}
                                 onClick={() => applyCurrencyDelta(k, -1)}
+                                disabled={!canEditInventory}
                               >
                                 -
                               </button>
@@ -1731,6 +1839,7 @@ export default function CampaignHub(props) {
                                 className={`${styles.smallBtn} ${styles.btnGold} ${styles.currencyStepBtn}`}
                                 onMouseEnter={smallBtnHover}
                                 onClick={() => applyCurrencyDelta(k, 1)}
+                                disabled={!canEditInventory}
                               >
                                 +
                               </button>
@@ -1739,7 +1848,12 @@ export default function CampaignHub(props) {
                         ))}
                       </div>
                       <div className={styles.currencyDanger}>
-                        <button className={smallBtnClass('ghost', styles.fullWidthBtn)} onMouseEnter={smallBtnHover} onClick={() => setDangerOpen((v) => !v)}>
+                        <button
+                          className={smallBtnClass('ghost', styles.fullWidthBtn)}
+                          onMouseEnter={smallBtnHover}
+                          onClick={() => setDangerOpen((v) => !v)}
+                          disabled={!canEditInventory}
+                        >
                           {dangerOpen ? 'Hide Danger' : 'Danger Zone'}
                         </button>
                         {dangerOpen && (
@@ -1750,11 +1864,17 @@ export default function CampaignHub(props) {
                               className={smallBtnClass('danger', styles.fullWidthBtn)}
                               onMouseEnter={smallBtnHover}
                               onClick={() => {
+                                if (!ensureInventoryEditPermission()) return;
                                 const ok = confirm('Clear the entire Bag of Holding? This cannot be undone.');
                                 if (!ok) return;
-                                setBag({ currency: { pp: 0, gp: 0, sp: 0, cp: 0 }, items: [] });
+                                setBag((prev) => ({
+                                  ...prev,
+                                  currency: { pp: 0, gp: 0, sp: 0, cp: 0 },
+                                  items: [],
+                                }));
                                 setDangerOpen(false);
                               }}
+                              disabled={!canEditInventory}
                             >
                               Clear Bag Forever
                             </button>
@@ -1794,11 +1914,11 @@ export default function CampaignHub(props) {
                             </div>
                             <div className={styles.actionsRow}>
                               <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
-                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
-                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)}>Delete</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1" disabled={!canEditInventory}>-</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1" disabled={!canEditInventory}>+</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)} disabled={!canEditInventory}>Equip</button>
+                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)} disabled={!canEditInventory}>Edit</button>
+                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)} disabled={!canEditInventory}>Delete</button>
                             </div>
                           </div>
                         </div>
@@ -1854,12 +1974,12 @@ export default function CampaignHub(props) {
                       onChange={(e) => {
                         const selectedValue = e.target.value;
                         const selectedPlayer = assignablePlayers.find(
-                          (player) => (player.userId || player.email) === selectedValue
+                          (player) => player.userId === selectedValue
                         );
                         setQuestDraft((d) => ({
                           ...d,
                           assignedUserId: selectedPlayer?.userId || '',
-                          assignedEmail: selectedPlayer?.email || '',
+                          assignedEmail: '',
                           assignedUsername: normalizeText(selectedPlayer?.username || ''),
                           assignedLabel: normalizeText(selectedPlayer?.username || selectedPlayer?.label || ''),
                         }));
@@ -1869,11 +1989,11 @@ export default function CampaignHub(props) {
                       <option value="">Select player...</option>
                       {selectedQuestAssigneeMissing && (
                         <option value={selectedQuestAssigneeValue}>
-                          {questDraft.assignedLabel || questDraft.assignedUsername || questDraft.assignedEmail || questDraft.assignedUserId}
+                          {questDraft.assignedLabel || questDraft.assignedUsername || 'Assigned Player'}
                         </option>
                       )}
                       {assignablePlayers.map((player) => {
-                        const value = player.userId || player.email;
+                        const value = player.userId;
                         return (
                           <option key={value} value={value}>
                             {player.label}
@@ -1968,7 +2088,7 @@ export default function CampaignHub(props) {
               <div className={styles.sectionDivider} />
               <div className={styles.modalFooter}>
                 <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => setInvModalOpen(false)}>Cancel</button>
-                <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={invSaveDraft}>{invEditingId ? 'Save Changes' : 'Add Item'}</button>
+                <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={invSaveDraft} disabled={!canEditInventory}>{invEditingId ? 'Save Changes' : 'Add Item'}</button>
               </div>
             </div>
           </div>

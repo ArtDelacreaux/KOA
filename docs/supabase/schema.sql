@@ -183,6 +183,52 @@ as $$
   order by cm.joined_at asc;
 $$;
 
+create or replace function public.resolve_login_email(p_campaign_id text, p_identifier text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_identifier text := lower(coalesce(btrim(p_identifier), ''));
+  v_match_count int := 0;
+  v_email text := null;
+begin
+  if coalesce(btrim(p_campaign_id), '') = '' then
+    return null;
+  end if;
+
+  if v_identifier = '' then
+    return null;
+  end if;
+
+  if position('@' in v_identifier) > 0 then
+    return v_identifier;
+  end if;
+
+  select
+    count(*)::int,
+    min(lower(cm.email::text))
+  into v_match_count, v_email
+  from public.campaign_members cm
+  join public.profiles p
+    on p.user_id = cm.user_id
+  where cm.campaign_id = p_campaign_id
+    and lower(nullif(btrim(p.username), '')) = v_identifier;
+
+  if v_match_count > 1 then
+    raise exception 'Multiple accounts use this username. Sign in with email.';
+  end if;
+
+  if v_match_count = 1 then
+    return v_email;
+  end if;
+
+  return null;
+end;
+$$;
+
 create or replace function public.claim_campaign_membership(p_campaign_id text)
 returns text
 language plpgsql
@@ -279,6 +325,7 @@ end;
 $$;
 
 grant usage on schema public to authenticated;
+grant usage on schema public to anon;
 grant select, insert, update, delete on public.profiles to authenticated;
 grant select on public.campaign_invites to authenticated;
 grant select on public.campaign_members to authenticated;
@@ -290,6 +337,7 @@ grant execute on function public.seed_campaign_once(text, jsonb) to authenticate
 grant execute on function public.is_campaign_member(text, uuid) to authenticated;
 grant execute on function public.is_campaign_owner(text, uuid) to authenticated;
 grant execute on function public.list_campaign_member_directory(text) to authenticated;
+grant execute on function public.resolve_login_email(text, text) to authenticated, anon;
 
 alter table public.profiles enable row level security;
 alter table public.campaign_invites enable row level security;

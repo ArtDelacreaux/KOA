@@ -1401,44 +1401,44 @@ export default function CharacterBook({
 
   const formatControllerLabel = (assignment) => (
     assignment?.ownerUsername
-    || assignment?.ownerEmail
-    || assignment?.ownerUserId
+    || (assignment?.ownerUserId ? 'Assigned Player' : '')
     || 'Unassigned'
   );
 
   const promptAssignControllerForCharacter = (character) => {
     if (!character || !canAssignCharacterController) return;
     const currentAssignment = getCharacterController(character);
-    const currentEmail = String(currentAssignment?.ownerEmail || '');
+    const currentUsername = String(currentAssignment?.ownerUsername || '');
     const entry = window.prompt(
-      `Assign controller email for ${character.name}. Leave blank to clear assignment.`,
-      currentEmail
+      `Assign controller username for ${character.name}. Leave blank to clear assignment.`,
+      currentUsername
     );
     if (entry == null) return;
 
-    const nextEmail = String(entry || '').trim().toLowerCase();
-    if (!nextEmail) {
+    const nextUsername = String(entry || '').trim();
+    if (!nextUsername) {
       clearCharacterController(character);
       return;
     }
 
-    const matchesViewer = nextEmail === String(viewerIdentity?.email || '').trim().toLowerCase();
+    const matchesViewer =
+      nextUsername.toLowerCase() === String(viewerIdentity?.username || '').trim().toLowerCase();
     assignCharacterController(character, {
       ownerUserId: matchesViewer ? String(viewerIdentity?.userId || '') : '',
-      ownerEmail: nextEmail,
-      ownerUsername: matchesViewer ? String(viewerIdentity?.username || '') : '',
+      ownerEmail: '',
+      ownerUsername: nextUsername,
     });
   };
 
   const assignCharacterToViewer = (character) => {
     if (!character || !canAssignCharacterController) return;
-    const email = String(viewerIdentity?.email || '').trim().toLowerCase();
-    if (!email) return;
+    const username = String(viewerIdentity?.username || '').trim();
+    if (!username) return;
 
     assignCharacterController(character, {
       ownerUserId: String(viewerIdentity?.userId || ''),
-      ownerEmail: email,
-      ownerUsername: String(viewerIdentity?.username || ''),
+      ownerEmail: '',
+      ownerUsername: username,
     });
   };
 
@@ -2221,7 +2221,7 @@ export default function CharacterBook({
                           >
                             Assign
                           </button>
-                          {!!viewerIdentity?.email && (
+                          {!!String(viewerIdentity?.username || '').trim() && (
                             <button
                               type="button"
                               className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}

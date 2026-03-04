@@ -52,6 +52,22 @@ async function loadProfile(supabase, userId) {
   };
 }
 
+async function resolveSignInEmail(supabase, campaignId, rawIdentifier) {
+  const identifier = String(rawIdentifier || '').trim();
+  if (!identifier) throw new Error('Email or username is required.');
+  if (identifier.includes('@')) return identifier.toLowerCase();
+
+  const { data, error } = await supabase.rpc('resolve_login_email', {
+    p_campaign_id: campaignId,
+    p_identifier: identifier,
+  });
+  if (error) throw new Error(error.message || 'Unable to resolve username.');
+
+  const resolved = String(data || '').trim().toLowerCase();
+  if (!resolved) throw new Error('Username not found for this campaign.');
+  return resolved;
+}
+
 export default function AuthGate({ children }) {
   const enabled = isSupabaseBackend;
   const campaignId = getCampaignId();
@@ -63,7 +79,7 @@ export default function AuthGate({ children }) {
   const [role, setRole] = useState('member');
   const [cloudStatus, setCloudStatus] = useState(repository.getCloudStatus());
   const [authError, setAuthError] = useState('');
-  const [email, setEmail] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [usernameDraft, setUsernameDraft] = useState('');
   const [guestMode, setGuestMode] = useState(false);
@@ -278,12 +294,19 @@ export default function AuthGate({ children }) {
     setBusy(true);
     setAuthError('');
     setGuestMode(false);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: String(email || '').trim(),
-      password: String(password || ''),
-    });
-    if (error) setAuthError(error.message || 'Sign in failed.');
-    setBusy(false);
+    try {
+      const email = await resolveSignInEmail(supabase, campaignId, loginIdentifier);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password: String(password || ''),
+      });
+      if (error) throw error;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Sign in failed.';
+      setAuthError(msg);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const continueAsGuest = useCallback(async () => {
@@ -378,37 +401,38 @@ export default function AuthGate({ children }) {
   if (phase === 'signed_out') {
     return (
       <div className={styles.authShell}>
-        <form className={styles.card} onSubmit={signIn}>
+        <form className={`${styles.card} ${styles.loginCard}`} onSubmit={signIn}>
+          <div className={styles.loginBadge}>Invite-Only Campaign Portal</div>
           <h1 className={styles.title}>Knights of Avalon</h1>
-          <p className={styles.copy}>Sign in with your invited email account.</p>
-          <label className={styles.label} htmlFor="login-email">Email</label>
-          <input
-            id="login-email"
-            className={styles.input}
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-            required
-          />
-          <label className={styles.label} htmlFor="login-password">Password</label>
-          <input
-            id="login-password"
-            className={styles.input}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
+          <p className={styles.copy}>Sign in with your campaign username or invited email account.</p>
+          <div className={styles.formStack}>
+            <label className={styles.label} htmlFor="login-identifier">Email or Username</label>
+            <input
+              id="login-identifier"
+              className={styles.input}
+              type="text"
+              value={loginIdentifier}
+              onChange={(e) => setLoginIdentifier(e.target.value)}
+              autoComplete="username"
+              required
+            />
+            <label className={styles.label} htmlFor="login-password">Password</label>
+            <input
+              id="login-password"
+              className={styles.input}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
           <button className={styles.primaryBtn} type="submit" disabled={busy}>
             {busy ? 'Signing In...' : 'Sign In'}
           </button>
           <button className={styles.secondaryBtn} type="button" onClick={continueAsGuest} disabled={busy}>
             Continue as Guest
           </button>
-          <p className={styles.hint}>Self-signup is disabled. Ask the DM for an invite.</p>
-          <p className={styles.hint}>Guest mode is read-only.</p>
           {authError && <p className={styles.error}>{authError}</p>}
         </form>
       </div>
@@ -445,7 +469,7 @@ export default function AuthGate({ children }) {
         <div className={styles.card}>
           <h1 className={styles.title}>Invite Required</h1>
           <p className={styles.copy}>
-            {authError || 'This email is not in the campaign invite list.'}
+            {authError || 'This account is not in the campaign invite list.'}
           </p>
           <button className={styles.primaryBtn} type="button" onClick={signOut}>
             Sign Out

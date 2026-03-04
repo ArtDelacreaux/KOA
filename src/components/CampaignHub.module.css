@@ -1230,7 +1230,21 @@
 .controlsFooter {
   margin-top: 12px;
   display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.inventoryOwnerControls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: min(380px, 100%);
+}
+
+.inventoryOwnerControls select {
+  min-width: 220px;
 }
 
 .addItemBtn {
