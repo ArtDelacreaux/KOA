@@ -116,6 +116,8 @@ export function createSupabaseAdapter() {
   let isFlushing = false;
   let sharedChannel = null;
   let privateChannel = null;
+  let sharedSubscribed = false;
+  let privateSubscribed = false;
   let remotePollTimer = null;
   let onlineListenerBound = false;
   let visibilityListenerBound = false;
@@ -265,6 +267,8 @@ export function createSupabaseAdapter() {
 
   function teardownRealtime() {
     if (!supabase) return;
+    sharedSubscribed = false;
+    privateSubscribed = false;
     if (sharedChannel) {
       try {
         supabase.removeChannel(sharedChannel);
@@ -289,6 +293,7 @@ export function createSupabaseAdapter() {
   function startPolling() {
     stopPolling();
     remotePollTimer = setInterval(async () => {
+      if (status.connected) return;
       if (!status.ready || !supabase || !campaignId || (!userId && !sharedReadOnly)) return;
       try {
         await loadRemoteDocuments();
@@ -355,6 +360,8 @@ export function createSupabaseAdapter() {
   function startRealtime() {
     if (!supabase || !campaignId || (!userId && !sharedReadOnly)) return;
     teardownRealtime();
+    sharedSubscribed = false;
+    privateSubscribed = false;
 
     sharedChannel = supabase
       .channel(`koa-shared:${campaignId}`)
@@ -371,8 +378,14 @@ export function createSupabaseAdapter() {
       )
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') {
-          updateStatus({ connected: true });
+          sharedSubscribed = true;
+          updateStatus({ connected: sharedSubscribed || privateSubscribed });
           if (userId) scheduleFlush(50);
+          return;
+        }
+        if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
+          sharedSubscribed = false;
+          updateStatus({ connected: sharedSubscribed || privateSubscribed });
         }
       });
 
@@ -395,8 +408,14 @@ export function createSupabaseAdapter() {
       )
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') {
-          updateStatus({ connected: true });
+          privateSubscribed = true;
+          updateStatus({ connected: sharedSubscribed || privateSubscribed });
           scheduleFlush(50);
+          return;
+        }
+        if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
+          privateSubscribed = false;
+          updateStatus({ connected: sharedSubscribed || privateSubscribed });
         }
       });
   }
