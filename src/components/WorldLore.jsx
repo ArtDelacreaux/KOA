@@ -1712,6 +1712,8 @@ export default function WorldLore({
   const handleOpenGalleryItem = (picked) => {
     if (activeTab === 'maps' && picked?.id != null) {
       setActiveMapId(picked.id);
+      setLightboxItem(null);
+      return;
     }
     setLightboxItem({ ...picked, _tab: activeTab });
   };
