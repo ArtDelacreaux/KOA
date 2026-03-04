@@ -118,17 +118,29 @@ function previewText(value, maxLen = 42) {
 
 function upsertMessage(list, row) {
   if (!row || row.id == null) return list;
-  if (list.some((item) => item.id === row.id)) return list;
+  const existingIndex = list.findIndex((item) => item.id === row.id);
+  const next = existingIndex === -1
+    ? [...list, row]
+    : list.map((item, idx) => (idx === existingIndex ? { ...item, ...row } : item));
 
-  const next = [...list, row].sort((a, b) => {
+  next.sort((a, b) => {
     const left = new Date(a.created_at).getTime();
     const right = new Date(b.created_at).getTime();
     if (left !== right) return left - right;
-    return Number(a.id) - Number(b.id);
+    const leftId = Number(a.id);
+    const rightId = Number(b.id);
+    if (Number.isFinite(leftId) && Number.isFinite(rightId)) return leftId - rightId;
+    return String(a.id).localeCompare(String(b.id));
   });
 
   if (next.length <= MAX_RENDERED_MESSAGES) return next;
   return next.slice(next.length - MAX_RENDERED_MESSAGES);
+}
+
+function removeMessageById(list, id) {
+  if (id == null) return list;
+  const next = list.filter((item) => item.id !== id);
+  return next.length === list.length ? list : next;
 }
 
 function loadStoredPanelSize() {
@@ -452,6 +464,40 @@ export default function PlayerChatDock({ mode = 'dock' }) {
               });
             }
           }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        (payload) => {
+          if (!active) return;
+          const incoming = payload?.new;
+          const oldRow = payload?.old;
+          const rowId = incoming?.id ?? oldRow?.id;
+          if (rowId == null) return;
+          if (!incoming || !canViewMessage(incoming, currentUserId)) {
+            setMessages((prev) => removeMessageById(prev, rowId));
+            return;
+          }
+          setMessages((prev) => upsertMessage(prev, incoming));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        (payload) => {
+          if (!active) return;
+          setMessages((prev) => removeMessageById(prev, payload?.old?.id));
         }
       )
       .subscribe((status) => {

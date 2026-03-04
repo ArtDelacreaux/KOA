@@ -51,6 +51,41 @@ function emailLocalPart(email) {
   return normalized.split('@')[0] || '';
 }
 
+function toNumberOr(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+function sanitizeLauncherState(rawState, defaultState, nowMs = Date.now()) {
+  const source = rawState && typeof rawState === 'object' ? rawState : {};
+  const timerRunning = !!source.timerRunning;
+  const timerAccumulatedMs = Math.max(
+    0,
+    toNumberOr(source.timerAccumulatedMs, toNumberOr(source.elapsedMs, 0))
+  );
+  const legacyLastTick = toNumberOr(source.lastTick, NaN);
+  const parsedStartedAt = toNumberOr(source.timerStartedAtMs, NaN);
+  const timerStartedAtMs = timerRunning
+    ? (Number.isFinite(parsedStartedAt)
+      ? parsedStartedAt
+      : Number.isFinite(legacyLastTick)
+        ? legacyLastTick
+        : nowMs)
+    : null;
+
+  const normalized = {
+    ...defaultState,
+    ...source,
+    timerRunning,
+    timerAccumulatedMs,
+    timerStartedAtMs,
+  };
+  if (Object.prototype.hasOwnProperty.call(normalized, 'elapsedMs')) delete normalized.elapsedMs;
+  if (Object.prototype.hasOwnProperty.call(normalized, 'lastTick')) delete normalized.lastTick;
+  if (Object.prototype.hasOwnProperty.call(normalized, 'notes')) delete normalized.notes;
+  return normalized;
+}
+
 export default function CampaignHub(props) {
   const {
     enabled: authEnabled,
@@ -407,12 +442,13 @@ export default function CampaignHub(props) {
     owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul',
     recap: '',
     timerRunning: false,
-    elapsedMs: 0,
-    lastTick: Date.now(),
+    timerAccumulatedMs: 0,
+    timerStartedAtMs: null,
   };
 
   const [launcherState, setLauncherState] = useLocalStorageState(STORAGE_KEYS.launcher, defaultLauncherState);
   const [launcherNotes, setLauncherNotes] = useLocalStorageState(STORAGE_KEYS.launcherNotes, '');
+  const [launcherNowMs, setLauncherNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     setLauncherState((prev) => {
@@ -421,13 +457,7 @@ export default function CampaignHub(props) {
       if (legacyNotes && !String(launcherNotes || '').trim()) {
         setLauncherNotes(legacyNotes);
       }
-
-      const normalized = {
-        ...defaultLauncherState,
-        ...source,
-      };
-      if (Object.prototype.hasOwnProperty.call(normalized, 'notes')) delete normalized.notes;
-      return normalized;
+      return sanitizeLauncherState(source, defaultLauncherState);
     });
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,10 +466,54 @@ export default function CampaignHub(props) {
   useEffect(() => {
     if (!launcherState.timerRunning) return;
     const id = window.setInterval(() => {
-      setLauncherState((s) => { const now = Date.now(); const delta = Math.max(0, now - (s.lastTick || now)); return { ...s, elapsedMs: (s.elapsedMs || 0) + delta, lastTick: now }; });
+      setLauncherNowMs(Date.now());
     }, 250);
     return () => window.clearInterval(id);
   }, [launcherState.timerRunning]);
+
+  const displayedElapsedMs = useMemo(() => {
+    const base = Math.max(0, toNumberOr(launcherState.timerAccumulatedMs, 0));
+    if (!launcherState.timerRunning) return base;
+    const startedAt = toNumberOr(launcherState.timerStartedAtMs, NaN);
+    if (!Number.isFinite(startedAt)) return base;
+    return base + Math.max(0, launcherNowMs - startedAt);
+  }, [launcherNowMs, launcherState.timerAccumulatedMs, launcherState.timerRunning, launcherState.timerStartedAtMs]);
+
+  const toggleSessionTimer = () => {
+    setLauncherNowMs(Date.now());
+    setLauncherState((current) => {
+      const nowMs = Date.now();
+      const normalized = sanitizeLauncherState(current, defaultLauncherState, nowMs);
+      if (normalized.timerRunning) {
+        const startedAt = toNumberOr(normalized.timerStartedAtMs, nowMs);
+        const elapsedDelta = Math.max(0, nowMs - startedAt);
+        return {
+          ...normalized,
+          timerRunning: false,
+          timerAccumulatedMs: Math.max(0, toNumberOr(normalized.timerAccumulatedMs, 0) + elapsedDelta),
+          timerStartedAtMs: null,
+        };
+      }
+      return {
+        ...normalized,
+        timerRunning: true,
+        timerStartedAtMs: nowMs,
+      };
+    });
+  };
+
+  const resetSessionTimer = () => {
+    setLauncherNowMs(Date.now());
+    setLauncherState((current) => {
+      const normalized = sanitizeLauncherState(current, defaultLauncherState);
+      return {
+        ...normalized,
+        timerRunning: false,
+        timerAccumulatedMs: 0,
+        timerStartedAtMs: null,
+      };
+    });
+  };
 
   const fmtElapsed = (ms) => { const total = Math.floor((ms || 0) / 1000); const h = String(Math.floor(total / 3600)).padStart(2, '0'); const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0'); const s = String(total % 60).padStart(2, '0'); return `${h}:${m}:${s}`; };
   const openTool = (kind) => { const url = kind === 'watch' ? launcherState.watchUrl : launcherState.owlbearUrl; if (!url) return; window.open(url, '_blank', 'noopener,noreferrer'); };
@@ -774,19 +848,19 @@ export default function CampaignHub(props) {
                     <div className={styles.blockTitle}>Session Timer</div>
                     <div className={styles.blockSub}>Track how long you've been playing.</div>
                   </div>
-                  <div className={styles.timerValue}>{fmtElapsed(launcherState.elapsedMs)}</div>
+                  <div className={styles.timerValue}>{fmtElapsed(displayedElapsedMs)}</div>
                   <div className={styles.timerActions}>
                     <button
                       className={smallBtnClass(launcherState.timerRunning ? 'danger' : 'gold')}
                       onMouseEnter={smallBtnHover}
-                      onClick={() => setLauncherState((s) => ({ ...s, timerRunning: !s.timerRunning, lastTick: Date.now() }))}
+                      onClick={toggleSessionTimer}
                     >
                       {launcherState.timerRunning ? 'Pause' : 'Start'}
                     </button>
                     <button
                       className={smallBtnClass('danger')}
                       onMouseEnter={smallBtnHover}
-                      onClick={() => setLauncherState((s) => ({ ...s, timerRunning: false, elapsedMs: 0, lastTick: Date.now() }))}
+                      onClick={resetSessionTimer}
                     >
                       Reset
                     </button>

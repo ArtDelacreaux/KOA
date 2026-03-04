@@ -7,8 +7,12 @@ const QUEUE_STORAGE_KEY = 'koa:supabase:queue:v1';
 const RETRY_BASE_MS = 900;
 const RETRY_MAX_MS = 15000;
 // Keep remote state snappy even when realtime subscriptions are unavailable.
-const REMOTE_POLL_MS = 1000;
+const REMOTE_POLL_MS = 30000;
+const VISIBILITY_PULL_COOLDOWN_MS = 5000;
 const LOCAL_WRITE_PULL_GUARD_MS = 2200;
+const DEFAULT_FLUSH_DELAY_MS = 10;
+const DEBOUNCED_SHARED_WRITE_MS = 600;
+const SYNC_DEBUG_ENABLED = !!import.meta.env.DEV;
 
 const PRIVATE_KEYS = new Set([STORAGE_KEYS.launcherNotes].filter(Boolean));
 const LOCAL_ONLY_KEYS = new Set([STORAGE_KEYS.worldNpcDeepLink].filter(Boolean));
@@ -103,6 +107,25 @@ function toSnapshotPayloadObject(snapshot) {
   return payload;
 }
 
+function shouldDebounceSharedWrite(key) {
+  if (key === STORAGE_KEYS.launcher) return true;
+  if (key === STORAGE_KEYS.launcherNotes) return true;
+  if (key === STORAGE_KEYS.menuCampaignBrief) return true;
+  if (String(key || '').startsWith(STORAGE_KEYS.menuNotePrefix)) return true;
+  return false;
+}
+
+function writeDebounceMsForKey(scope, key, mode = 'upsert') {
+  if (mode !== 'upsert') return 0;
+  if (scope === 'local' || scope === 'private') return 0;
+  return shouldDebounceSharedWrite(key) ? DEBOUNCED_SHARED_WRITE_MS : 0;
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
 export function createSupabaseAdapter() {
   const local = createLocalAdapter();
 
@@ -120,6 +143,7 @@ export function createSupabaseAdapter() {
   let sharedSubscribed = false;
   let privateSubscribed = false;
   let remotePollTimer = null;
+  let lastVisibilityPullAtMs = 0;
   let onlineListenerBound = false;
   let visibilityListenerBound = false;
 
@@ -127,6 +151,12 @@ export function createSupabaseAdapter() {
   const lastSeenRemoteUpdatedAt = new Map();
   const suppressPullUntilByKey = new Map();
   const minExpectedRemoteStampByKey = new Map();
+  const debugCounters = {
+    pullReadsWhileConnected: 0,
+    fallbackPollRuns: 0,
+    writesPerKey: {},
+    coalescedWriteSkips: 0,
+  };
   const status = {
     enabled: true,
     configured: isSupabaseConfigured(),
@@ -144,6 +174,36 @@ export function createSupabaseAdapter() {
     Object.assign(status, partial || {});
   }
 
+  function bumpDebugCounter(counterKey, amount = 1) {
+    if (!SYNC_DEBUG_ENABLED) return;
+    if (!Object.prototype.hasOwnProperty.call(debugCounters, counterKey)) return;
+    debugCounters[counterKey] = toFiniteNumber(debugCounters[counterKey], 0) + amount;
+    publishDebugSnapshot();
+  }
+
+  function bumpWriteCounter(key) {
+    if (!SYNC_DEBUG_ENABLED) return;
+    const normalizedKey = normalizeText(key);
+    if (!normalizedKey) return;
+    debugCounters.writesPerKey[normalizedKey] = toFiniteNumber(debugCounters.writesPerKey[normalizedKey], 0) + 1;
+    publishDebugSnapshot();
+  }
+
+  function getDebugSnapshot() {
+    if (!SYNC_DEBUG_ENABLED) return null;
+    return {
+      pullReadsWhileConnected: debugCounters.pullReadsWhileConnected,
+      fallbackPollRuns: debugCounters.fallbackPollRuns,
+      writesPerKey: { ...debugCounters.writesPerKey },
+      coalescedWriteSkips: debugCounters.coalescedWriteSkips,
+    };
+  }
+
+  function publishDebugSnapshot() {
+    if (!SYNC_DEBUG_ENABLED || typeof window === 'undefined') return;
+    window.__koaSupabaseSyncDebug = getDebugSnapshot();
+  }
+
   function getScope(key) {
     if (LOCAL_ONLY_KEYS.has(key)) return 'local';
     if (PRIVATE_KEYS.has(key)) return 'private';
@@ -159,11 +219,13 @@ export function createSupabaseAdapter() {
       value: item.value,
       enqueuedAt: item.enqueuedAt,
       attempts: item.attempts || 0,
+      readyAt: toFiniteNumber(item.readyAt, Date.now()),
     }));
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(serializable));
     } catch {}
     updateStatus({ queueSize: serializable.length });
+    publishDebugSnapshot();
   }
 
   function loadQueue() {
@@ -190,6 +252,7 @@ export function createSupabaseAdapter() {
           value: item.value,
           enqueuedAt: item.enqueuedAt || new Date().toISOString(),
           attempts: Math.max(0, Number.parseInt(item.attempts, 10) || 0),
+          readyAt: toFiniteNumber(item.readyAt, Date.now()),
         });
       });
     }
@@ -204,14 +267,14 @@ export function createSupabaseAdapter() {
     queueFlushTimer = setTimeout(() => {
       queueFlushTimer = null;
       flushPendingWrites();
-    }, Math.max(0, delayMs));
+    }, Math.max(0, toFiniteNumber(delayMs, DEFAULT_FLUSH_DELAY_MS)));
   }
 
   function bindOnlineListener() {
     if (onlineListenerBound || typeof window === 'undefined') return;
     onlineListenerBound = true;
     window.addEventListener('online', () => {
-      scheduleFlush(10);
+      scheduleFlush(DEFAULT_FLUSH_DELAY_MS);
     });
   }
 
@@ -220,10 +283,14 @@ export function createSupabaseAdapter() {
     visibilityListenerBound = true;
     document.addEventListener('visibilitychange', async () => {
       if (document.visibilityState !== 'visible') return;
-      scheduleFlush(10);
+      scheduleFlush(DEFAULT_FLUSH_DELAY_MS);
       if (!status.ready || !supabase || !campaignId || (!userId && !sharedReadOnly)) return;
+      if (status.connected) return;
+      const now = Date.now();
+      if (now - lastVisibilityPullAtMs < VISIBILITY_PULL_COOLDOWN_MS) return;
+      lastVisibilityPullAtMs = now;
       try {
-        await loadRemoteDocuments();
+        await loadRemoteDocuments('focus');
         updateStatus({
           lastSyncError: '',
           lastSyncAt: new Date().toISOString(),
@@ -274,6 +341,8 @@ export function createSupabaseAdapter() {
 
   function enqueue(scope, key, mode, type, value) {
     if (scope === 'local') return;
+    const debounceMs = writeDebounceMsForKey(scope, key, mode);
+    const now = Date.now();
     const id = queueKey(scope, key);
     pendingQueue.set(id, {
       scope,
@@ -281,11 +350,13 @@ export function createSupabaseAdapter() {
       mode,
       type,
       value,
-      enqueuedAt: new Date().toISOString(),
+      enqueuedAt: new Date(now).toISOString(),
       attempts: 0,
+      readyAt: now + debounceMs,
     });
     markLocalWriteBarrier(scope, key);
     persistQueue();
+    scheduleFlush(Math.max(DEFAULT_FLUSH_DELAY_MS, debounceMs));
   }
 
   function teardownRealtime() {
@@ -304,6 +375,7 @@ export function createSupabaseAdapter() {
       } catch {}
       privateChannel = null;
     }
+    stopPolling();
     updateStatus({ connected: false });
   }
 
@@ -314,12 +386,16 @@ export function createSupabaseAdapter() {
   }
 
   function startPolling() {
-    stopPolling();
+    if (remotePollTimer) return;
     remotePollTimer = setInterval(async () => {
-      if (status.connected) return;
       if (!status.ready || !supabase || !campaignId || (!userId && !sharedReadOnly)) return;
+      if (status.connected) {
+        stopPolling();
+        return;
+      }
+      bumpDebugCounter('fallbackPollRuns');
       try {
-        await loadRemoteDocuments();
+        await loadRemoteDocuments('fallback-poll');
         updateStatus({
           lastSyncError: '',
           lastSyncAt: new Date().toISOString(),
@@ -329,6 +405,13 @@ export function createSupabaseAdapter() {
         updateStatus({ lastSyncError: msg });
       }
     }, REMOTE_POLL_MS);
+  }
+
+  function updateConnectedState() {
+    const connected = sharedSubscribed || privateSubscribed;
+    updateStatus({ connected });
+    if (connected) stopPolling();
+    else if (status.ready) startPolling();
   }
 
   function applyRemoteRow(scope, row, reason) {
@@ -363,8 +446,9 @@ export function createSupabaseAdapter() {
     emitRemoteChange(key, undefined, { type: 'remove', reason });
   }
 
-  async function loadRemoteDocuments() {
+  async function loadRemoteDocuments(reason = 'manual') {
     if (!supabase || !campaignId || (!userId && !sharedReadOnly)) return;
+    if (status.connected) bumpDebugCounter('pullReadsWhileConnected');
 
     const [sharedRes, privateRes] = await Promise.all([
       supabase
@@ -409,13 +493,13 @@ export function createSupabaseAdapter() {
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') {
           sharedSubscribed = true;
-          updateStatus({ connected: sharedSubscribed || privateSubscribed });
+          updateConnectedState();
           if (userId) scheduleFlush(50);
           return;
         }
         if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
           sharedSubscribed = false;
-          updateStatus({ connected: sharedSubscribed || privateSubscribed });
+          updateConnectedState();
         }
       });
 
@@ -439,13 +523,13 @@ export function createSupabaseAdapter() {
       .subscribe((state) => {
         if (state === 'SUBSCRIBED') {
           privateSubscribed = true;
-          updateStatus({ connected: sharedSubscribed || privateSubscribed });
+          updateConnectedState();
           scheduleFlush(50);
           return;
         }
         if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT' || state === 'CLOSED') {
           privateSubscribed = false;
-          updateStatus({ connected: sharedSubscribed || privateSubscribed });
+          updateConnectedState();
         }
       });
   }
@@ -456,6 +540,8 @@ export function createSupabaseAdapter() {
 
     const isPrivate = op.scope === 'private';
     const table = isPrivate ? 'private_docs' : 'shared_docs';
+    bumpWriteCounter(op.key);
+    publishDebugSnapshot();
 
     if (op.mode === 'remove') {
       let query = supabase.from(table).delete().eq('campaign_id', campaignId).eq('doc_key', op.key);
@@ -501,14 +587,24 @@ export function createSupabaseAdapter() {
 
     let maxAttempts = 0;
     let failureMessage = '';
+    let earliestReadyAt = Number.POSITIVE_INFINITY;
+    let wroteAny = false;
 
     for (let i = 0; i < ops.length; i += 1) {
       const op = ops[i];
+      const nowMs = Date.now();
+      const readyAt = toFiniteNumber(op.readyAt, 0);
+      if (readyAt > nowMs) {
+        earliestReadyAt = Math.min(earliestReadyAt, readyAt);
+        bumpDebugCounter('coalescedWriteSkips');
+        continue;
+      }
       const id = queueKey(op.scope, op.key);
       try {
         await sendOperation(op);
         pendingQueue.delete(id);
         markLocalWriteBarrier(op.scope, op.key);
+        wroteAny = true;
       } catch (err) {
         let effectiveError = err;
         if (isPermissionLikeError(err)) {
@@ -517,6 +613,7 @@ export function createSupabaseAdapter() {
             await sendOperation(op);
             pendingQueue.delete(id);
             markLocalWriteBarrier(op.scope, op.key);
+            wroteAny = true;
             continue;
           } catch (retryErr) {
             effectiveError = retryErr;
@@ -525,7 +622,7 @@ export function createSupabaseAdapter() {
 
         const attempts = (op.attempts || 0) + 1;
         maxAttempts = Math.max(maxAttempts, attempts);
-        pendingQueue.set(id, { ...op, attempts });
+        pendingQueue.set(id, { ...op, attempts, readyAt: Date.now() });
         if (!failureMessage) {
           failureMessage = `[${op.scope}:${op.key}] ${normalizeErrorMessage(effectiveError)}`;
         }
@@ -540,10 +637,19 @@ export function createSupabaseAdapter() {
       return;
     }
 
-    updateStatus({
-      lastSyncError: '',
-      lastSyncAt: new Date().toISOString(),
-    });
+    if (pendingQueue.size > 0) {
+      const delayMs = Number.isFinite(earliestReadyAt)
+        ? Math.max(DEFAULT_FLUSH_DELAY_MS, earliestReadyAt - Date.now())
+        : DEFAULT_FLUSH_DELAY_MS;
+      scheduleFlush(delayMs);
+    }
+
+    if (wroteAny) {
+      updateStatus({
+        lastSyncError: '',
+        lastSyncAt: new Date().toISOString(),
+      });
+    }
     isFlushing = false;
   }
 
@@ -570,6 +676,7 @@ export function createSupabaseAdapter() {
   loadQueue();
   bindOnlineListener();
   bindVisibilityListener();
+  publishDebugSnapshot();
 
   return {
     name: 'supabase',
@@ -583,7 +690,6 @@ export function createSupabaseAdapter() {
       local.writeJson(key, value);
       const scope = getScope(key);
       enqueue(scope, key, 'upsert', 'json', value);
-      scheduleFlush(10);
     },
     readText(key, fallbackValue = '') {
       return local.readText(key, fallbackValue);
@@ -593,13 +699,11 @@ export function createSupabaseAdapter() {
       local.writeText(key, normalized);
       const scope = getScope(key);
       enqueue(scope, key, 'upsert', 'text', normalized);
-      scheduleFlush(10);
     },
     remove(key) {
       local.remove(key);
       const scope = getScope(key);
       enqueue(scope, key, 'remove', 'json', null);
-      scheduleFlush(10);
     },
     async configureSession(config = {}) {
       supabase = getSupabaseClient();
@@ -635,7 +739,7 @@ export function createSupabaseAdapter() {
       }
 
       try {
-        await loadRemoteDocuments();
+        await loadRemoteDocuments('configure');
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to pull cloud data.';
         updateStatus({ lastSyncError: msg });
@@ -643,7 +747,6 @@ export function createSupabaseAdapter() {
 
       startRealtime();
       updateStatus({ ready: true });
-      startPolling();
       if (userId) await flushPendingWrites();
       return this.getCloudStatus();
     },
@@ -662,10 +765,12 @@ export function createSupabaseAdapter() {
       return this.getCloudStatus();
     },
     getCloudStatus() {
-      return {
+      const next = {
         ...status,
         queueSize: pendingQueue.size,
       };
+      if (SYNC_DEBUG_ENABLED) next.debug = getDebugSnapshot();
+      return next;
     },
     async seedCampaignFromSnapshot(snapshot) {
       if (!supabase || !campaignId || !userId) {
@@ -679,7 +784,7 @@ export function createSupabaseAdapter() {
       if (error) throw new Error(error.message || 'Cloud seed failed.');
 
       try {
-        await loadRemoteDocuments();
+        await loadRemoteDocuments('seed-refresh');
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Cloud seeded but pull refresh failed.';
         updateStatus({ lastSyncError: msg });
