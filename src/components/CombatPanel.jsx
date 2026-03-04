@@ -1905,13 +1905,29 @@ export default function CombatPanel({
       return;
     }
 
-    const popout = window.open('', 'combat-sheet-popout', 'popup=yes,width=1180,height=900,resizable=yes,scrollbars=yes');
+    const screenWidth = Math.max(1024, toInt(window.screen?.availWidth, 1280));
+    const screenHeight = Math.max(720, toInt(window.screen?.availHeight, 900));
+    const featureString = [
+      'popup=yes',
+      `width=${screenWidth}`,
+      `height=${screenHeight}`,
+      'left=0',
+      'top=0',
+      'resizable=yes',
+      'scrollbars=yes',
+    ].join(',');
+    const popout = window.open('', 'combat-sheet-popout', featureString);
     if (!popout) {
       window.alert('Pop-up blocked. Please allow pop-ups for this site to use Character Sheet pop out.');
       return;
     }
 
     try {
+      try {
+        if (typeof popout.moveTo === 'function') popout.moveTo(0, 0);
+        if (typeof popout.resizeTo === 'function') popout.resizeTo(screenWidth, screenHeight);
+      } catch (_) {}
+
       popout.document.head.innerHTML = '';
       const metaCharset = popout.document.createElement('meta');
       metaCharset.setAttribute('charset', 'utf-8');
@@ -1969,11 +1985,11 @@ export default function CombatPanel({
       sheetPopoutRootRef.current = null;
       return;
     }
-    if (!editorOpen || !selected || editorMode !== 'sheet') {
+    if (!editorOpen || !selected) {
       closeSheetPopout(true, { suppressSessionEnd: true });
       return;
     }
-    popout.document.title = `${selected.name} — Character Sheet`;
+    popout.document.title = `${selected.name} — ${editorMode === 'sheet' ? 'Character Sheet' : 'Combatant Editor'}`;
   }, [sheetPopoutOpen, editorOpen, selected, editorMode]);
 
   useEffect(() => {
@@ -2709,13 +2725,12 @@ export default function CombatPanel({
     sheetPopoutOpen
     && editorOpen
     && selected
-    && editorMode === 'sheet'
     && popoutWindow
     && !popoutWindow.closed
     && sheetPopoutRootRef.current
   );
   const sheetPortalHost = isSheetPopoutActive ? sheetPopoutRootRef.current : null;
-  const shouldRenderEditorInline = !!(editorOpen && selected && !(editorMode === 'sheet' && isSheetPopoutActive));
+  const shouldRenderEditorInline = !!(editorOpen && selected && !isSheetPopoutActive);
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -3181,8 +3196,8 @@ export default function CombatPanel({
           if (!editorOpen || !selected) return null;
           const editorModal = (
             <>
-            <div className={styles.modalBack}>
-            <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal}`}>
+            <div className={`${styles.modalBack} ${isSheetPopoutActive ? styles.popoutModalBack : ''}`}>
+            <div className={`${styles.modalCard} ${editorMode === 'sheet' ? styles.sheetManagerModal : styles.editorModal} ${isSheetPopoutActive ? styles.popoutModalCard : ''}`}>
               <div className={styles.editorHeader}>
                 <div className={styles.editorTitle}>
                   {editorMode === 'sheet' ? 'Character Sheet:' : 'Editing:'} <span className={styles.editorNameAccent}>{selected.name}</span>
@@ -4152,7 +4167,7 @@ export default function CombatPanel({
         )}
           </>
           );
-          if (editorMode === 'sheet' && isSheetPopoutActive && sheetPortalHost) {
+          if (isSheetPopoutActive && sheetPortalHost) {
             return createPortal(editorModal, sheetPortalHost);
           }
           if (!shouldRenderEditorInline) return null;
