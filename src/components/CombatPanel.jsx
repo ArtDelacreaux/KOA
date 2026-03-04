@@ -1705,20 +1705,6 @@ export default function CombatPanel({
   }, []);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
-      const incoming = normalize(loadState()) || defaultEncounter();
-      setEncounter((prev) => {
-        try {
-          if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
-        } catch {}
-        suppressNextPersistRef.current = true;
-        return incoming;
-      });
-    }, 1200);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
     if (!hydrated.current) { hydrated.current = true; return; }
     if (suppressNextPersistRef.current) {
       suppressNextPersistRef.current = false;
@@ -2210,14 +2196,25 @@ export default function CombatPanel({
     });
   };
 
-  const setSelectedField = (patch) => {
-    if (!selected || !selectedCanEdit) return;
-    setEncounter(prev => {
+  const setSelectedField = (patchOrBuilder) => {
+    if (!selectedId) return;
+    setEncounter((prev) => {
       const next = normalize(prev);
-      const previousProfileKey = sheetProfileKey(selected.sourceCharacterId, selected.name);
       const activeId = next.combatants[next.activeIndex]?.id || null;
+      const selectedCombatant = next.combatants.find((combatant) => combatant.id === selectedId);
+      if (!selectedCombatant || !canControlCombatant(selectedCombatant)) return prev;
+
+      const patchCandidate =
+        typeof patchOrBuilder === 'function'
+          ? patchOrBuilder(selectedCombatant)
+          : patchOrBuilder;
+      if (!patchCandidate || typeof patchCandidate !== 'object') return prev;
+      if (Object.keys(patchCandidate).length === 0) return prev;
+
+      const patch = patchCandidate;
+      const previousProfileKey = sheetProfileKey(selectedCombatant.sourceCharacterId, selectedCombatant.name);
       const pair = findCastorWilliamPair(next.combatants);
-      const syncRole = castorWilliamSyncRole(selected);
+      const syncRole = castorWilliamSyncRole(selectedCombatant);
       const mirrorTargetId =
         syncRole === 'castor'
           ? pair.william?.id || ''
@@ -2228,14 +2225,16 @@ export default function CombatPanel({
         next.castorWilliamResourceSync && mirrorTargetId
           ? pickCastorWilliamResourcePatch(patch)
           : null;
+
       next.combatants = next.combatants.map((combatant) => {
-        if (combatant.id === selected.id) return { ...combatant, ...patch };
+        if (combatant.id === selectedCombatant.id) return { ...combatant, ...patch };
         if (mirroredResourcePatch && combatant.id === mirrorTargetId) {
           return { ...combatant, ...cloneCastorWilliamResourcePatch(mirroredResourcePatch) };
         }
         return combatant;
       });
-      const updatedSelected = next.combatants.find((x) => x.id === selected.id);
+
+      const updatedSelected = next.combatants.find((combatant) => combatant.id === selectedCombatant.id);
       if (updatedSelected) {
         const nextProfileKey = sheetProfileKey(updatedSelected.sourceCharacterId, updatedSelected.name);
         if (nextProfileKey && (updatedSelected.sourceSheet || next.sheetProfiles?.[nextProfileKey] || next.sheetProfiles?.[previousProfileKey])) {
@@ -2245,11 +2244,12 @@ export default function CombatPanel({
           next.sheetProfiles = nextProfiles;
         }
       }
+
       if (Object.prototype.hasOwnProperty.call(patch, 'init') || Object.prototype.hasOwnProperty.call(patch, 'side') || Object.prototype.hasOwnProperty.call(patch, 'name')) {
         next.combatants = sortCombatants(next.combatants);
         if (next.combatants.length === 0) next.activeIndex = 0;
         else if (activeId) {
-          const idx = next.combatants.findIndex(x => x.id === activeId);
+          const idx = next.combatants.findIndex((combatant) => combatant.id === activeId);
           next.activeIndex = idx >= 0 ? idx : clamp(next.activeIndex, 0, next.combatants.length - 1);
         } else {
           next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
@@ -2260,14 +2260,14 @@ export default function CombatPanel({
   };
 
   const toggleSelectedSensitiveStats = () => {
-    if (!selected || !selectedCanEdit) return;
-    setSelectedField({ hideSensitiveStats: !selected.hideSensitiveStats });
+    setSelectedField((combatant) => ({ hideSensitiveStats: !combatant.hideSensitiveStats }));
   };
 
   const adjustSelectedTempHp = (delta) => {
-    if (!selected) return;
-    const current = Math.max(0, toInt(selected.tempHP, 0));
-    setSelectedField({ tempHP: Math.max(0, current + delta) });
+    setSelectedField((combatant) => {
+      const current = Math.max(0, toInt(combatant.tempHP, 0));
+      return { tempHP: Math.max(0, current + delta) };
+    });
   };
 
   const updateSelectedTempHp = (raw) => {
@@ -2281,40 +2281,41 @@ export default function CombatPanel({
   };
 
   const applyHpAdjustment = (kind) => {
-    if (!selected) return;
     const amount = Math.abs(toInt(hpAdjustAmount, 0));
     if (amount <= 0) return;
 
-    const hp = selected.hp === '' ? 0 : toInt(selected.hp, 0);
-    const maxHP = selected.maxHP === '' ? null : toInt(selected.maxHP, 0);
-    const tempHP = toInt(selected.tempHP, 0);
+    setSelectedField((combatant) => {
+      const hp = combatant.hp === '' ? 0 : toInt(combatant.hp, 0);
+      const maxHP = combatant.maxHP === '' ? null : toInt(combatant.maxHP, 0);
+      const tempHP = toInt(combatant.tempHP, 0);
 
-    if (kind === 'damage') {
-      let remaining = amount;
-      const absorbedByTemp = Math.min(tempHP, remaining);
-      remaining -= absorbedByTemp;
-      const nextTempHP = tempHP - absorbedByTemp;
-      const nextHP = Math.max(0, hp - remaining);
-      setSelectedField({ hp: nextHP, tempHP: nextTempHP });
-      return;
-    }
+      if (kind === 'damage') {
+        let remaining = amount;
+        const absorbedByTemp = Math.min(tempHP, remaining);
+        remaining -= absorbedByTemp;
+        const nextTempHP = tempHP - absorbedByTemp;
+        const nextHP = Math.max(0, hp - remaining);
+        return { hp: nextHP, tempHP: nextTempHP };
+      }
 
-    const healed = hp + amount;
-    const nextHP = maxHP != null && maxHP > 0 ? Math.min(maxHP, healed) : healed;
-    setSelectedField({ hp: nextHP });
+      const healed = hp + amount;
+      const nextHP = maxHP != null && maxHP > 0 ? Math.min(maxHP, healed) : healed;
+      return { hp: nextHP };
+    });
   };
 
   const setSpellSlotField = (level, patch) => {
-    if (!selected) return;
-    const slots = normalizeSpellSlots(selected.spellSlots);
-    const nextSlots = slots.map((slot) => {
-      if (slot.level !== level) return slot;
-      const merged = typeof patch === 'function' ? patch(slot) : { ...slot, ...patch };
-      const max = clamp(toInt(merged.max, 0), 0, 20);
-      const current = clamp(toInt(merged.current, max), 0, max);
-      return { level, max, current };
+    setSelectedField((combatant) => {
+      const slots = normalizeSpellSlots(combatant.spellSlots);
+      const nextSlots = slots.map((slot) => {
+        if (slot.level !== level) return slot;
+        const merged = typeof patch === 'function' ? patch(slot) : { ...slot, ...patch };
+        const max = clamp(toInt(merged.max, 0), 0, 20);
+        const current = clamp(toInt(merged.current, max), 0, max);
+        return { level, max, current };
+      });
+      return { spellSlots: nextSlots };
     });
-    setSelectedField({ spellSlots: nextSlots });
   };
 
   const nudgeSpellSlotMax = (level, delta) => {
@@ -2330,33 +2331,36 @@ export default function CombatPanel({
   };
 
   const setFeatureChargeField = (id, patch) => {
-    if (!selected) return;
-    const charges = normalizeFeatureCharges(selected.featureCharges);
-    const nextCharges = charges.map((charge) => {
-      if (charge.id !== id) return charge;
-      const merged = typeof patch === 'function' ? patch(charge) : { ...charge, ...patch };
-      return {
-        id: charge.id,
-        name: cleanText(merged.name) || charge.name,
-        max: clamp(toInt(merged.max, charge.max), 0, 20),
-        current: clamp(toInt(merged.current, charge.current), 0, clamp(toInt(merged.max, charge.max), 0, 20)),
-      };
+    setSelectedField((combatant) => {
+      const charges = normalizeFeatureCharges(combatant.featureCharges);
+      const nextCharges = charges.map((charge) => {
+        if (charge.id !== id) return charge;
+        const merged = typeof patch === 'function' ? patch(charge) : { ...charge, ...patch };
+        return {
+          id: charge.id,
+          name: cleanText(merged.name) || charge.name,
+          max: clamp(toInt(merged.max, charge.max), 0, 20),
+          current: clamp(toInt(merged.current, charge.current), 0, clamp(toInt(merged.max, charge.max), 0, 20)),
+        };
+      });
+      return { featureCharges: nextCharges };
     });
-    setSelectedField({ featureCharges: nextCharges });
   };
 
   const addFeatureCharge = () => {
-    if (!selected) return;
-    const charges = normalizeFeatureCharges(selected.featureCharges);
-    const id = createId('feature');
-    const next = [...charges, { id, name: `Feature ${charges.length + 1}`, max: 0, current: 0 }];
-    setSelectedField({ featureCharges: next });
+    setSelectedField((combatant) => {
+      const charges = normalizeFeatureCharges(combatant.featureCharges);
+      const id = createId('feature');
+      const next = [...charges, { id, name: `Feature ${charges.length + 1}`, max: 0, current: 0 }];
+      return { featureCharges: next };
+    });
   };
 
   const removeFeatureCharge = (id) => {
-    if (!selected) return;
-    const charges = normalizeFeatureCharges(selected.featureCharges);
-    setSelectedField({ featureCharges: charges.filter((charge) => charge.id !== id) });
+    setSelectedField((combatant) => {
+      const charges = normalizeFeatureCharges(combatant.featureCharges);
+      return { featureCharges: charges.filter((charge) => charge.id !== id) };
+    });
   };
 
   const nudgeFeatureChargeMax = (id, delta) => {
@@ -2372,33 +2376,35 @@ export default function CombatPanel({
   };
 
   const updateFeatureChargeName = (id, rawName) => {
-    if (!selected) return;
-    const charges = normalizeFeatureCharges(selected.featureCharges);
-    const next = charges.map((charge) => (charge.id === id ? { ...charge, name: String(rawName || '') } : charge));
-    setSelectedField({ featureCharges: next });
+    setSelectedField((combatant) => {
+      const charges = normalizeFeatureCharges(combatant.featureCharges);
+      const next = charges.map((charge) => (charge.id === id ? { ...charge, name: String(rawName || '') } : charge));
+      return { featureCharges: next };
+    });
   };
 
   const longRestSelected = () => {
-    if (!selected) return;
-    const maxHP = selected.maxHP === '' ? '' : toInt(selected.maxHP, 0);
-    const nextHP = maxHP === '' ? selected.hp : maxHP;
-    const nextSpellSlots = normalizeSpellSlots(selected.spellSlots).map((slot) => ({
-      ...slot,
-      current: slot.max,
-    }));
-    const nextFeatureCharges = normalizeFeatureCharges(selected.featureCharges).map((feature) => ({
-      ...feature,
-      current: feature.max,
-    }));
-
     setStatusDraft('');
-    setSelectedField({
-      hp: nextHP,
-      tempHP: 0,
-      status: [],
-      concentration: '',
-      spellSlots: nextSpellSlots,
-      featureCharges: nextFeatureCharges,
+    setSelectedField((combatant) => {
+      const maxHP = combatant.maxHP === '' ? '' : toInt(combatant.maxHP, 0);
+      const nextHP = maxHP === '' ? combatant.hp : maxHP;
+      const nextSpellSlots = normalizeSpellSlots(combatant.spellSlots).map((slot) => ({
+        ...slot,
+        current: slot.max,
+      }));
+      const nextFeatureCharges = normalizeFeatureCharges(combatant.featureCharges).map((feature) => ({
+        ...feature,
+        current: feature.max,
+      }));
+
+      return {
+        hp: nextHP,
+        tempHP: 0,
+        status: [],
+        concentration: '',
+        spellSlots: nextSpellSlots,
+        featureCharges: nextFeatureCharges,
+      };
     });
   };
 
