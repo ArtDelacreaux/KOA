@@ -4,6 +4,8 @@ import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import styles from './PlayerChatDock.module.css';
 import chatNotifSfx from '../assets/Sound Effects/chatnotif.mp3';
 import dmNotifSfx from '../assets/Sound Effects/dmnotif.mp3';
+import arlisChatGif from '../assets/Chat Anim/arlisChat.gif';
+import willChatGif from '../assets/Chat Anim/willChat.gif';
 
 const INITIAL_LOAD_LIMIT = 120;
 const MAX_RENDERED_MESSAGES = 200;
@@ -14,15 +16,41 @@ const PANEL_MIN_WIDTH = 420;
 const PANEL_MIN_HEIGHT = 420;
 const PANEL_MARGIN = 24;
 const PANEL_DEFAULT_SIZE = { width: 680, height: 620 };
+const CHAT_ANIM_BY_NAME_KEY = {
+  arlis: arlisChatGif,
+  arlisghoth: arlisChatGif,
+  william: willChatGif,
+  will: willChatGif,
+  williamspicer: willChatGif,
+};
 
 function normalizeText(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeNameKey(value) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function normalizeRole(value) {
   const role = normalizeText(value).toLowerCase();
   if (role === 'owner' || role === 'dm') return role;
   return 'member';
+}
+
+function getChatAnimForName(value) {
+  const key = normalizeNameKey(value);
+  if (!key) return '';
+  if (CHAT_ANIM_BY_NAME_KEY[key]) return CHAT_ANIM_BY_NAME_KEY[key];
+  if (key.includes('arlis')) return CHAT_ANIM_BY_NAME_KEY.arlis;
+  if (key.includes('william') || key.includes('will')) return CHAT_ANIM_BY_NAME_KEY.william;
+  return '';
+}
+
+function isWilliamName(value) {
+  const key = normalizeNameKey(value);
+  if (!key) return false;
+  return key === 'will' || key === 'william' || key === 'williamspicer' || key.includes('william');
 }
 
 function tryPlayAudio(audio, { reset = true } = {}) {
@@ -519,6 +547,14 @@ export default function PlayerChatDock({ mode = 'dock' }) {
   }, [members, selectedRecipientId, selectedThreadId]);
 
   const selectedThreadMode = selectedThreadId === PARTY_THREAD_ID ? 'Party' : 'Private';
+  const chatBackgroundAnims = useMemo(() => {
+    if (selectedThreadId === PARTY_THREAD_ID) return { left: '', right: '', leftFlip: false };
+    return {
+      left: getChatAnimForName(authorDisplay),
+      right: getChatAnimForName(selectedThreadTitle),
+      leftFlip: isWilliamName(authorDisplay),
+    };
+  }, [authorDisplay, selectedThreadId, selectedThreadTitle]);
 
   const toggleOpen = () => {
     setOpen((prev) => {
@@ -788,39 +824,55 @@ export default function PlayerChatDock({ mode = 'dock' }) {
                 <span className={styles.modeBadge}>{selectedThreadMode}</span>
               </div>
 
-              <div ref={listRef} className={styles.messageList}>
-                {loading ? <p className={styles.status}>Loading recent messages...</p> : null}
-                {!loading && activeThreadMessages.length === 0 ? <p className={styles.status}>No messages yet.</p> : null}
-                {activeThreadMessages.map((message) => {
-                  const authorUserId = normalizeText(message.author_user_id);
-                  const mine = authorUserId === currentUserId;
-                  const recipientUserId = normalizeText(message.recipient_user_id);
-                  const isPrivate = !!recipientUserId;
-                  const authorLabel =
-                    normalizeText(message.author_display) ||
-                    displayNameByUserId.get(authorUserId) ||
-                    'Player';
-                  const targetLabel = displayNameByUserId.get(recipientUserId) || 'member';
+              <div className={styles.messageListWrap}>
+                <div className={styles.chatAnimLayer} aria-hidden="true">
+                  {chatBackgroundAnims.left ? (
+                    <span
+                      className={`${styles.chatAnim} ${styles.chatAnimLeft} ${chatBackgroundAnims.leftFlip ? styles.chatAnimFlip : ''}`}
+                      style={{ backgroundImage: `url("${chatBackgroundAnims.left}")` }}
+                    />
+                  ) : null}
+                  {chatBackgroundAnims.right ? (
+                    <span
+                      className={`${styles.chatAnim} ${styles.chatAnimRight}`}
+                      style={{ backgroundImage: `url("${chatBackgroundAnims.right}")` }}
+                    />
+                  ) : null}
+                </div>
+                <div ref={listRef} className={styles.messageList}>
+                  {loading ? <p className={styles.status}>Loading recent messages...</p> : null}
+                  {!loading && activeThreadMessages.length === 0 ? <p className={styles.status}>No messages yet.</p> : null}
+                  {activeThreadMessages.map((message) => {
+                    const authorUserId = normalizeText(message.author_user_id);
+                    const mine = authorUserId === currentUserId;
+                    const recipientUserId = normalizeText(message.recipient_user_id);
+                    const isPrivate = !!recipientUserId;
+                    const authorLabel =
+                      normalizeText(message.author_display) ||
+                      displayNameByUserId.get(authorUserId) ||
+                      'Player';
+                    const targetLabel = displayNameByUserId.get(recipientUserId) || 'member';
 
-                  return (
-                    <article key={message.id} className={`${styles.message} ${mine ? styles.mine : styles.other}`}>
-                      <div className={styles.meta}>
-                        <span className={styles.author}>{authorLabel}</span>
-                        <div className={styles.metaRight}>
-                          {isPrivate ? (
-                            <span className={styles.privateBadge}>
-                              {mine ? `Private to ${targetLabel}` : 'Private'}
-                            </span>
-                          ) : (
-                            <span className={styles.partyBadge}>Party</span>
-                          )}
-                          <time className={styles.time} dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+                    return (
+                      <article key={message.id} className={`${styles.message} ${mine ? styles.mine : styles.other}`}>
+                        <div className={styles.meta}>
+                          <span className={styles.author}>{authorLabel}</span>
+                          <div className={styles.metaRight}>
+                            {isPrivate ? (
+                              <span className={styles.privateBadge}>
+                                {mine ? `Private to ${targetLabel}` : 'Private'}
+                              </span>
+                            ) : (
+                              <span className={styles.partyBadge}>Party</span>
+                            )}
+                            <time className={styles.time} dateTime={message.created_at}>{formatTime(message.created_at)}</time>
+                          </div>
                         </div>
-                      </div>
-                      <p className={styles.body}>{String(message.body ?? '')}</p>
-                    </article>
-                  );
-                })}
+                        <p className={styles.body}>{String(message.body ?? '')}</p>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className={styles.composer}>

@@ -303,6 +303,50 @@
   gap: 8px;
 }
 
+.messageListWrap {
+  position: relative;
+  min-height: 0;
+}
+
+.chatAnimLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.chatAnim {
+  position: absolute;
+  bottom: 0;
+  width: 104px;
+  height: 104px;
+  transform: none;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: bottom center;
+  opacity: 0.16;
+  filter: saturate(0.95) contrast(1.02);
+}
+
+.chatAnimFlip {
+  transform: scaleX(-1);
+}
+
+.chatAnimLeft {
+  left: 10px;
+}
+
+.chatAnimRight {
+  right: 10px;
+}
+
+.messageList {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
 .status {
   margin: 0;
   font-size: 0.84rem;
@@ -513,6 +557,12 @@
 
   .threadButton {
     min-width: 180px;
+  }
+
+  .chatAnim {
+    width: 84px;
+    height: 84px;
+    opacity: 0.13;
   }
 
   .resizeHandle {
