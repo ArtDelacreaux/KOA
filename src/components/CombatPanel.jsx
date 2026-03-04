@@ -3123,12 +3123,6 @@ export default function CombatPanel({
                   </div>
                 </div>
 
-                {selectedSensitiveStatsHidden && (
-                  <div className={styles.restrictedHiddenHint}>
-                    Sensitive combat stats are owner-hidden and redacted.
-                  </div>
-                )}
-
                 <div className={styles.restrictedStatsGrid}>
                   <div className={styles.restrictedStatRow}>
                     <div className={styles.label}>Current HP</div>
