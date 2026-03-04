@@ -8,6 +8,7 @@ import {
   readWorldNpcsRaw,
   setWorldNpcDeepLink,
 } from '../domain/worldNpcs';
+import { DEFAULT_CHARACTERS } from '../data/characters';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import { repository } from '../repository';
 
@@ -35,6 +36,31 @@ const TABS = [
   Import your images at the top of this file like:
     import worldMapImg from '../assets/lore/world-map.jpg';
 */
+const DEFAULT_CHARACTER_NPCS_BY_ID = new Map();
+const DEFAULT_CHARACTER_NPCS_BY_NAME = new Map();
+
+(Array.isArray(DEFAULT_CHARACTERS) ? DEFAULT_CHARACTERS : []).forEach((char) => {
+  const idKey = normalizeText(char?.id);
+  const nameKey = normalizeText(char?.name);
+  const npcList = Array.isArray(char?.npcs) ? char.npcs : [];
+  if (idKey) DEFAULT_CHARACTER_NPCS_BY_ID.set(idKey, npcList);
+  if (nameKey) DEFAULT_CHARACTER_NPCS_BY_NAME.set(nameKey, npcList);
+});
+
+function getCanonicalBaseNpcsForCharacter(char) {
+  const idKey = normalizeText(char?.id);
+  const nameKey = normalizeText(char?.name);
+  const hasCanonical =
+    (idKey && DEFAULT_CHARACTER_NPCS_BY_ID.has(idKey))
+    || (nameKey && DEFAULT_CHARACTER_NPCS_BY_NAME.has(nameKey));
+  if (hasCanonical) {
+    return DEFAULT_CHARACTER_NPCS_BY_ID.get(idKey)
+      || DEFAULT_CHARACTER_NPCS_BY_NAME.get(nameKey)
+      || [];
+  }
+  return Array.isArray(char?.npcs) ? char.npcs : [];
+}
+
 // initial, default gallery data; users can override via the repository
 const DEFAULT_GALLERY = {
   maps: [
@@ -1511,7 +1537,7 @@ export default function WorldLore({
 
     for (const char of roster) {
       const saved = Array.isArray(store?.[char?.name]) ? store[char.name] : [];
-      const base = Array.isArray(char?.npcs) ? char.npcs : [];
+      const base = getCanonicalBaseNpcsForCharacter(char);
 
       const seenNames = new Set();
       const merged = [...saved, ...base].filter((npc) => {

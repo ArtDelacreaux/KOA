@@ -7,6 +7,7 @@ import {
   normalizeRelatedNpc,
   normalizeWorldNpc,
 } from '../domain/worldNpcs';
+import { DEFAULT_CHARACTERS } from '../data/characters';
 import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import useLocalStorageState from '../lib/useLocalStorageState';
@@ -38,6 +39,31 @@ const CHAR_MUSIC_MAP = {
 
 function normalizeText(value) {
   return String(value ?? '').trim();
+}
+
+const DEFAULT_CHARACTER_NPCS_BY_ID = new Map();
+const DEFAULT_CHARACTER_NPCS_BY_NAME = new Map();
+
+(Array.isArray(DEFAULT_CHARACTERS) ? DEFAULT_CHARACTERS : []).forEach((char) => {
+  const idKey = normalizeText(char?.id).toLowerCase();
+  const nameKey = normalizeText(char?.name).toLowerCase();
+  const npcList = Array.isArray(char?.npcs) ? char.npcs : [];
+  if (idKey) DEFAULT_CHARACTER_NPCS_BY_ID.set(idKey, npcList);
+  if (nameKey) DEFAULT_CHARACTER_NPCS_BY_NAME.set(nameKey, npcList);
+});
+
+function getCanonicalBaseNpcsForCharacter(char) {
+  const idKey = normalizeText(char?.id).toLowerCase();
+  const nameKey = normalizeText(char?.name).toLowerCase();
+  const hasCanonical =
+    (idKey && DEFAULT_CHARACTER_NPCS_BY_ID.has(idKey))
+    || (nameKey && DEFAULT_CHARACTER_NPCS_BY_NAME.has(nameKey));
+  if (hasCanonical) {
+    return DEFAULT_CHARACTER_NPCS_BY_ID.get(idKey)
+      || DEFAULT_CHARACTER_NPCS_BY_NAME.get(nameKey)
+      || [];
+  }
+  return Array.isArray(char?.npcs) ? char.npcs : [];
 }
 
 export default function CharacterBook({
@@ -744,7 +770,8 @@ export default function CharacterBook({
 
   const getBaseRelatedNpcs = (char) => {
     if (!char) return [];
-    return (char.npcs || []).map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
+    const base = getCanonicalBaseNpcsForCharacter(char);
+    return base.map((npc, idx) => normalizeRelatedNpc(npc, char.name, idx));
   };
 
   const getCharacterOwnedNpcs = (char, store = charNpcByCharacter) => {
