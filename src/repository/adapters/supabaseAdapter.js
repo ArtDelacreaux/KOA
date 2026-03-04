@@ -13,9 +13,14 @@ const LOCAL_WRITE_PULL_GUARD_MS = 2200;
 const DEFAULT_FLUSH_DELAY_MS = 10;
 const DEBOUNCED_SHARED_WRITE_MS = 600;
 const SYNC_DEBUG_ENABLED = !!import.meta.env.DEV;
+const NPC_CONFLICT_GUARD_KIND = 'npc-conflict-guard';
+const NPC_CONFLICT_GUARD_VERSION = 1;
 
 const PRIVATE_KEYS = new Set([STORAGE_KEYS.launcherNotes].filter(Boolean));
 const LOCAL_ONLY_KEYS = new Set([STORAGE_KEYS.worldNpcDeepLink].filter(Boolean));
+const NPC_CONFLICT_GUARD_KEYS = new Set(
+  [STORAGE_KEYS.worldNpcs, STORAGE_KEYS.charNpcs].filter(Boolean)
+);
 
 function hasOwn(obj, key) {
   return Object.prototype.hasOwnProperty.call(obj, key);
@@ -124,6 +129,121 @@ function writeDebounceMsForKey(scope, key, mode = 'upsert') {
 function toFiniteNumber(value, fallback = 0) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function isNpcConflictGuardKey(key) {
+  return NPC_CONFLICT_GUARD_KEYS.has(normalizeText(key));
+}
+
+function normalizeIsoTimestamp(value) {
+  const text = normalizeText(value).trim();
+  if (!text) return '';
+  const epoch = Date.parse(text);
+  if (!Number.isFinite(epoch)) return '';
+  return new Date(epoch).toISOString();
+}
+
+function toTimestampMs(value) {
+  const normalized = normalizeIsoTimestamp(value);
+  return normalized ? Date.parse(normalized) : 0;
+}
+
+function isNpcGuardEnvelope(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (!hasOwn(value, '__koaMeta')) return false;
+  const meta = value.__koaMeta;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
+  return normalizeText(meta.kind) === NPC_CONFLICT_GUARD_KIND;
+}
+
+function decodeGuardedJsonValue(key, value) {
+  if (!isNpcConflictGuardKey(key) || !isNpcGuardEnvelope(value)) {
+    return {
+      value,
+      updatedAt: '',
+      isGuarded: false,
+    };
+  }
+
+  const meta = value.__koaMeta || {};
+  return {
+    value: hasOwn(value, 'data') ? value.data : null,
+    updatedAt: normalizeIsoTimestamp(meta.updatedAt),
+    isGuarded: true,
+  };
+}
+
+function encodeGuardedJsonValue(key, value, updatedAt = '') {
+  if (!isNpcConflictGuardKey(key)) return value;
+  const stamp = normalizeIsoTimestamp(updatedAt) || new Date().toISOString();
+  return {
+    __koaMeta: {
+      kind: NPC_CONFLICT_GUARD_KIND,
+      version: NPC_CONFLICT_GUARD_VERSION,
+      updatedAt: stamp,
+    },
+    data: value === undefined ? null : value,
+  };
+}
+
+function resolveIncomingGuardedJson(key, localRawValue, incomingRawValue, remoteUpdatedAt = '') {
+  if (!isNpcConflictGuardKey(key)) {
+    return {
+      accept: true,
+      storedValue: incomingRawValue,
+      exposedValue: incomingRawValue,
+    };
+  }
+
+  const localDecoded = decodeGuardedJsonValue(key, localRawValue);
+  const incomingDecoded = decodeGuardedJsonValue(key, incomingRawValue);
+  const localMs = toTimestampMs(localDecoded.updatedAt);
+  const incomingMs = toTimestampMs(incomingDecoded.updatedAt);
+
+  // If local data has a guard timestamp, reject any unguarded remote payload
+  // and any payload with an older guard timestamp.
+  if (localMs > 0 && incomingMs <= 0) {
+    return {
+      accept: false,
+      storedValue: localRawValue,
+      exposedValue: localDecoded.value,
+    };
+  }
+
+  if (localMs > 0 && incomingMs > 0 && incomingMs < localMs) {
+    return {
+      accept: false,
+      storedValue: localRawValue,
+      exposedValue: localDecoded.value,
+    };
+  }
+
+  const effectiveStamp =
+    incomingDecoded.updatedAt
+    || normalizeIsoTimestamp(remoteUpdatedAt)
+    || new Date().toISOString();
+
+  if (incomingDecoded.isGuarded && incomingRawValue && typeof incomingRawValue === 'object' && !Array.isArray(incomingRawValue)) {
+    return {
+      accept: true,
+      storedValue: {
+        ...incomingRawValue,
+        __koaMeta: {
+          ...(incomingRawValue.__koaMeta || {}),
+          kind: NPC_CONFLICT_GUARD_KIND,
+          version: NPC_CONFLICT_GUARD_VERSION,
+          updatedAt: effectiveStamp,
+        },
+      },
+      exposedValue: incomingDecoded.value,
+    };
+  }
+
+  return {
+    accept: true,
+    storedValue: encodeGuardedJsonValue(key, incomingDecoded.value, effectiveStamp),
+    exposedValue: incomingDecoded.value,
+  };
 }
 
 export function createSupabaseAdapter() {
@@ -433,6 +553,15 @@ export function createSupabaseAdapter() {
     if (remoteStamp) lastSeenRemoteUpdatedAt.set(stampKey, remoteStamp);
 
     const payload = normalizePayload(row?.payload);
+    if (payload.type === 'json') {
+      const localRawValue = local.readJson(key, undefined);
+      const resolved = resolveIncomingGuardedJson(key, localRawValue, payload.value, remoteStamp);
+      if (!resolved.accept) return;
+      writeLocalValue(key, payload.type, resolved.storedValue);
+      emitRemoteChange(key, resolved.exposedValue, { type: payload.type, reason });
+      return;
+    }
+
     writeLocalValue(key, payload.type, payload.value);
     emitRemoteChange(key, payload.value, { type: payload.type, reason });
   }
@@ -664,9 +793,10 @@ export function createSupabaseAdapter() {
 
       const incoming = hasOwn(payload, spec.id) ? payload[spec.id] : spec.fallback;
       const value = spec.key === STORAGE_KEYS.launcher ? toSeedLauncherValue(incoming) : incoming;
+      const seededValue = spec.type === 'text' ? value : encodeGuardedJsonValue(spec.key, value);
       docs[spec.key] = {
         type: spec.type === 'text' ? 'text' : 'json',
-        value,
+        value: seededValue,
       };
     });
 
@@ -684,12 +814,15 @@ export function createSupabaseAdapter() {
       changeHandler = typeof handler === 'function' ? handler : () => {};
     },
     readJson(key, fallbackValue) {
-      return local.readJson(key, fallbackValue);
+      const stored = local.readJson(key, undefined);
+      if (stored === undefined) return fallbackValue;
+      return decodeGuardedJsonValue(key, stored).value;
     },
     writeJson(key, value) {
-      local.writeJson(key, value);
+      const guardedValue = encodeGuardedJsonValue(key, value);
+      local.writeJson(key, guardedValue);
       const scope = getScope(key);
-      enqueue(scope, key, 'upsert', 'json', value);
+      enqueue(scope, key, 'upsert', 'json', guardedValue);
     },
     readText(key, fallbackValue = '') {
       return local.readText(key, fallbackValue);
