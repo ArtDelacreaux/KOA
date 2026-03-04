@@ -1238,6 +1238,13 @@
   gap: 10px;
 }
 
+.assignmentHint {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255, 220, 160, 0.84);
+}
+
 .assignmentRow {
   border-radius: 12px;
   border: 1px solid rgba(255, 220, 160, 0.12);
@@ -1271,8 +1278,30 @@
 
 .assignmentActions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: 56px;
+}
+
+.assignmentSelect {
+  min-width: 220px;
+  max-width: 280px;
+  width: 280px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.assignmentClearBtn {
+  min-width: 72px;
+}
+
+.assignmentActionGhost {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .modalFormGrid {

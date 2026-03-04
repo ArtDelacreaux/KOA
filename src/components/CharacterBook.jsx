@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ShellLayout from './ShellLayout';
 import styles from './CharacterBook.module.css';
 import { createId } from '../domain/ids';
@@ -7,6 +7,7 @@ import {
   normalizeRelatedNpc,
   normalizeWorldNpc,
 } from '../domain/worldNpcs';
+import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import useLocalStorageState from '../lib/useLocalStorageState';
 
@@ -22,7 +23,7 @@ import cerciTheme from '../assets/music/Cerci.mp3';
 import jasperTheme from '../assets/music/Jasper.mp3';
 import dmTheme from '../assets/music/Dm.mp3';
 
-// Map character name → imported audio module
+// Map character name ? imported audio module
 const CHAR_MUSIC_MAP = {
   'William Spicer': williamTheme,
   'Arlis Ghoth': arlisTheme,
@@ -34,6 +35,10 @@ const CHAR_MUSIC_MAP = {
   'Jasper Delancey': jasperTheme,
   'DM': dmTheme,
 };
+
+function normalizeText(value) {
+  return String(value ?? '').trim();
+}
 
 export default function CharacterBook({
   panelType,
@@ -111,7 +116,7 @@ export default function CharacterBook({
 
   const fontStack = "'Cinzel', 'Trajan Pro', 'Times New Roman', serif";
 
-  /* ---------- slider color (cold → neutral → hot) ---------- */
+  /* ---------- slider color (cold ? neutral ? hot) ---------- */
   const relTempColor = (v) => {
     const t = Math.max(0, Math.min(100, Number(v) || 0));
     const blue = [37, 99, 235];
@@ -422,6 +427,9 @@ export default function CharacterBook({
 
   const [worldNpcModalOpen, setWorldNpcModalOpen] = useState(false);
   const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
+  const [assignmentPlayers, setAssignmentPlayers] = useState([]);
+  const [assignmentPlayersLoading, setAssignmentPlayersLoading] = useState(false);
+  const [assignmentPlayersError, setAssignmentPlayersError] = useState('');
   const [connectionWebModalOpen, setConnectionWebModalOpen] = useState(false);
   const [editingWorldNpcId, setEditingWorldNpcId] = useState(null);
   const [worldNpcDraft, setWorldNpcDraft] = useState({
@@ -438,6 +446,109 @@ export default function CharacterBook({
   });
   const [worldNpcCharSearch, setWorldNpcCharSearch] = useState('');
   const [worldNpcConnectionSearch, setWorldNpcConnectionSearch] = useState('');
+
+  const fallbackAssignmentPlayers = useMemo(() => {
+    const seen = new Set();
+    const next = [];
+    const pushOption = (rawUserId, rawUsername, fallback = 'Assigned Player') => {
+      const userId = normalizeText(rawUserId);
+      const username = normalizeText(rawUsername);
+      if (!userId && !username) return;
+      const label = username || fallback;
+      const value = userId ? `id:${userId}` : `name:${label.toLowerCase()}`;
+      if (seen.has(value)) return;
+      seen.add(value);
+      next.push({ value, userId, username: label, label });
+    };
+
+    pushOption(viewerIdentity?.userId, viewerIdentity?.username, 'You');
+    Object.values(characterControllers || {}).forEach((assignment, idx) => {
+      pushOption(
+        assignment?.ownerUserId,
+        assignment?.ownerUsername,
+        `Assigned Player ${idx + 1}`
+      );
+    });
+
+    return next.sort((a, b) => a.label.localeCompare(b.label));
+  }, [characterControllers, viewerIdentity?.userId, viewerIdentity?.username]);
+
+  useEffect(() => {
+    if (!assignmentModalOpen || !canAssignCharacterController) return;
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      setAssignmentPlayers(fallbackAssignmentPlayers);
+      setAssignmentPlayersLoading(false);
+      setAssignmentPlayersError('');
+      return;
+    }
+
+    let cancelled = false;
+    const loadAssignmentPlayers = async () => {
+      setAssignmentPlayersLoading(true);
+      setAssignmentPlayersError('');
+      try {
+        const { data, error } = await supabase.rpc('list_campaign_member_directory', {
+          p_campaign_id: campaignId,
+        });
+        if (error) throw error;
+        if (cancelled) return;
+
+        const seen = new Set();
+        const next = (Array.isArray(data) ? data : [])
+          .map((row, idx) => {
+            const userId = normalizeText(row?.user_id);
+            const username = normalizeText(row?.username) || `Member ${idx + 1}`;
+            const value = userId ? `id:${userId}` : `name:${username.toLowerCase()}`;
+            if (seen.has(value)) return null;
+            seen.add(value);
+            return { value, userId, username, label: username };
+          })
+          .filter(Boolean);
+
+        const viewerUserId = normalizeText(viewerIdentity?.userId);
+        const viewerUsername = normalizeText(viewerIdentity?.username);
+        if (viewerUsername) {
+          const viewerValue = viewerUserId ? `id:${viewerUserId}` : `name:${viewerUsername.toLowerCase()}`;
+          if (!seen.has(viewerValue)) {
+            next.push({
+              value: viewerValue,
+              userId: viewerUserId,
+              username: viewerUsername,
+              label: viewerUsername,
+            });
+          }
+        }
+
+        if (next.length === 0) {
+          setAssignmentPlayers(fallbackAssignmentPlayers);
+        } else {
+          next.sort((a, b) => a.label.localeCompare(b.label));
+          setAssignmentPlayers(next);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Failed to load campaign usernames.';
+        setAssignmentPlayersError(msg);
+        setAssignmentPlayers(fallbackAssignmentPlayers);
+      } finally {
+        if (!cancelled) setAssignmentPlayersLoading(false);
+      }
+    };
+
+    loadAssignmentPlayers();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    assignmentModalOpen,
+    canAssignCharacterController,
+    fallbackAssignmentPlayers,
+    viewerIdentity?.userId,
+    viewerIdentity?.username,
+  ]);
 
   // Image cropper (simple, no external libs)
   const [worldNpcCropOpen, setWorldNpcCropOpen] = useState(false);
@@ -1405,40 +1516,23 @@ export default function CharacterBook({
     || 'Unassigned'
   );
 
-  const promptAssignControllerForCharacter = (character) => {
+  const assignCharacterFromDropdown = (character, selectedValue) => {
     if (!character || !canAssignCharacterController) return;
-    const currentAssignment = getCharacterController(character);
-    const currentUsername = String(currentAssignment?.ownerUsername || '');
-    const entry = window.prompt(
-      `Assign controller username for ${character.name}. Leave blank to clear assignment.`,
-      currentUsername
-    );
-    if (entry == null) return;
-
-    const nextUsername = String(entry || '').trim();
-    if (!nextUsername) {
+    const nextValue = normalizeText(selectedValue);
+    if (!nextValue) {
       clearCharacterController(character);
       return;
     }
 
-    const matchesViewer =
-      nextUsername.toLowerCase() === String(viewerIdentity?.username || '').trim().toLowerCase();
-    assignCharacterController(character, {
-      ownerUserId: matchesViewer ? String(viewerIdentity?.userId || '') : '',
-      ownerEmail: '',
-      ownerUsername: nextUsername,
-    });
-  };
+    const selectedPlayer = assignmentPlayers.find((player) => player.value === nextValue);
+    if (!selectedPlayer) return;
 
-  const assignCharacterToViewer = (character) => {
-    if (!character || !canAssignCharacterController) return;
-    const username = String(viewerIdentity?.username || '').trim();
-    if (!username) return;
-
+    const selectedUsername = normalizeText(selectedPlayer.username || selectedPlayer.label);
+    const selectedUserId = normalizeText(selectedPlayer.userId);
     assignCharacterController(character, {
-      ownerUserId: String(viewerIdentity?.userId || ''),
+      ownerUserId: selectedUserId,
       ownerEmail: '',
-      ownerUsername: username,
+      ownerUsername: selectedUsername,
     });
   };
 
@@ -1453,14 +1547,25 @@ export default function CharacterBook({
           || assignment.ownerUsername
         )
       );
+      const selectedAssignmentValue = normalizeText(assignment?.ownerUserId)
+        ? `id:${normalizeText(assignment.ownerUserId)}`
+        : normalizeText(assignment?.ownerUsername)
+          ? `name:${normalizeText(assignment.ownerUsername).toLowerCase()}`
+          : '';
+      const selectedAssignmentMissing = !!(
+        selectedAssignmentValue
+        && !assignmentPlayers.some((player) => player.value === selectedAssignmentValue)
+      );
       return {
         character,
         assignment,
         hasAssignment,
         label: formatControllerLabel(assignment),
+        selectedAssignmentValue,
+        selectedAssignmentMissing,
       };
     }),
-    [characters, characterControllers, getCharacterController]
+    [assignmentPlayers, characters, characterControllers, getCharacterController]
   );
 
   const showProfileTab = !!selectedChar && (charView === 'detail' || charView === 'relations' || charView === 'npc');
@@ -1494,12 +1599,12 @@ export default function CharacterBook({
               }}
               className={styles.returnBtn}
             >
-              ← RETURN
+              ? RETURN
             </button>
 
             <div className={styles.headerCenter}>
               <div className={styles.headerKicker}>
-                ✦ &nbsp; CODEX OF THE PARTY &nbsp; ✦
+                ? &nbsp; CODEX OF THE PARTY &nbsp; ?
               </div>
               <div className={styles.headerTitleMain}>
                 CHARACTER BOOK
@@ -2012,7 +2117,7 @@ export default function CharacterBook({
                                   onClick={() => setRelObj(selectedChar.name, otherName, { editing: !isEditing })}
                                   disabled={!selectedCharCanEditRelationships}
                                 >
-                                  ✎
+                                  ?
                                 </button>
                               </div>
                             </div>
@@ -2035,7 +2140,7 @@ export default function CharacterBook({
                                 />
                               ) : (
                                 <div className={`${styles.relationNoteText} ${note ? styles.relationNoteTextHas : styles.relationNoteTextEmpty}`}>
-                                  {note || 'No notes yet. Click ✎ to add one.'}
+                                  {note || 'No notes yet. Click ? to add one.'}
                                 </div>
                               )}
                             </div>
@@ -2202,6 +2307,12 @@ export default function CharacterBook({
                 </button>
               </div>
               <div className={styles.modalBodyPad}>
+                {assignmentPlayersLoading && (
+                  <div className={styles.assignmentHint}>Loading campaign usernames...</div>
+                )}
+                {!!assignmentPlayersError && (
+                  <div className={styles.assignmentHint}>{assignmentPlayersError}</div>
+                )}
                 <div className={styles.assignmentList}>
                   {assignmentRows.map((row) => {
                     return (
@@ -2211,40 +2322,36 @@ export default function CharacterBook({
                           <div className={styles.assignmentControllerText}>Controller: {row.label}</div>
                         </div>
                         <div className={styles.assignmentActions}>
+                          <select
+                            className={`${styles.inputBase} ${styles.assignmentSelect}`}
+                            value={row.selectedAssignmentValue}
+                            onChange={(event) => assignCharacterFromDropdown(row.character, event.target.value)}
+                          >
+                            <option value="">Unassigned</option>
+                            {row.selectedAssignmentMissing && (
+                              <option value={row.selectedAssignmentValue}>
+                                {row.label}
+                              </option>
+                            )}
+                            {assignmentPlayers.map((player) => (
+                              <option key={player.value} value={player.value}>
+                                {player.label}
+                              </option>
+                            ))}
+                          </select>
                           <button
                             type="button"
-                            className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
+                            className={`${styles.tinyBtn} ${styles.tinyBtnSoft} ${styles.assignmentClearBtn} ${!row.hasAssignment ? styles.assignmentActionGhost : ''}`}
                             onMouseEnter={tinyBtnHover}
                             onMouseLeave={tinyBtnLeave}
                             onMouseDown={navClick}
-                            onClick={() => promptAssignControllerForCharacter(row.character)}
+                            onClick={() => clearCharacterController(row.character)}
+                            disabled={!row.hasAssignment}
+                            aria-hidden={!row.hasAssignment}
+                            tabIndex={row.hasAssignment ? 0 : -1}
                           >
-                            Assign
+                            Clear
                           </button>
-                          {!!String(viewerIdentity?.username || '').trim() && (
-                            <button
-                              type="button"
-                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
-                              onMouseEnter={tinyBtnHover}
-                              onMouseLeave={tinyBtnLeave}
-                              onMouseDown={navClick}
-                              onClick={() => assignCharacterToViewer(row.character)}
-                            >
-                              Assign To Me
-                            </button>
-                          )}
-                          {row.hasAssignment && (
-                            <button
-                              type="button"
-                              className={`${styles.tinyBtn} ${styles.tinyBtnSoft}`}
-                              onMouseEnter={tinyBtnHover}
-                              onMouseLeave={tinyBtnLeave}
-                              onMouseDown={navClick}
-                              onClick={() => clearCharacterController(row.character)}
-                            >
-                              Clear
-                            </button>
-                          )}
                         </div>
                       </div>
                     );
@@ -2748,7 +2855,7 @@ export default function CharacterBook({
                               onClick={() => toggleWorldNpcCharacterLink(charName)}
                             >
                               <span className={`${styles.pickerCheck} ${checked ? styles.pickerCheckChecked : styles.pickerCheckUnchecked}`}>
-                                {checked ? '✓' : ''}
+                                {checked ? '?' : ''}
                               </span>
                               <span className={styles.ellipsisText}>
                                 {charName}
@@ -2816,7 +2923,7 @@ export default function CharacterBook({
                                   onClick={() => toggleWorldNpcConnection(target.id)}
                                 >
                                   <span className={`${styles.pickerCheck} ${checked ? styles.pickerCheckChecked : styles.pickerCheckUnchecked}`}>
-                                    {checked ? '✓' : ''}
+                                    {checked ? '?' : ''}
                                   </span>
                                   <span className={styles.ellipsisText}>
                                     {target.name || 'Unnamed NPC'}
