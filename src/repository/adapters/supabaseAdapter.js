@@ -8,6 +8,7 @@ const RETRY_BASE_MS = 900;
 const RETRY_MAX_MS = 15000;
 // Keep remote state snappy even when realtime subscriptions are unavailable.
 const REMOTE_POLL_MS = 1000;
+const LOCAL_WRITE_PULL_GUARD_MS = 2200;
 
 const PRIVATE_KEYS = new Set([STORAGE_KEYS.launcherNotes].filter(Boolean));
 const LOCAL_ONLY_KEYS = new Set([STORAGE_KEYS.worldNpcDeepLink].filter(Boolean));
@@ -124,6 +125,7 @@ export function createSupabaseAdapter() {
 
   const pendingQueue = new Map();
   const lastSeenRemoteUpdatedAt = new Map();
+  const suppressPullUntilByKey = new Map();
   const status = {
     enabled: true,
     configured: isSupabaseConfigured(),
@@ -250,6 +252,25 @@ export function createSupabaseAdapter() {
     local.remove(key);
   }
 
+  function markLocalWriteBarrier(scope, key, ttlMs = LOCAL_WRITE_PULL_GUARD_MS) {
+    if (scope === 'local') return;
+    const id = queueKey(scope, key);
+    suppressPullUntilByKey.set(id, Date.now() + Math.max(0, ttlMs));
+  }
+
+  function shouldIgnoreRemoteApply(scope, key, reason) {
+    const id = queueKey(scope, key);
+    if (pendingQueue.has(id)) return true;
+    if (reason !== 'pull') return false;
+    const holdUntil = suppressPullUntilByKey.get(id) || 0;
+    if (!holdUntil) return false;
+    if (holdUntil <= Date.now()) {
+      suppressPullUntilByKey.delete(id);
+      return false;
+    }
+    return true;
+  }
+
   function enqueue(scope, key, mode, type, value) {
     if (scope === 'local') return;
     const id = queueKey(scope, key);
@@ -262,6 +283,7 @@ export function createSupabaseAdapter() {
       enqueuedAt: new Date().toISOString(),
       attempts: 0,
     });
+    markLocalWriteBarrier(scope, key);
     persistQueue();
   }
 
@@ -314,6 +336,7 @@ export function createSupabaseAdapter() {
 
     const ownScope = getScope(key);
     if (ownScope !== scope) return;
+    if (shouldIgnoreRemoteApply(scope, key, reason)) return;
 
     const remoteStamp = normalizeText(row?.updated_at);
     const stampKey = queueKey(scope, key);
@@ -328,6 +351,7 @@ export function createSupabaseAdapter() {
   function applyRemoteDelete(scope, row, reason) {
     const key = normalizeText(row?.doc_key);
     if (!key) return;
+    if (shouldIgnoreRemoteApply(scope, key, reason)) return;
     lastSeenRemoteUpdatedAt.delete(queueKey(scope, key));
     removeLocalValue(key);
     emitRemoteChange(key, undefined, { type: 'remove', reason });
@@ -476,6 +500,7 @@ export function createSupabaseAdapter() {
       try {
         await sendOperation(op);
         pendingQueue.delete(id);
+        markLocalWriteBarrier(op.scope, op.key);
       } catch (err) {
         let effectiveError = err;
         if (isPermissionLikeError(err)) {
@@ -483,6 +508,7 @@ export function createSupabaseAdapter() {
             await supabase.rpc('claim_campaign_membership', { p_campaign_id: campaignId });
             await sendOperation(op);
             pendingQueue.delete(id);
+            markLocalWriteBarrier(op.scope, op.key);
             continue;
           } catch (retryErr) {
             effectiveError = retryErr;
