@@ -180,6 +180,10 @@ const INITIAL_ATRIA_POINTS = [
   { locationId: 6, x: 87.7, y: 22.0 }, // Buston
   { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
 ];
+const DEFAULT_PRIMARY_MAP_ID = DEFAULT_GALLERY.maps?.[0]?.id ?? null;
+const INITIAL_ATRIA_POINTS_BY_LOCATION = new Map(
+  INITIAL_ATRIA_POINTS.map((point) => [String(point.locationId), { x: point.x, y: point.y }])
+);
 
 const ABSOLUTE_URL_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
@@ -208,13 +212,92 @@ function resolveLoreImageSrc(src) {
     : `${normalizedBase}${normalizedPath}`;
 }
 
+function idsMatch(left, right) {
+  return String(left ?? '') === String(right ?? '');
+}
+
+function clampPercent(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function roundPercent(value) {
+  return Math.round(clampPercent(value) * 100) / 100;
+}
+
+function normalizeMapPoint(point) {
+  if (!point || typeof point !== 'object') return null;
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x: roundPercent(x), y: roundPercent(y) };
+}
+
+function mapPointsEqual(left, right) {
+  if (!left || !right) return false;
+  return left.x === right.x && left.y === right.y;
+}
+
+function getFallbackMapId(maps = []) {
+  const first = (Array.isArray(maps) ? maps : []).find((map) => map && map.id != null);
+  return first ? first.id : null;
+}
+
+function resolveLocationMapId(location, maps = [], fallbackMapId = null) {
+  const mapList = Array.isArray(maps) ? maps : [];
+  const hasMaps = mapList.length > 0;
+  const candidate = location?.mapId;
+
+  if (candidate != null && candidate !== '') {
+    if (!hasMaps || mapList.some((map) => idsMatch(map?.id, candidate))) {
+      return candidate;
+    }
+  }
+
+  if (fallbackMapId != null && fallbackMapId !== '') return fallbackMapId;
+  return hasMaps ? mapList[0].id : null;
+}
+
+function getSeededAtriaPoint(locationId, mapId) {
+  if (!idsMatch(mapId, DEFAULT_PRIMARY_MAP_ID)) return null;
+  const seeded = INITIAL_ATRIA_POINTS_BY_LOCATION.get(String(locationId));
+  return seeded ? { x: seeded.x, y: seeded.y } : null;
+}
+
+function normalizeLocationForStorage(location, maps = [], fallbackMapId = null) {
+  const safeLocation = location && typeof location === 'object' ? location : {};
+  const resolvedMapId = resolveLocationMapId(safeLocation, maps, fallbackMapId);
+  const mapPoint = normalizeMapPoint(safeLocation.mapPoint) || getSeededAtriaPoint(safeLocation.id, resolvedMapId) || null;
+  return {
+    ...safeLocation,
+    mapId: resolvedMapId,
+    mapPoint,
+  };
+}
+
+function resolveMapAspect(mapItem) {
+  const aspect = String(mapItem?.aspect || '').trim();
+  return aspect || ATRIA_MAP_ASPECT;
+}
+
+function resolveMapIdFromSelectValue(value, maps = []) {
+  const pick = (Array.isArray(maps) ? maps : []).find((map) => String(map?.id) === String(value));
+  return pick ? pick.id : value;
+}
+
+function getMapTitleById(mapId, maps = []) {
+  const hit = (Array.isArray(maps) ? maps : []).find((map) => idsMatch(map?.id, mapId));
+  return (hit?.title || '').trim() || 'Unassigned';
+}
+
 // helper that merges stored edits with defaults
 function mergeGallery(defaultGallery, storedGallery) {
-  if (!storedGallery || typeof storedGallery !== 'object') return defaultGallery;
+  const source = storedGallery && typeof storedGallery === 'object' ? storedGallery : {};
   const out = {};
   TABS.forEach((tab) => {
     const defaultList = Array.isArray(defaultGallery[tab.id]) ? defaultGallery[tab.id] : [];
-    const storedList = Array.isArray(storedGallery[tab.id]) ? storedGallery[tab.id] : [];
+    const storedList = Array.isArray(source[tab.id]) ? source[tab.id] : [];
     const map = new Map(defaultList.map((item) => [item.id, { ...item }]));
     storedList.forEach((item) => {
       if (item && item.id != null) {
@@ -223,6 +306,10 @@ function mergeGallery(defaultGallery, storedGallery) {
     });
     out[tab.id] = Array.from(map.values());
   });
+  const mapList = Array.isArray(out.maps) ? out.maps : [];
+  const fallbackMapId = getFallbackMapId(mapList) ?? DEFAULT_PRIMARY_MAP_ID;
+  out.locations = (Array.isArray(out.locations) ? out.locations : [])
+    .map((location) => normalizeLocationForStorage(location, mapList, fallbackMapId));
   return out;
 }
 
@@ -249,8 +336,12 @@ function SectionDivider({ label }) {
 }
 
 function InteractiveAtriaMap({
+  maps = [],
+  activeMapId = null,
+  onSelectMap = () => { },
   locations = [],
   onOpenLocation = () => { },
+  onUpdateLocationPoint = () => { },
 }) {
   const stageRef = useRef(null);
   const dragRef = useRef({
@@ -268,29 +359,45 @@ function InteractiveAtriaMap({
   const [dragging, setDragging] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [copyStatus, setCopyStatus] = useState('');
+  const [selectedPointId, setSelectedPointId] = useState(null);
 
-  const [points, setPoints] = useState(() => {
-    const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
-    return (locations || []).map((location, index) => {
-      const seeded = seededById.get(location.id);
-      if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
-      const fallbackColumn = index % 3;
-      const fallbackRow = Math.floor(index / 3);
-      return {
-        locationId: location.id,
-        x: 34 + fallbackColumn * 16,
-        y: 34 + fallbackRow * 12,
-      };
-    });
-  });
-  const [selectedPointId, setSelectedPointId] = useState(() => (locations[0] ? locations[0].id : null));
+  const mapList = Array.isArray(maps) ? maps : [];
+  const fallbackMapId = getFallbackMapId(mapList);
+  const resolvedActiveMapId = activeMapId != null ? activeMapId : fallbackMapId;
+  const activeMap = mapList.find((map) => idsMatch(map?.id, resolvedActiveMapId)) || mapList[0] || null;
+  const activeMapSrc = resolveLoreImageSrc(activeMap?.src);
+  const activeMapAspect = resolveMapAspect(activeMap);
+
+  const activeLocations = (Array.isArray(locations) ? locations : [])
+    .map((location) => normalizeLocationForStorage(location, mapList, fallbackMapId))
+    .filter((location) => activeMap && idsMatch(location.mapId, activeMap.id));
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const clampPercent = (value) => clamp(value, 0, 100);
-  const roundCoord = (value) => Math.round(clampPercent(value) * 100) / 100;
+  const buildPointForLocation = (location, index) => {
+    const explicit = normalizeMapPoint(location?.mapPoint);
+    const seeded = getSeededAtriaPoint(location?.id, activeMap?.id);
+    if (explicit) return explicit;
+    if (seeded) return seeded;
+
+    const fallbackColumn = index % 3;
+    const fallbackRow = Math.floor(index / 3);
+    return {
+      x: roundPercent(34 + fallbackColumn * 16),
+      y: roundPercent(34 + fallbackRow * 12),
+    };
+  };
+
+  const points = activeLocations.map((location, index) => {
+    const point = buildPointForLocation(location, index);
+    return {
+      locationId: location.id,
+      x: point.x,
+      y: point.y,
+    };
+  });
 
   const getLocationById = (locationId) =>
-    (locations || []).find((location) => location.id === locationId) || null;
+    activeLocations.find((location) => idsMatch(location.id, locationId)) || null;
 
   const clampPanToStage = (nextPan, nextZoom = zoom) => {
     const stageEl = stageRef.current;
@@ -310,13 +417,11 @@ function InteractiveAtriaMap({
   };
 
   const setPointCoords = (locationId, x, y) => {
-    setPoints((prev) =>
-      (prev || []).map((point) =>
-        point.locationId === locationId
-          ? { ...point, x: roundCoord(x), y: roundCoord(y) }
-          : point
-      )
-    );
+    if (!activeMap) return;
+    onUpdateLocationPoint(locationId, activeMap.id, {
+      x: roundPercent(x),
+      y: roundPercent(y),
+    });
   };
 
   const toMapPercentFromClient = (clientX, clientY) => {
@@ -329,16 +434,17 @@ function InteractiveAtriaMap({
     const baseY = (clientY - rect.top - pan.y) / zoom;
 
     return {
-      x: roundCoord((baseX / rect.width) * 100),
-      y: roundCoord((baseY / rect.height) * 100),
+      x: roundPercent((baseX / rect.width) * 100),
+      y: roundPercent((baseY / rect.height) * 100),
     };
   };
 
-  const selectedPoint = (points || []).find((point) => point.locationId === selectedPointId) || null;
+  const selectedPoint = points.find((point) => idsMatch(point.locationId, selectedPointId)) || null;
   const selectedLocation = selectedPoint ? getLocationById(selectedPoint.locationId) : null;
-  const atriaMapSrc = resolveLoreImageSrc(ATRIA_MAP_SRC);
 
-  const exportPoints = (points || []).map((point) => ({
+  const exportPoints = points.map((point) => ({
+    mapId: activeMap?.id ?? null,
+    mapTitle: activeMap?.title || 'Unknown map',
     locationId: point.locationId,
     title: getLocationById(point.locationId)?.title || `Location ${point.locationId}`,
     x: Number(point.x.toFixed(2)),
@@ -346,30 +452,7 @@ function InteractiveAtriaMap({
   }));
 
   useEffect(() => {
-    setPoints((prev) => {
-      const prevById = new Map((prev || []).map((point) => [point.locationId, point]));
-      const seededById = new Map(INITIAL_ATRIA_POINTS.map((point) => [point.locationId, point]));
-
-      return (locations || []).map((location, index) => {
-        const existing = prevById.get(location.id);
-        if (existing) return existing;
-
-        const seeded = seededById.get(location.id);
-        if (seeded) return { locationId: location.id, x: seeded.x, y: seeded.y };
-
-        const fallbackColumn = index % 3;
-        const fallbackRow = Math.floor(index / 3);
-        return {
-          locationId: location.id,
-          x: 34 + fallbackColumn * 16,
-          y: 34 + fallbackRow * 12,
-        };
-      });
-    });
-  }, [locations]);
-
-  useEffect(() => {
-    if ((points || []).some((point) => point.locationId === selectedPointId)) return;
+    if (points.some((point) => idsMatch(point.locationId, selectedPointId))) return;
     setSelectedPointId(points[0]?.locationId || null);
   }, [points, selectedPointId]);
 
@@ -388,6 +471,12 @@ function InteractiveAtriaMap({
   }, [zoom]);
 
   useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setDragging(false);
+  }, [activeMap?.id]);
+
+  useEffect(() => {
     if (!editMode || !selectedPointId) return;
     const onKeyDown = (event) => {
       const targetTag = (event.target?.tagName || '').toUpperCase();
@@ -401,25 +490,19 @@ function InteractiveAtriaMap({
       if (event.key === 'ArrowRight') nextX = step;
       if (!nextX && !nextY) return;
 
+      const current = points.find((point) => idsMatch(point.locationId, selectedPointId));
+      if (!current) return;
+
       event.preventDefault();
-      setPoints((prev) =>
-        (prev || []).map((point) =>
-          point.locationId === selectedPointId
-            ? {
-              ...point,
-              x: roundCoord(point.x + nextX),
-              y: roundCoord(point.y + nextY),
-            }
-            : point
-        )
-      );
+      setPointCoords(selectedPointId, current.x + nextX, current.y + nextY);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [editMode, selectedPointId]);
+  }, [editMode, points, selectedPointId]);
 
   const applyZoom = (nextZoom) => {
+    if (!activeMap) return;
     const normalizedZoom = clamp(Number(nextZoom) || 1, 1, 4);
     setZoom(normalizedZoom);
     setPan((prev) => clampPanToStage(prev, normalizedZoom));
@@ -428,6 +511,7 @@ function InteractiveAtriaMap({
   const onWheelZoom = (event) => {
     // Keep regular page scrolling unless user intentionally zooms with Ctrl/Cmd + wheel.
     if (!event.ctrlKey && !event.metaKey) return;
+    if (!activeMap) return;
     event.preventDefault();
     const stageEl = stageRef.current;
     if (!stageEl) return;
@@ -451,6 +535,7 @@ function InteractiveAtriaMap({
   };
 
   const onStagePointerDown = (event) => {
+    if (!activeMap) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     const stageEl = stageRef.current;
     if (!stageEl) return;
@@ -491,6 +576,7 @@ function InteractiveAtriaMap({
   };
 
   const onStageClick = (event) => {
+    if (!activeMap) return;
     if (!editMode || !selectedPointId) return;
     if (dragRef.current.moved) {
       dragRef.current.moved = false;
@@ -504,6 +590,7 @@ function InteractiveAtriaMap({
 
   const onMarkerClick = (event, point) => {
     event.stopPropagation();
+    if (!activeMap) return;
     setSelectedPointId(point.locationId);
     if (editMode) return;
     onOpenLocation(point.locationId);
@@ -523,13 +610,32 @@ function InteractiveAtriaMap({
     <div className={styles.atriaMapWrap}>
       <div className={styles.atriaMapToolbar}>
         <div className={styles.atriaMapZoomControls}>
+          <label className={styles.atriaPinSelectLabel}>
+            Map
+            <select
+              value={activeMap ? String(activeMap.id) : ''}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                if (!nextValue) return;
+                onSelectMap(resolveMapIdFromSelectValue(nextValue, mapList));
+              }}
+              className={styles.atriaPinSelect}
+              disabled={mapList.length === 0}
+            >
+              {mapList.map((map) => (
+                <option key={String(map.id)} value={String(map.id)}>
+                  {map.title || `Map ${map.id}`}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
             onClick={() => applyZoom(zoom - 0.2)}
-            disabled={zoom <= 1}
+            disabled={!activeMap || zoom <= 1}
             title="Zoom out"
           >
-            −
+            -
           </button>
           <input
             type="range"
@@ -539,12 +645,13 @@ function InteractiveAtriaMap({
             value={zoom}
             onChange={(event) => applyZoom(event.target.value)}
             className={styles.atriaZoomRange}
+            disabled={!activeMap}
             title="Zoom"
           />
           <button
             className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtn}`}
             onClick={() => applyZoom(zoom + 0.2)}
-            disabled={zoom >= 4}
+            disabled={!activeMap || zoom >= 4}
             title="Zoom in"
           >
             +
@@ -555,6 +662,7 @@ function InteractiveAtriaMap({
           <button
             className={`koa-glass-btn koa-interactive-lift ${styles.atriaToolBtnWide}`}
             onClick={() => setEditMode((prev) => !prev)}
+            disabled={!activeMap}
             title="Toggle map pin edit mode"
           >
             {editMode ? 'Done Editing' : 'Edit Pins'}
@@ -566,11 +674,11 @@ function InteractiveAtriaMap({
                 Pin
                 <select
                   value={selectedPointId || ''}
-                  onChange={(event) => setSelectedPointId(Number(event.target.value))}
+                  onChange={(event) => setSelectedPointId(event.target.value)}
                   className={styles.atriaPinSelect}
                 >
-                  {(locations || []).map((location) => (
-                    <option key={location.id} value={location.id}>
+                  {activeLocations.map((location) => (
+                    <option key={String(location.id)} value={location.id}>
                       {location.title}
                     </option>
                   ))}
@@ -598,8 +706,8 @@ function InteractiveAtriaMap({
         onClick={onStageClick}
         className={styles.atriaMapStage}
         style={{
-          cursor: dragging ? 'grabbing' : (editMode ? 'crosshair' : (zoom > 1 ? 'grab' : 'grab')),
-          '--atria-map-aspect': ATRIA_MAP_ASPECT,
+          cursor: !activeMap ? 'default' : (dragging ? 'grabbing' : (editMode ? 'crosshair' : 'grab')),
+          '--atria-map-aspect': activeMapAspect,
         }}
       >
         <div
@@ -608,20 +716,26 @@ function InteractiveAtriaMap({
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
           }}
         >
-          <img
-            src={atriaMapSrc}
-            alt="The Continent of Atria"
-            draggable={false}
-            className={styles.atriaMapImage}
-          />
+          {activeMapSrc ? (
+            <img
+              src={activeMapSrc || ATRIA_MAP_SRC}
+              alt={activeMap?.title || 'Selected world map'}
+              draggable={false}
+              className={styles.atriaMapImage}
+            />
+          ) : (
+            <div className={styles.atriaMapImageFallback}>
+              NO MAP IMAGE SET
+            </div>
+          )}
 
-          {(points || []).map((point) => {
+          {points.map((point) => {
             const location = getLocationById(point.locationId);
             const label = location?.title || `Location ${point.locationId}`;
-            const isSelected = point.locationId === selectedPointId;
+            const isSelected = idsMatch(point.locationId, selectedPointId);
             return (
               <button
-                key={point.locationId}
+                key={String(point.locationId)}
                 type="button"
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => onMarkerClick(event, point)}
@@ -637,18 +751,24 @@ function InteractiveAtriaMap({
         </div>
 
         <div className={styles.atriaMapHint}>
-          {editMode
-            ? 'Edit mode: select a pin, click map to place it, use arrow keys to nudge (Shift for fine movement).'
-            : 'Use + / − or slider to zoom. Hold Ctrl/Cmd + wheel for mouse-wheel zoom. Drag to pan, click a pin to open its location card.'}
+          {!activeMap
+            ? 'No map entries available. Add a map from the Maps archive while Edit Lore is enabled.'
+            : !activeMapSrc
+              ? 'Assign an image source to this map in Edit Lore to render the interactive view.'
+              : editMode
+                ? 'Edit mode: select a pin, click map to place it, use arrow keys to nudge (Shift for fine movement).'
+                : 'Use + / - or slider to zoom. Hold Ctrl/Cmd + wheel for mouse-wheel zoom. Drag to pan, click a pin to open its location card.'}
         </div>
       </div>
 
       <div className={styles.atriaMapFooter}>
         <div className={styles.atriaMapFooterPrimary}>
-          {selectedLocation ? selectedLocation.title : 'No location selected'}
+          {selectedLocation ? selectedLocation.title : (activeMap?.title || 'No map selected')}
         </div>
         <div className={styles.atriaMapFooterSecondary}>
-          {selectedPoint ? `X ${selectedPoint.x.toFixed(2)}% • Y ${selectedPoint.y.toFixed(2)}%` : 'No coordinates'}
+          {selectedPoint
+            ? `X ${selectedPoint.x.toFixed(2)}% � Y ${selectedPoint.y.toFixed(2)}%`
+            : `${activeLocations.length} linked location${activeLocations.length === 1 ? '' : 's'}`}
         </div>
         {copyStatus && (
           <div className={styles.atriaMapCopyStatus}>{copyStatus}</div>
@@ -659,8 +779,6 @@ function InteractiveAtriaMap({
     </div>
   );
 }
-
-
 
 function ImageCard({ item, onClick }) {
   // Allow per-card preview control:
@@ -715,6 +833,7 @@ function Lightbox({
   onOpenWorldNpcs = () => { },
   onOpenMember = () => { },
   getFactionMembers = () => [],
+  mapOptions = [],
   editMode = false,
   onUpdateItem = () => { },
   canDeleteItem = () => false,
@@ -773,6 +892,11 @@ function Lightbox({
   const isFaction = tab === 'factions';
   const factionMembers = isFaction ? getFactionMembers(item) : [];
   const isZoom = !isLocation && !isFaction; // maps & scenes
+  const mapList = Array.isArray(mapOptions) ? mapOptions : [];
+  const linkedMapTitle = isLocation
+    ? getMapTitleById(item.mapId, mapList)
+    : '';
+  const linkedPoint = isLocation ? normalizeMapPoint(item.mapPoint) : null;
 
   const renderEditFields = () => {
     if (!editMode || !editData) return null;
@@ -805,6 +929,25 @@ function Lightbox({
         </div>
         {isLocation && (
           <>
+            <div className={styles.editRow}>
+              <label className={styles.editLabel}>Linked Map</label>
+              <select
+                className={styles.editInput}
+                value={editData.mapId == null ? '' : String(editData.mapId)}
+                onChange={(e) => {
+                  const nextRaw = e.target.value;
+                  const nextMapId = nextRaw ? resolveMapIdFromSelectValue(nextRaw, mapList) : null;
+                  setEditData((prev) => ({ ...prev, mapId: nextMapId, mapPoint: null }));
+                }}
+              >
+                <option value="">Unassigned</option>
+                {mapList.map((map) => (
+                  <option key={String(map.id)} value={String(map.id)}>
+                    {map.title || `Map ${map.id}`}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className={styles.editRow}>
               <label className={styles.editLabel}>Region</label>
               <input
@@ -959,6 +1102,12 @@ function Lightbox({
 
               {!isFaction ? (
                 <div className={styles.lightboxFacts}>
+                  {isLocation && (
+                    <div><strong className={styles.factLabel}>Linked Map:</strong> {linkedMapTitle}</div>
+                  )}
+                  {isLocation && linkedPoint && (
+                    <div><strong className={styles.factLabel}>Map Pin:</strong> {`X ${linkedPoint.x.toFixed(2)}% � Y ${linkedPoint.y.toFixed(2)}%`}</div>
+                  )}
                   <div><strong className={styles.factLabel}>Region:</strong> {(item.region || 'Unknown').trim()}</div>
                   <div><strong className={styles.factLabel}>Governance:</strong> {(item.governance || 'Unknown').trim()}</div>
                   <div><strong className={styles.factLabel}>Economy:</strong> {(item.economy || 'Unknown').trim()}</div>
@@ -1167,6 +1316,49 @@ export default function WorldLore({
       console.warn('failed to save world lore', e);
     }
   };
+  const mapList = Array.isArray(gallery.maps) ? gallery.maps : [];
+  const [activeMapId, setActiveMapId] = useState(() => getFallbackMapId(mapList));
+  const activeMap = mapList.find((map) => idsMatch(map?.id, activeMapId)) || mapList[0] || null;
+
+  useEffect(() => {
+    const fallbackMapId = getFallbackMapId(mapList);
+    if (fallbackMapId == null) {
+      if (activeMapId !== null) setActiveMapId(null);
+      return;
+    }
+    const hasActiveMap = activeMapId != null && mapList.some((map) => idsMatch(map?.id, activeMapId));
+    if (!hasActiveMap) {
+      setActiveMapId(fallbackMapId);
+    }
+  }, [activeMapId, mapList]);
+
+  const handleUpdateLocationMapPoint = (locationId, mapId, point) => {
+    const normalizedPoint = normalizeMapPoint(point);
+    if (!normalizedPoint) return;
+
+    const fallbackMapId = getFallbackMapId(mapList);
+    let changed = false;
+    const nextLocations = (Array.isArray(gallery.locations) ? gallery.locations : []).map((location) => {
+      if (!idsMatch(location?.id, locationId)) return location;
+
+      const currentMapId = resolveLocationMapId(location, mapList, fallbackMapId);
+      const nextMapId = mapId != null ? mapId : currentMapId;
+      const currentPoint = normalizeMapPoint(location?.mapPoint);
+      if (idsMatch(currentMapId, nextMapId) && mapPointsEqual(currentPoint, normalizedPoint)) {
+        return location;
+      }
+
+      changed = true;
+      return normalizeLocationForStorage(
+        { ...location, mapId: nextMapId, mapPoint: normalizedPoint },
+        mapList,
+        fallbackMapId
+      );
+    });
+
+    if (!changed) return;
+    saveGallery({ ...gallery, locations: nextLocations });
+  };
 
   // when the user toggles edit mode for lore entries
   const [loreEditMode, setLoreEditMode] = useState(false);
@@ -1253,10 +1445,20 @@ export default function WorldLore({
     if (!loreEditEnabled) return;
     if (!updated || updated.id == null) return;
     const tab = updated._tab || activeTab;
-    const list = (gallery[tab] || []).map((it) => (it.id === updated.id ? { ...updated } : it));
+    const fallbackMapId = getFallbackMapId(mapList);
+    const normalizedUpdated = tab === 'locations'
+      ? normalizeLocationForStorage(updated, mapList, activeMap?.id ?? fallbackMapId)
+      : { ...updated };
+    const list = (gallery[tab] || []).map((it) => (idsMatch(it?.id, normalizedUpdated.id) ? normalizedUpdated : it));
     const next = { ...gallery, [tab]: list };
+    if (tab === 'maps') {
+      const nextMaps = Array.isArray(next.maps) ? next.maps : [];
+      const nextFallbackMapId = getFallbackMapId(nextMaps);
+      next.locations = (Array.isArray(next.locations) ? next.locations : [])
+        .map((location) => normalizeLocationForStorage(location, nextMaps, nextFallbackMapId));
+    }
     saveGallery(next);
-    setLightboxItem({ ...updated, _tab: tab });
+    setLightboxItem({ ...normalizedUpdated, _tab: tab });
   };
 
   const openWorldNpcCodex = ({ search = '', faction = '' } = {}) => {
@@ -1394,7 +1596,7 @@ export default function WorldLore({
     return !defaults.has(String(item.id));
   };
 
-  const buildNewItem = (tab, id) => {
+  const buildNewItem = (tab, id, { linkedMapId = null } = {}) => {
     const base = {
       id,
       title: `New ${tabSingularLabels[tab] || 'Entry'}`,
@@ -1403,9 +1605,17 @@ export default function WorldLore({
       description: '',
       userAdded: true,
     };
+    if (tab === 'maps') {
+      return {
+        ...base,
+        aspect: ATRIA_MAP_ASPECT,
+      };
+    }
     if (tab === 'locations') {
       return {
         ...base,
+        mapId: linkedMapId,
+        mapPoint: getSeededAtriaPoint(id, linkedMapId) || null,
         region: 'Unknown',
         governance: 'Unknown',
         economy: 'Unknown',
@@ -1433,7 +1643,14 @@ export default function WorldLore({
       return Number.isFinite(numericId) ? Math.max(maxId, numericId) : maxId;
     }, 0) + 1;
 
-    const nextItem = buildNewItem(tab, nextId);
+    const fallbackMapId = getFallbackMapId(mapList);
+    const nextItem = tab === 'locations'
+      ? normalizeLocationForStorage(
+        buildNewItem(tab, nextId, { linkedMapId: activeMap?.id ?? fallbackMapId }),
+        mapList,
+        activeMap?.id ?? fallbackMapId
+      )
+      : buildNewItem(tab, nextId, { linkedMapId: activeMap?.id ?? fallbackMapId });
     const nextGallery = {
       ...gallery,
       [tab]: [...currentList, nextItem],
@@ -1450,22 +1667,53 @@ export default function WorldLore({
     if (!isUserAddedItem(tab, candidate)) return;
 
     const currentList = Array.isArray(gallery[tab]) ? gallery[tab] : [];
-    const nextList = currentList.filter((item) => String(item?.id) !== String(candidate.id));
+    const nextList = currentList.filter((item) => !idsMatch(item?.id, candidate.id));
     if (nextList.length === currentList.length) return;
 
-    saveGallery({ ...gallery, [tab]: nextList });
+    let nextGallery = { ...gallery, [tab]: nextList };
+    if (tab === 'maps') {
+      const nextMaps = Array.isArray(nextGallery.maps) ? nextGallery.maps : [];
+      const fallbackMapId = getFallbackMapId(nextMaps);
+      nextGallery = {
+        ...nextGallery,
+        locations: (Array.isArray(gallery.locations) ? gallery.locations : []).map((location) => {
+          const currentMapId = resolveLocationMapId(location, mapList, getFallbackMapId(mapList));
+          if (idsMatch(currentMapId, candidate.id)) {
+            return normalizeLocationForStorage(
+              { ...location, mapId: fallbackMapId, mapPoint: null },
+              nextMaps,
+              fallbackMapId
+            );
+          }
+          return normalizeLocationForStorage(location, nextMaps, fallbackMapId);
+        }),
+      };
+      if (activeMapId != null && idsMatch(activeMapId, candidate.id)) {
+        setActiveMapId(fallbackMapId);
+      }
+    }
+
+    saveGallery(nextGallery);
     setLightboxItem((prev) => {
       if (!prev) return prev;
       const prevTab = prev._tab || tab;
       if (prevTab !== tab) return prev;
-      return String(prev.id) === String(candidate.id) ? null : prev;
+      return idsMatch(prev.id, candidate.id) ? null : prev;
     });
   };
 
   const openLocationFromMap = (locationId) => {
-    const picked = gallery.locations.find((location) => location.id === locationId);
+    const picked = (Array.isArray(gallery.locations) ? gallery.locations : [])
+      .find((location) => idsMatch(location.id, locationId));
     if (!picked) return;
     setLightboxItem({ ...picked, _tab: 'locations' });
+  };
+
+  const handleOpenGalleryItem = (picked) => {
+    if (activeTab === 'maps' && picked?.id != null) {
+      setActiveMapId(picked.id);
+    }
+    setLightboxItem({ ...picked, _tab: activeTab });
   };
 
   return (
@@ -1495,8 +1743,12 @@ export default function WorldLore({
           <section>
             <SectionDivider label="World Map" />
             <InteractiveAtriaMap
+              maps={mapList}
+              activeMapId={activeMap?.id ?? null}
+              onSelectMap={setActiveMapId}
               locations={gallery.locations}
               onOpenLocation={openLocationFromMap}
+              onUpdateLocationPoint={handleUpdateLocationMapPoint}
             />
           </section>
 
@@ -1524,7 +1776,7 @@ export default function WorldLore({
                 <ImageCard
                   key={item.id}
                   item={item}
-                  onClick={(picked) => setLightboxItem({ ...picked, _tab: activeTab })}
+                  onClick={handleOpenGalleryItem}
                 />
               ))}
             </div>
@@ -1566,7 +1818,10 @@ export default function WorldLore({
         onOpenWorldNpcs={openWorldNpcCodex}
         onOpenMember={openFactionMemberProfile}
         getFactionMembers={getFactionMembers}
+        mapOptions={mapList}
       />
     </div>
   );
 }
+
+
