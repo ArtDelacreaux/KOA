@@ -51,10 +51,89 @@ function emailLocalPart(email) {
   return normalized.split('@')[0] || '';
 }
 
+function playerPresenceKey({ userId = '', email = '', label = '' }) {
+  const normalizedUserId = normalizeText(userId);
+  if (normalizedUserId) return normalizedUserId.toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
+  if (normalizedEmail) return normalizedEmail;
+  return normalizeText(label).toLowerCase();
+}
+
 function toNumberOr(value, fallback) {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 }
+
+function clamp01(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  if (num <= 0) return 0;
+  if (num >= 1) return 1;
+  return num;
+}
+
+function hexToRgb(hex) {
+  const normalized = String(hex || '').replace('#', '').trim();
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return { r: 0, g: 0, b: 0 };
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex(rgb) {
+  const toHex = (value) => Math.max(0, Math.min(255, Math.round(value || 0))).toString(16).padStart(2, '0');
+  return `#${toHex(rgb?.r)}${toHex(rgb?.g)}${toHex(rgb?.b)}`;
+}
+
+function mixHex(a, b, t) {
+  const from = hexToRgb(a);
+  const to = hexToRgb(b);
+  const ratio = clamp01(t);
+  return rgbToHex({
+    r: from.r + ((to.r - from.r) * ratio),
+    g: from.g + ((to.g - from.g) * ratio),
+    b: from.b + ((to.b - from.b) * ratio),
+  });
+}
+
+function worldTimeSkyPalette(progress) {
+  const p = clamp01(progress);
+  const eveningStart = 5 / (HUB_TIME_OPTIONS.length - 1);
+  const nightStart = 6 / (HUB_TIME_OPTIONS.length - 1);
+  const nightRamp = clamp01((p - eveningStart) / Math.max(0.0001, 1 - eveningStart));
+  const deepNightRamp = clamp01((p - nightStart) / Math.max(0.0001, 1 - nightStart));
+  const daylight = Math.max(0, Math.sin(p * Math.PI));
+  const left = p < 0.35
+    ? mixHex('#f0cd97', '#9fbcd3', p / 0.35)
+    : mixHex('#9fbcd3', '#19142d', (p - 0.35) / 0.65);
+  const mid = p < 0.55
+    ? mixHex('#edce93', '#7f8fb8', p / 0.55)
+    : mixHex('#7f8fb8', '#171328', (p - 0.55) / 0.45);
+  const right = p < 0.5
+    ? mixHex('#dfae73', '#705986', p / 0.5)
+    : mixHex('#705986', '#0f0a1d', (p - 0.5) / 0.5);
+  return {
+    left,
+    mid,
+    right,
+    glow: 0.2 + (daylight * 0.52),
+    stars: p >= eveningStart ? (0.16 + (nightRamp * 0.7)) : 0,
+    starsDense: deepNightRamp * 0.72,
+  };
+}
+
+const HUB_TIME_OPTIONS = [
+  'Early Morning',
+  'Morning',
+  'Late Morning',
+  'Afternoon',
+  'Late Afternoon',
+  'Evening',
+  'Night',
+  'Midnight',
+];
 
 function sanitizeLauncherState(rawState, defaultState, nowMs = Date.now()) {
   const source = rawState && typeof rawState === 'object' ? rawState : {};
@@ -72,6 +151,9 @@ function sanitizeLauncherState(rawState, defaultState, nowMs = Date.now()) {
         ? legacyLastTick
         : nowMs)
     : null;
+  const timeOfDay = normalizeText(source.timeOfDay || source.worldTime || defaultState.timeOfDay || 'Morning');
+  const timeOfDayUpdatedAt = normalizeText(source.timeOfDayUpdatedAt || source.worldTimeUpdatedAt);
+  const timeOfDayUpdatedBy = normalizeText(source.timeOfDayUpdatedBy || source.worldTimeUpdatedBy);
 
   const normalized = {
     ...defaultState,
@@ -79,6 +161,9 @@ function sanitizeLauncherState(rawState, defaultState, nowMs = Date.now()) {
     timerRunning,
     timerAccumulatedMs,
     timerStartedAtMs,
+    timeOfDay: timeOfDay || 'Morning',
+    timeOfDayUpdatedAt,
+    timeOfDayUpdatedBy,
   };
   if (Object.prototype.hasOwnProperty.call(normalized, 'elapsedMs')) delete normalized.elapsedMs;
   if (Object.prototype.hasOwnProperty.call(normalized, 'lastTick')) delete normalized.lastTick;
@@ -156,6 +241,12 @@ export default function CampaignHub(props) {
   const [playersLoading, setPlayersLoading] = useState(false);
   const [playersError, setPlayersError] = useState('');
   const [questBoardView, setQuestBoardView] = useState('party');
+  const [recapOpen, setRecapOpen] = useState(true);
+  const [playerPresenceOpen, setPlayerPresenceOpen] = useState(false);
+  const [playerDirectory, setPlayerDirectory] = useState([]);
+  const [playerDirectoryLoading, setPlayerDirectoryLoading] = useState(false);
+  const [presenceByPlayerKey, setPresenceByPlayerKey] = useState({});
+  const [presenceConnected, setPresenceConnected] = useState(false);
 
   useEffect(() => {
     if (!authEnabled || !canManageCampaign) {
@@ -246,6 +337,84 @@ export default function CampaignHub(props) {
       cancelled = true;
     };
   }, [authEnabled, canManageCampaign]);
+
+  useEffect(() => {
+    if (!authEnabled || !currentUserId) {
+      setPlayerDirectory([]);
+      setPlayerDirectoryLoading(false);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      setPlayerDirectory([]);
+      setPlayerDirectoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const loadPlayerDirectory = async () => {
+      setPlayerDirectoryLoading(true);
+      try {
+        const { data, error } = await supabase.rpc('list_campaign_member_directory', {
+          p_campaign_id: campaignId,
+        });
+        if (error) throw error;
+        if (cancelled) return;
+
+        const seen = new Set();
+        const rows = Array.isArray(data) ? data : [];
+        const nextDirectory = rows
+          .map((row, idx) => {
+            const userId = normalizeText(row?.user_id);
+            if (!userId || seen.has(userId)) return null;
+            seen.add(userId);
+            const username = normalizeText(row?.username);
+            const label = username || `Member ${idx + 1}`;
+            return {
+              userId,
+              email: '',
+              username,
+              label,
+              role: normalizeText(row?.role || 'member').toLowerCase(),
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.label.localeCompare(b.label));
+
+        if (!nextDirectory.some((member) => normalizeText(member.userId) === currentUserId)) {
+          const selfLabel = normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You');
+          nextDirectory.push({
+            userId: currentUserId,
+            email: currentUserEmail,
+            username: normalizeText(profile?.username),
+            label: selfLabel,
+            role: 'member',
+          });
+        }
+
+        if (!cancelled) setPlayerDirectory(nextDirectory);
+      } catch {
+        if (cancelled) return;
+        const fallbackLabel = normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You');
+        setPlayerDirectory(currentUserId ? [{
+          userId: currentUserId,
+          email: currentUserEmail,
+          username: normalizeText(profile?.username),
+          label: fallbackLabel,
+          role: 'member',
+        }] : []);
+      } finally {
+        if (!cancelled) setPlayerDirectoryLoading(false);
+      }
+    };
+
+    loadPlayerDirectory();
+    return () => {
+      cancelled = true;
+    };
+  }, [authEnabled, currentUserEmail, currentUserId, profile?.username]);
 
   const canViewPersonalQuest = useMemo(
     () => (q) => {
@@ -471,6 +640,9 @@ export default function CampaignHub(props) {
     watchUrl: 'https://w2g.tv/en/room/?room_id=h2rq2xmdrlzdlyolcu',
     owlbearUrl: 'https://owlbear.rodeo/room/TQbSmbFAE6l4/TheFatedSoul',
     recap: '',
+    timeOfDay: 'Morning',
+    timeOfDayUpdatedAt: '',
+    timeOfDayUpdatedBy: '',
     timerRunning: false,
     timerAccumulatedMs: 0,
     timerStartedAtMs: null,
@@ -556,9 +728,211 @@ export default function CampaignHub(props) {
   const cloudStatus = repository.getCloudStatus();
   const usingSupabase = authEnabled && repository.adapterName === 'supabase';
   const canSeedCloud = usingSupabase && canManageCampaign && canEditCampaignData;
-  const showCloudPrepBackup = !authEnabled || canManageCampaign;
+  const showCloudPrepBackup = authEnabled && canManageCampaign;
+  const canManageHubTime = canEditCampaignData;
   const cloudPendingWrites = Number(cloudStatus?.queueSize || 0);
   const cloudError = String(cloudStatus?.lastSyncError || '');
+
+  const hubTimeValue = normalizeText(launcherState.timeOfDay) || 'Morning';
+  const hubTimeIndex = useMemo(() => {
+    const index = HUB_TIME_OPTIONS.indexOf(hubTimeValue);
+    return index >= 0 ? index : 1;
+  }, [hubTimeValue]);
+  const hubTimeMaxIndex = Math.max(1, HUB_TIME_OPTIONS.length - 1);
+  const hubTimeProgress = hubTimeIndex / hubTimeMaxIndex;
+  const hubTimeSky = useMemo(() => worldTimeSkyPalette(hubTimeProgress), [hubTimeProgress]);
+  const hubTimeNeedleAngle = -90 + (hubTimeProgress * 180);
+
+  const setHubTimeOfDay = (nextTime) => {
+    if (!canManageHubTime) return;
+    const normalizedTime = normalizeText(nextTime) || 'Morning';
+    const updatedBy = normalizeText(profile?.username || emailLocalPart(session?.user?.email) || 'DM');
+    const updatedAt = new Date().toISOString();
+    setLauncherState((current) => {
+      const base = sanitizeLauncherState(current, defaultLauncherState);
+      return {
+        ...base,
+        timeOfDay: normalizedTime,
+        timeOfDayUpdatedAt: updatedAt,
+        timeOfDayUpdatedBy: updatedBy,
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!authEnabled || !currentUserId) {
+      setPresenceByPlayerKey({});
+      setPresenceConnected(false);
+      return () => {};
+    }
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      setPresenceByPlayerKey({});
+      setPresenceConnected(false);
+      return () => {};
+    }
+
+    let active = true;
+    let subscribed = false;
+    const selfPresenceKey = playerPresenceKey({
+      userId: currentUserId,
+      email: currentUserEmail,
+      label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'you'),
+    });
+
+    const channel = supabase.channel(`koa-hub-presence:${campaignId}`, {
+      config: {
+        presence: {
+          key: selfPresenceKey || 'anonymous',
+        },
+      },
+    });
+
+    const buildSelfPresencePayload = () => ({
+      userId: currentUserId,
+      email: currentUserEmail,
+      username: normalizeText(profile?.username),
+      label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You'),
+      status: document.hidden ? 'away' : 'online',
+      updatedAt: new Date().toISOString(),
+    });
+
+    const syncPresenceState = () => {
+      if (!active) return;
+      const rawState = channel.presenceState();
+      const nextPresence = {};
+
+      Object.values(rawState || {}).forEach((entries) => {
+        (Array.isArray(entries) ? entries : []).forEach((entry) => {
+          const userId = normalizeText(entry?.userId || entry?.user_id);
+          const email = normalizeEmail(entry?.email);
+          const label = normalizeText(entry?.label || entry?.username || emailLocalPart(email) || '');
+          const key = playerPresenceKey({ userId, email, label });
+          if (!key) return;
+
+          const status = normalizeText(entry?.status).toLowerCase() === 'away' ? 'away' : 'online';
+          const previous = nextPresence[key];
+          if (!previous || previous.status !== 'online' || status === 'online') {
+            nextPresence[key] = {
+              key,
+              userId,
+              email,
+              label,
+              status,
+              updatedAt: normalizeText(entry?.updatedAt || entry?.updated_at),
+            };
+          }
+        });
+      });
+
+      setPresenceByPlayerKey(nextPresence);
+    };
+
+    channel
+      .on('presence', { event: 'sync' }, syncPresenceState)
+      .on('presence', { event: 'join' }, syncPresenceState)
+      .on('presence', { event: 'leave' }, syncPresenceState)
+      .subscribe(async (status) => {
+        if (!active) return;
+        if (status === 'SUBSCRIBED') {
+          subscribed = true;
+          setPresenceConnected(true);
+          try {
+            await channel.track(buildSelfPresencePayload());
+          } catch {}
+          return;
+        }
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          subscribed = false;
+          setPresenceConnected(false);
+        }
+      });
+
+    const onVisibilityChange = () => {
+      if (!active || !subscribed) return;
+      channel.track(buildSelfPresencePayload()).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      try {
+        if (subscribed) channel.untrack();
+      } catch {}
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  }, [authEnabled, currentUserEmail, currentUserId, profile?.username]);
+
+  const playerPresenceMembers = useMemo(() => {
+    const unique = new Map();
+    const pushMember = (member) => {
+      const label = normalizeText(member?.label || member?.username || emailLocalPart(member?.email) || 'Player');
+      const entry = {
+        userId: normalizeText(member?.userId || member?.user_id),
+        email: normalizeEmail(member?.email),
+        username: normalizeText(member?.username),
+        label,
+      };
+      const key = playerPresenceKey(entry);
+      if (!key || unique.has(key)) return;
+      unique.set(key, { ...entry, key });
+    };
+
+    (playerDirectory || []).forEach(pushMember);
+    (assignablePlayers || []).forEach(pushMember);
+    if (currentUserId || currentUserEmail) {
+      pushMember({
+        userId: currentUserId,
+        email: currentUserEmail,
+        username: normalizeText(profile?.username),
+        label: normalizeText(profile?.username || emailLocalPart(currentUserEmail) || 'You'),
+      });
+    }
+
+    return Array.from(unique.values())
+      .map((member) => {
+        const presence = presenceByPlayerKey[member.key];
+        let status = 'offline';
+        if (presence?.status === 'away') status = 'away';
+        else if (presence?.status === 'online') status = 'online';
+        else if (member.userId && currentUserId && member.userId === currentUserId) status = 'online';
+
+        return {
+          ...member,
+          status,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [
+    assignablePlayers,
+    currentUserEmail,
+    currentUserId,
+    playerDirectory,
+    presenceByPlayerKey,
+    profile?.username,
+  ]);
+  const onlinePlayerCount = playerPresenceMembers.filter((member) => member.status === 'online').length;
+  const awayPlayerCount = playerPresenceMembers.filter((member) => member.status === 'away').length;
+
+  useEffect(() => {
+    if (!playerPresenceOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setPlayerPresenceOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [playerPresenceOpen]);
+
+  useEffect(() => {
+    if (campaignTab !== 'launcher' && playerPresenceOpen) {
+      setPlayerPresenceOpen(false);
+    }
+  }, [campaignTab, playerPresenceOpen]);
 
   const exportBackup = () => {
     const snapshot = buildMigrationSnapshot();
@@ -817,166 +1191,285 @@ export default function CampaignHub(props) {
           {campaignTab === 'launcher' && (
             <div className={styles.questBoardStack}>
               <div className={`${styles.questBoardFrame} ${styles.hubBoardFrame}`}>
-                <div className={styles.questBoardBanner}>
-                  <div>
+                <div className={`${styles.questBoardBanner} ${styles.hubBoardBanner}`}>
+                  <div className={styles.hubBoardHeading}>
                     <div className={styles.questBoardEyebrow}>Guild Services</div>
                     <div className={styles.questBoardTitle}>Party Hub Board</div>
                     <div className={styles.questBoardSub}>Session tools, launch links, and records for the whole crew.</div>
                   </div>
-                  <span className={styles.boardStatusPill}>Active Session</span>
+                  <div className={styles.hubBannerTimer}>
+                    <div className={styles.hubBannerTimerValue}>{fmtElapsed(displayedElapsedMs)}</div>
+                    <div className={styles.hubBannerTimerActions}>
+                      <button
+                        className={smallBtnClass(launcherState.timerRunning ? 'danger' : 'gold', styles.hubBannerTimerBtn)}
+                        onMouseEnter={smallBtnHover}
+                        onClick={toggleSessionTimer}
+                      >
+                        {launcherState.timerRunning ? 'Pause' : 'Resume'}
+                      </button>
+                      <button
+                        className={smallBtnClass('danger', styles.hubBannerTimerBtn)}
+                        onMouseEnter={smallBtnHover}
+                        onClick={resetSessionTimer}
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.hubBannerStatusWrap}>
+                    <span className={styles.boardStatusPill}>Hub Active</span>
+                  </div>
                 </div>
 
-                <div className={styles.launcherGrid}>
-                  <div className={styles.questColumn}>
-                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
-                      <div className={styles.cardHeaderRow}>
-                        <div>
-                          <div className={styles.cardTitle}>Quick Launch</div>
-                          <div className={styles.cardSub}>Don't forget your character sheet!</div>
-                        </div>
-                        <span className={styles.playersPill}>Players</span>
+                <div
+                  className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTimeCard} ${styles.hubTimeTopCard}`}
+                  style={{
+                    '--hub-time-progress': hubTimeProgress.toFixed(4),
+                    '--hub-time-sky-left': hubTimeSky.left,
+                    '--hub-time-sky-mid': hubTimeSky.mid,
+                    '--hub-time-sky-right': hubTimeSky.right,
+                    '--hub-time-glow-alpha': hubTimeSky.glow.toFixed(4),
+                    '--hub-time-stars-alpha': hubTimeSky.stars.toFixed(4),
+                    '--hub-time-stars-dense-alpha': hubTimeSky.starsDense.toFixed(4),
+                  }}
+                >
+                  <div className={styles.hubTimeHeader}>
+                    <div className={styles.blockTitle}>World Time</div>
+                  </div>
+                  <div
+                    className={styles.hubTimeDial}
+                    style={{
+                      '--hub-time-needle-angle': `${hubTimeNeedleAngle}deg`,
+                    }}
+                  >
+                    <div className={styles.hubTimeDialSky} />
+                    <div className={styles.hubTimeDialGlow} />
+                    <div className={styles.hubTimeDialStars} />
+                    <div className={styles.hubTimeDialStarsDense} />
+                    <div className={styles.hubTimeDialArc} />
+                    <div className={styles.hubTimeDialTicks} />
+                    <div className={styles.hubTimeDialNeedle}>
+                      <span className={styles.hubTimeDialNeedleTip} />
+                    </div>
+                    <div className={`${styles.hubTimeDialIcon} ${styles.hubTimeDialSun}`} aria-hidden="true">☀</div>
+                    <div className={`${styles.hubTimeDialIcon} ${styles.hubTimeDialMoon}`} aria-hidden="true">☾</div>
+                    <div className={styles.hubTimeDialCenter}>
+                      <div className={styles.hubTimeDialCenterLabel}>Current</div>
+                      <div className={styles.hubTimeDialCenterValue}>{hubTimeValue}</div>
+                    </div>
+                  </div>
+                  <div className={styles.hubTimeControls}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={HUB_TIME_OPTIONS.length - 1}
+                      step={1}
+                      value={hubTimeIndex}
+                      onChange={(e) => setHubTimeOfDay(HUB_TIME_OPTIONS[Number(e.target.value)] || HUB_TIME_OPTIONS[1])}
+                      disabled={!canManageHubTime}
+                      className={styles.hubSlider}
+                    />
+                  </div>
+                </div>
+
+                <div className={styles.hubQuickRow}>
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain}`} onMouseEnter={() => playHover()}>
+                    <div className={styles.iconRow}>
+                      <div className={styles.toolIcon}>
+                        <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
                       </div>
-
-                      <div className={styles.sectionDivider} />
-
-                      <div className={styles.toolGrid}>
-                        <div className={`${styles.toolCard} ${styles.boardNoteCard}`} onMouseEnter={() => playHover()}>
-                          <div className={styles.iconRow}>
-                            <div className={styles.toolIcon}>
-                              <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
-                            </div>
-                            <div>
-                              <div className={styles.toolTitle}>Watch Party</div>
-                              <div className={styles.toolSub}>Music / Videos / Friends</div>
-                            </div>
-                          </div>
-                          <div className={styles.toolActions}>
-                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Open Room</button>
-                          </div>
-                        </div>
-
-                        <div className={`${styles.toolCard} ${styles.boardNoteCard}`} onMouseEnter={() => playHover()}>
-                          <div className={styles.iconRow}>
-                            <div className={styles.toolIcon}>
-                              <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
-                            </div>
-                            <div>
-                              <div className={styles.toolTitle}>Owlbear Table</div>
-                              <div className={styles.toolSub}>Maps / tokens / encounters</div>
-                            </div>
-                          </div>
-                          <div className={styles.toolActions}>
-                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Open Room</button>
-                          </div>
-                        </div>
+                      <div>
+                        <div className={styles.toolTitle}>Watch Party</div>
+                        <div className={styles.toolSub}>Music / Videos / Friends</div>
                       </div>
+                    </div>
+                    <div className={styles.hubTileActions}>
+                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Open Room</button>
+                    </div>
+                  </div>
 
-                      <div className={`${styles.softCard} ${styles.nestedCard} ${styles.boardNoteCard}`}>
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain}`} onMouseEnter={() => playHover()}>
+                    <div className={styles.iconRow}>
+                      <div className={styles.toolIcon}>
+                        <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
+                      </div>
+                      <div>
+                        <div className={styles.toolTitle}>Owlbear Table</div>
+                        <div className={styles.toolSub}>Maps / Tokens / Encounters</div>
+                      </div>
+                    </div>
+                    <div className={styles.hubTileActions}>
+                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Open Room</button>
+                    </div>
+                  </div>
+
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile}`} onMouseEnter={() => playHover()}>
+                    <div className={styles.iconRow}>
+                      <div className={styles.hubPlayersGlyph}>PR</div>
+                      <div>
+                        <div className={styles.toolTitle}>Players</div>
+                        <div className={styles.toolSub}>{onlinePlayerCount} online · {awayPlayerCount} away</div>
+                      </div>
+                    </div>
+                    <div className={styles.hubTileMeta}>
+                      {presenceConnected ? 'Realtime connected' : 'Using fallback status'}
+                    </div>
+                    <div className={styles.hubTileActions}>
+                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => setPlayerPresenceOpen(true)}>Open Presence</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.hubNotesRecapRow}>
+                  <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
+                    <div>
+                      <div className={styles.blockTitle}>Session Notes</div>
+                      <div className={styles.blockSub}>Saved privately to your account.</div>
+                    </div>
+                    <textarea
+                      value={launcherNotes || ''}
+                      onChange={(e) => setLauncherNotes(e.target.value)}
+                      placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
+                      rows={8}
+                      className={`${styles.inputBase} ${styles.textarea}`}
+                    />
+                  </div>
+
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubRecapAccordion}`}>
+                    <div className={styles.hubRecapHeader}>
+                      <div>
                         <div className={styles.blockTitle}>Recap</div>
-                        <div className={styles.blockSub}>Write what happened last session</div>
+                        <div className={styles.blockSub}>Session summary and key beats.</div>
+                      </div>
+                      <button
+                        type="button"
+                        className={smallBtnClass('ghost')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => setRecapOpen((prev) => !prev)}
+                      >
+                        {recapOpen ? 'Collapse' : 'Expand'}
+                      </button>
+                    </div>
+                    {recapOpen && (
+                      <div className={styles.hubRecapBody}>
                         <textarea
                           value={launcherState.recap || ''}
                           onChange={(e) => setLauncherState((s) => ({ ...s, recap: e.target.value }))}
                           placeholder="Last time, the party..."
-                          rows={5}
+                          rows={8}
                           className={`${styles.inputBase} ${styles.textarea}`}
                         />
                       </div>
-                    </div>
-                  </div>
-
-                  <div className={`${styles.stackCol} ${styles.questColumn}`}>
-                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
-                      <div>
-                        <div className={styles.blockTitle}>Session Timer</div>
-                        <div className={styles.blockSub}>Track how long you've been playing.</div>
-                      </div>
-                      <div className={styles.timerValue}>{fmtElapsed(displayedElapsedMs)}</div>
-                      <div className={styles.timerActions}>
-                        <button
-                          className={smallBtnClass(launcherState.timerRunning ? 'danger' : 'gold')}
-                          onMouseEnter={smallBtnHover}
-                          onClick={toggleSessionTimer}
-                        >
-                          {launcherState.timerRunning ? 'Pause' : 'Start'}
-                        </button>
-                        <button
-                          className={smallBtnClass('danger')}
-                          onMouseEnter={smallBtnHover}
-                          onClick={resetSessionTimer}
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
-                      <div>
-                        <div className={styles.blockTitle}>Session Notes</div>
-                        <div className={styles.blockSub}>Saved privately to your account.</div>
-                      </div>
-                      <textarea
-                        value={launcherNotes || ''}
-                        onChange={(e) => setLauncherNotes(e.target.value)}
-                        placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
-                        rows={10}
-                        className={`${styles.inputBase} ${styles.textarea}`}
-                      />
-                    </div>
-                    {showCloudPrepBackup && (
-                      <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
-                        <div>
-                          <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                          <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
-                        </div>
-                        <div className={styles.toolActions}>
-                          <button
-                            className={smallBtnClass('gold')}
-                            onMouseEnter={smallBtnHover}
-                            onClick={exportBackup}
-                            disabled={backupBusy || seedBusy}
-                          >
-                            Download Backup
-                          </button>
-                          <button
-                            className={smallBtnClass('ghost')}
-                            onMouseEnter={smallBtnHover}
-                            onClick={openRestorePicker}
-                            disabled={backupBusy || seedBusy}
-                          >
-                            Restore Backup
-                          </button>
-                          {canSeedCloud && (
-                            <button
-                              className={smallBtnClass('gold')}
-                              onMouseEnter={smallBtnHover}
-                              onClick={seedCloudFromThisDevice}
-                              disabled={backupBusy || seedBusy}
-                            >
-                              {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
-                            </button>
-                          )}
-                        </div>
-                        <input
-                          ref={backupFileRef}
-                          type="file"
-                          accept="application/json"
-                          className={styles.hiddenFileInput}
-                          onChange={onBackupPicked}
-                        />
-                        <div className={styles.backupHint}>
-                          Each person should download their own backup from their own device/browser profile.
-                          {usingSupabase && (
-                            <>
-                              {' '}
-                              Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
-                            </>
-                          )}
-                        </div>
-                        {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
-                        {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
-                      </div>
                     )}
+                  </div>
+                </div>
+
+                {showCloudPrepBackup && (
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubBackupCard}`}>
+                    <div>
+                      <div className={styles.blockTitle}>Cloud Prep Backup</div>
+                      <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
+                    </div>
+                    <div className={styles.toolActions}>
+                      <button
+                        className={smallBtnClass('gold')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={exportBackup}
+                        disabled={backupBusy || seedBusy}
+                      >
+                        Download Backup
+                      </button>
+                      <button
+                        className={smallBtnClass('ghost')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={openRestorePicker}
+                        disabled={backupBusy || seedBusy}
+                      >
+                        Restore Backup
+                      </button>
+                      {canSeedCloud && (
+                        <button
+                          className={smallBtnClass('gold')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={seedCloudFromThisDevice}
+                          disabled={backupBusy || seedBusy}
+                        >
+                          {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      ref={backupFileRef}
+                      type="file"
+                      accept="application/json"
+                      className={styles.hiddenFileInput}
+                      onChange={onBackupPicked}
+                    />
+                    <div className={styles.backupHint}>
+                      Each person should download their own backup from their own device/browser profile.
+                      {usingSupabase && (
+                        <>
+                          {' '}
+                          Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
+                        </>
+                      )}
+                    </div>
+                    {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
+                    {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {playerPresenceOpen && (
+            <div className={styles.modalOverlay}>
+              <div className={`${styles.modalCard} ${styles.presenceModal}`}>
+                <div className={styles.modalHeader}>
+                  <div className={styles.modalTitle}>Player Presence</div>
+                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => setPlayerPresenceOpen(false)}>Close</button>
+                </div>
+                <div className={styles.sectionDivider} />
+                <div className={styles.modalBody}>
+                  <div className={styles.presenceTopMeta}>
+                    <span>{presenceConnected ? 'Realtime connected' : 'Using fallback status'}</span>
+                    <span>{onlinePlayerCount} online · {awayPlayerCount} away</span>
+                  </div>
+                  <div className={styles.presenceList}>
+                    {playerDirectoryLoading && (
+                      <div className={styles.modalHint}>Loading player directory...</div>
+                    )}
+                    {!playerDirectoryLoading && playerPresenceMembers.length === 0 && (
+                      <div className={styles.modalHint}>No players found for this campaign yet.</div>
+                    )}
+                    {playerPresenceMembers.map((member) => (
+                      <div key={member.key} className={styles.presenceRow}>
+                        <div className={styles.presenceIdentity}>
+                          <span
+                            className={`${styles.statusDot} ${member.status === 'online'
+                              ? styles.statusOnline
+                              : member.status === 'away'
+                                ? styles.statusAway
+                                : styles.statusOffline}`}
+                          />
+                          <div>
+                            <div className={styles.presenceName}>{member.label}</div>
+                            <div className={styles.presenceState}>{member.status}</div>
+                          </div>
+                        </div>
+                        <div className={styles.presenceActions}>
+                          <span
+                            className={`${styles.presenceBadge} ${member.status === 'online'
+                              ? styles.presenceBadgeOnline
+                              : member.status === 'away'
+                                ? styles.presenceBadgeAway
+                                : styles.presenceBadgeOffline}`}
+                          >
+                            {member.status === 'online' ? 'Connected' : member.status === 'away' ? 'Away' : 'Offline'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
