@@ -6,6 +6,7 @@ import styles from './AuthGate.module.css';
 
 const VALID_CAMPAIGN_ROLES = new Set(['owner', 'dm', 'member']);
 const GUEST_PROFILE = { user_id: 'guest', username: 'Guest', updated_at: null };
+const MIN_PASSWORD_LENGTH = 8;
 
 function normalizeCampaignRole(value) {
   const role = String(value || 'member').trim().toLowerCase();
@@ -18,6 +19,35 @@ function roleFromMembershipData(data) {
   if (Array.isArray(data)) return roleFromMembershipData(data[0]);
   if (typeof data === 'object') return normalizeCampaignRole(data.role);
   return 'member';
+}
+
+function parseAuthParamsFromWindow() {
+  if (typeof window === 'undefined') return new URLSearchParams();
+  const query = String(window.location.search || '').replace(/^\?/, '');
+  const hash = String(window.location.hash || '').replace(/^#/, '');
+  return new URLSearchParams([query, hash].filter(Boolean).join('&'));
+}
+
+function hasRecoveryIntentInUrl() {
+  return String(parseAuthParamsFromWindow().get('type') || '').toLowerCase() === 'recovery';
+}
+
+function clearRecoveryIntentFromUrl() {
+  if (typeof window === 'undefined' || !window.history?.replaceState) return;
+  const current = new URL(window.location.href);
+  current.hash = '';
+  [
+    'type',
+    'token',
+    'token_hash',
+    'access_token',
+    'refresh_token',
+    'expires_in',
+    'expires_at',
+    'token_type',
+    'code',
+  ].forEach((name) => current.searchParams.delete(name));
+  window.history.replaceState({}, document.title, `${current.pathname}${current.search}`);
 }
 
 async function claimCampaignMembership(supabase, campaignId) {
@@ -79,18 +109,27 @@ export default function AuthGate({ children }) {
   const [role, setRole] = useState('member');
   const [cloudStatus, setCloudStatus] = useState(repository.getCloudStatus());
   const [authError, setAuthError] = useState('');
+  const [authMessage, setAuthMessage] = useState('');
   const [loginIdentifier, setLoginIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [recoveryPending, setRecoveryPending] = useState(() => hasRecoveryIntentInUrl());
   const [usernameDraft, setUsernameDraft] = useState('');
   const [guestMode, setGuestMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const sessionRunRef = useRef(0);
   const phaseRef = useRef(phase);
   const userIdRef = useRef('');
+  const recoveryPendingRef = useRef(recoveryPending);
 
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+
+  useEffect(() => {
+    recoveryPendingRef.current = recoveryPending;
+  }, [recoveryPending]);
 
   const refreshCloudStatus = useCallback(() => {
     setCloudStatus(repository.getCloudStatus());
@@ -144,11 +183,13 @@ export default function AuthGate({ children }) {
   const applySession = useCallback(
     async (nextSession, options = {}) => {
       const silent = !!options.silent;
+      const isRecoveryFlow = !!options.recovery || recoveryPendingRef.current;
       const runId = sessionRunRef.current + 1;
       sessionRunRef.current = runId;
       setSession(nextSession || null);
       userIdRef.current = String(nextSession?.user?.id || '');
       setAuthError('');
+      setAuthMessage('');
 
       if (!enabled) {
         setPhase('ready');
@@ -159,8 +200,15 @@ export default function AuthGate({ children }) {
         await repository.clearSupabaseSession();
         setProfile(null);
         setRole('member');
+        if (isRecoveryFlow) setRecoveryPending(hasRecoveryIntentInUrl());
         refreshCloudStatus();
         setPhase('signed_out');
+        return;
+      }
+
+      if (isRecoveryFlow) {
+        setRecoveryPending(true);
+        setPhase('password_reset');
         return;
       }
 
@@ -229,6 +277,8 @@ export default function AuthGate({ children }) {
     let active = true;
 
     const boot = async () => {
+      const recoveryFromUrl = hasRecoveryIntentInUrl();
+      if (recoveryFromUrl) setRecoveryPending(true);
       const { data, error } = await supabase.auth.getSession();
       if (!active) return;
       if (error) {
@@ -236,19 +286,32 @@ export default function AuthGate({ children }) {
         setAuthError(error.message || 'Unable to read auth session.');
         return;
       }
-      await applySession(data?.session || null);
+      await applySession(data?.session || null, { recovery: recoveryFromUrl });
     };
 
     boot();
 
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecoveryPending(true);
+        setGuestMode(false);
+      }
+      if (event === 'SIGNED_OUT') {
+        setRecoveryPending(false);
+        setNewPassword('');
+        setConfirmNewPassword('');
+      }
+      const recoveryFromUrl = hasRecoveryIntentInUrl();
+      if (recoveryFromUrl) setRecoveryPending(true);
+      const isRecoveryFlow = event === 'PASSWORD_RECOVERY' || recoveryFromUrl || recoveryPendingRef.current;
       const nextUserId = String(nextSession?.user?.id || '');
       const sameUser = nextUserId && nextUserId === userIdRef.current;
       const shouldSilent =
+        !isRecoveryFlow &&
         phaseRef.current === 'ready' &&
         sameUser &&
         (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'USER_UPDATED');
-      applySession(nextSession, { silent: shouldSilent });
+      applySession(nextSession, { silent: shouldSilent, recovery: isRecoveryFlow });
     });
 
     return () => {
@@ -293,7 +356,12 @@ export default function AuthGate({ children }) {
     if (!supabase) return;
     setBusy(true);
     setAuthError('');
+    setAuthMessage('');
     setGuestMode(false);
+    setRecoveryPending(false);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    clearRecoveryIntentFromUrl();
     try {
       const email = await resolveSignInEmail(supabase, campaignId, loginIdentifier);
       const { error } = await supabase.auth.signInWithPassword({
@@ -309,15 +377,86 @@ export default function AuthGate({ children }) {
     }
   };
 
+  const requestPasswordRecovery = async () => {
+    if (!supabase) return;
+    const identifier = String(loginIdentifier || '').trim();
+    if (!identifier) {
+      setAuthError('Enter your email or username first, then request password recovery.');
+      setAuthMessage('');
+      return;
+    }
+    setBusy(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      const email = await resolveSignInEmail(supabase, campaignId, identifier);
+      const redirectTo =
+        typeof window === 'undefined' ? undefined : `${window.location.origin}${window.location.pathname}`;
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo ? { redirectTo } : undefined
+      );
+      if (error) throw error;
+      setAuthMessage('Password recovery email sent. Open the link in your inbox to set a new password.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to start password recovery.';
+      setAuthError(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveNewPassword = async (event) => {
+    event.preventDefault();
+    if (!supabase) return;
+    const nextPassword = String(newPassword || '');
+    const confirm = String(confirmNewPassword || '');
+    if (nextPassword.length < MIN_PASSWORD_LENGTH) {
+      setAuthError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+      setAuthMessage('');
+      return;
+    }
+    if (nextPassword !== confirm) {
+      setAuthError('Passwords do not match.');
+      setAuthMessage('');
+      return;
+    }
+
+    setBusy(true);
+    setAuthError('');
+    setAuthMessage('');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: nextPassword });
+      if (error) throw error;
+      clearRecoveryIntentFromUrl();
+      setRecoveryPending(false);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      const { data, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      await applySession(data?.session || null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unable to update password.';
+      setAuthError(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const continueAsGuest = useCallback(async () => {
     setBusy(true);
     setGuestMode(true);
+    setRecoveryPending(false);
+    setNewPassword('');
+    setConfirmNewPassword('');
     setSession(null);
     userIdRef.current = '';
     setProfile(GUEST_PROFILE);
     setRole('guest');
     setUsernameDraft('Guest');
     setAuthError('');
+    setAuthMessage('');
+    clearRecoveryIntentFromUrl();
     await repository.clearSupabaseSession();
     refreshCloudStatus();
     setPhase('ready');
@@ -330,6 +469,11 @@ export default function AuthGate({ children }) {
     } else if (supabase) {
       await supabase.auth.signOut();
     }
+    setRecoveryPending(false);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setAuthMessage('');
+    clearRecoveryIntentFromUrl();
     await repository.clearSupabaseSession();
     setProfile(null);
     setRole('member');
@@ -342,6 +486,7 @@ export default function AuthGate({ children }) {
     event.preventDefault();
     setBusy(true);
     setAuthError('');
+    setAuthMessage('');
     try {
       const nextProfile = await updateUsername(usernameDraft);
       setProfile(nextProfile);
@@ -432,6 +577,50 @@ export default function AuthGate({ children }) {
           </button>
           <button className={styles.secondaryBtn} type="button" onClick={continueAsGuest} disabled={busy}>
             Continue as Guest
+          </button>
+          <button className={styles.secondaryBtn} type="button" onClick={requestPasswordRecovery} disabled={busy}>
+            Send Password Recovery Link
+          </button>
+          {authMessage && <p className={styles.hint}>{authMessage}</p>}
+          {authError && <p className={styles.error}>{authError}</p>}
+        </form>
+      </div>
+    );
+  }
+
+  if (phase === 'password_reset') {
+    return (
+      <div className={styles.authShell}>
+        <form className={styles.card} onSubmit={saveNewPassword}>
+          <h1 className={styles.title}>Set New Password</h1>
+          <p className={styles.copy}>Choose a new password for your campaign account.</p>
+          <label className={styles.label} htmlFor="new-password">New Password</label>
+          <input
+            id="new-password"
+            className={styles.input}
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+          />
+          <label className={styles.label} htmlFor="confirm-new-password">Confirm New Password</label>
+          <input
+            id="confirm-new-password"
+            className={styles.input}
+            type="password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={MIN_PASSWORD_LENGTH}
+            required
+          />
+          <button className={styles.primaryBtn} type="submit" disabled={busy}>
+            {busy ? 'Updating Password...' : 'Update Password'}
+          </button>
+          <button className={styles.secondaryBtn} type="button" onClick={signOut} disabled={busy}>
+            Cancel
           </button>
           {authError && <p className={styles.error}>{authError}</p>}
         </form>
