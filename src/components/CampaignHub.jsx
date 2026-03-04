@@ -815,155 +815,170 @@ export default function CampaignHub(props) {
           </div>
           {/* ========== HUB ========== */}
           {campaignTab === 'launcher' && (
-            <div className={styles.launcherGrid}>
-              <div className={styles.softCard}>
-                <div className={styles.cardHeaderRow}>
+            <div className={styles.questBoardStack}>
+              <div className={`${styles.questBoardFrame} ${styles.hubBoardFrame}`}>
+                <div className={styles.questBoardBanner}>
                   <div>
-                    <div className={styles.cardTitle}>Quick Launch</div>
-                    <div className={styles.cardSub}>Don't forget your character sheet!</div>
+                    <div className={styles.questBoardEyebrow}>Guild Services</div>
+                    <div className={styles.questBoardTitle}>Party Hub Board</div>
+                    <div className={styles.questBoardSub}>Session tools, launch links, and records for the whole crew.</div>
                   </div>
-                  <span className={styles.playersPill}>Players</span>
+                  <span className={styles.boardStatusPill}>Active Session</span>
                 </div>
 
-                <div className={styles.sectionDivider} />
-
-                <div className={styles.toolGrid}>
-                  <div className={styles.toolCard} onMouseEnter={() => playHover()}>
-                    <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>
-                        <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
+                <div className={styles.launcherGrid}>
+                  <div className={styles.questColumn}>
+                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
+                      <div className={styles.cardHeaderRow}>
+                        <div>
+                          <div className={styles.cardTitle}>Quick Launch</div>
+                          <div className={styles.cardSub}>Don't forget your character sheet!</div>
+                        </div>
+                        <span className={styles.playersPill}>Players</span>
                       </div>
+
+                      <div className={styles.sectionDivider} />
+
+                      <div className={styles.toolGrid}>
+                        <div className={`${styles.toolCard} ${styles.boardNoteCard}`} onMouseEnter={() => playHover()}>
+                          <div className={styles.iconRow}>
+                            <div className={styles.toolIcon}>
+                              <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
+                            </div>
+                            <div>
+                              <div className={styles.toolTitle}>Watch Party</div>
+                              <div className={styles.toolSub}>Music / Videos / Friends</div>
+                            </div>
+                          </div>
+                          <div className={styles.toolActions}>
+                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Open Room</button>
+                          </div>
+                        </div>
+
+                        <div className={`${styles.toolCard} ${styles.boardNoteCard}`} onMouseEnter={() => playHover()}>
+                          <div className={styles.iconRow}>
+                            <div className={styles.toolIcon}>
+                              <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
+                            </div>
+                            <div>
+                              <div className={styles.toolTitle}>Owlbear Table</div>
+                              <div className={styles.toolSub}>Maps / tokens / encounters</div>
+                            </div>
+                          </div>
+                          <div className={styles.toolActions}>
+                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Open Room</button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={`${styles.softCard} ${styles.nestedCard} ${styles.boardNoteCard}`}>
+                        <div className={styles.blockTitle}>Recap</div>
+                        <div className={styles.blockSub}>Write what happened last session</div>
+                        <textarea
+                          value={launcherState.recap || ''}
+                          onChange={(e) => setLauncherState((s) => ({ ...s, recap: e.target.value }))}
+                          placeholder="Last time, the party..."
+                          rows={5}
+                          className={`${styles.inputBase} ${styles.textarea}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${styles.stackCol} ${styles.questColumn}`}>
+                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
                       <div>
-                        <div className={styles.toolTitle}>Watch Party</div>
-                        <div className={styles.toolSub}>Music / Videos / Friends</div>
+                        <div className={styles.blockTitle}>Session Timer</div>
+                        <div className={styles.blockSub}>Track how long you've been playing.</div>
                       </div>
-                    </div>
-                    <div className={styles.toolActions}>
-                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Open Room</button>
-                    </div>
-                  </div>
-
-                  <div className={styles.toolCard} onMouseEnter={() => playHover()}>
-                    <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>
-                        <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
-                      </div>
-                      <div>
-                        <div className={styles.toolTitle}>Owlbear Table</div>
-                        <div className={styles.toolSub}>Maps / tokens / encounters</div>
-                      </div>
-                    </div>
-                    <div className={styles.toolActions}>
-                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Open Room</button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={`${styles.softCard} ${styles.nestedCard}`}>
-                  <div className={styles.blockTitle}>Recap</div>
-                  <div className={styles.blockSub}>Write what happened last session</div>
-                  <textarea
-                    value={launcherState.recap || ''}
-                    onChange={(e) => setLauncherState((s) => ({ ...s, recap: e.target.value }))}
-                    placeholder="Last time, the party..."
-                    rows={5}
-                    className={`${styles.inputBase} ${styles.textarea}`}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.stackCol}>
-                <div className={styles.softCard}>
-                  <div>
-                    <div className={styles.blockTitle}>Session Timer</div>
-                    <div className={styles.blockSub}>Track how long you've been playing.</div>
-                  </div>
-                  <div className={styles.timerValue}>{fmtElapsed(displayedElapsedMs)}</div>
-                  <div className={styles.timerActions}>
-                    <button
-                      className={smallBtnClass(launcherState.timerRunning ? 'danger' : 'gold')}
-                      onMouseEnter={smallBtnHover}
-                      onClick={toggleSessionTimer}
-                    >
-                      {launcherState.timerRunning ? 'Pause' : 'Start'}
-                    </button>
-                    <button
-                      className={smallBtnClass('danger')}
-                      onMouseEnter={smallBtnHover}
-                      onClick={resetSessionTimer}
-                    >
-                      Reset
-                    </button>
-                  </div>
-                </div>
-
-                <div className={styles.softCard}>
-                  <div>
-                    <div className={styles.blockTitle}>Session Notes</div>
-                    <div className={styles.blockSub}>Saved privately to your account.</div>
-                  </div>
-                  <textarea
-                    value={launcherNotes || ''}
-                    onChange={(e) => setLauncherNotes(e.target.value)}
-                    placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
-                    rows={10}
-                    className={`${styles.inputBase} ${styles.textarea}`}
-                  />
-                </div>
-                {showCloudPrepBackup && (
-                  <div className={styles.softCard}>
-                    <div>
-                      <div className={styles.blockTitle}>Cloud Prep Backup</div>
-                      <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
-                    </div>
-                    <div className={styles.toolActions}>
-                      <button
-                        className={smallBtnClass('gold')}
-                        onMouseEnter={smallBtnHover}
-                        onClick={exportBackup}
-                        disabled={backupBusy || seedBusy}
-                      >
-                        Download Backup
-                      </button>
-                      <button
-                        className={smallBtnClass('ghost')}
-                        onMouseEnter={smallBtnHover}
-                        onClick={openRestorePicker}
-                        disabled={backupBusy || seedBusy}
-                      >
-                        Restore Backup
-                      </button>
-                      {canSeedCloud && (
+                      <div className={styles.timerValue}>{fmtElapsed(displayedElapsedMs)}</div>
+                      <div className={styles.timerActions}>
                         <button
-                          className={smallBtnClass('gold')}
+                          className={smallBtnClass(launcherState.timerRunning ? 'danger' : 'gold')}
                           onMouseEnter={smallBtnHover}
-                          onClick={seedCloudFromThisDevice}
-                          disabled={backupBusy || seedBusy}
+                          onClick={toggleSessionTimer}
                         >
-                          {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                          {launcherState.timerRunning ? 'Pause' : 'Start'}
                         </button>
-                      )}
+                        <button
+                          className={smallBtnClass('danger')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={resetSessionTimer}
+                        >
+                          Reset
+                        </button>
+                      </div>
                     </div>
-                    <input
-                      ref={backupFileRef}
-                      type="file"
-                      accept="application/json"
-                      className={styles.hiddenFileInput}
-                      onChange={onBackupPicked}
-                    />
-                    <div className={styles.backupHint}>
-                      Each person should download their own backup from their own device/browser profile.
-                      {usingSupabase && (
-                        <>
-                          {' '}
-                          Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
-                        </>
-                      )}
+
+                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
+                      <div>
+                        <div className={styles.blockTitle}>Session Notes</div>
+                        <div className={styles.blockSub}>Saved privately to your account.</div>
+                      </div>
+                      <textarea
+                        value={launcherNotes || ''}
+                        onChange={(e) => setLauncherNotes(e.target.value)}
+                        placeholder={`- NPC:\n- Hook:\n- Loot:\n- Reminder:`}
+                        rows={10}
+                        className={`${styles.inputBase} ${styles.textarea}`}
+                      />
                     </div>
-                    {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
-                    {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
+                    {showCloudPrepBackup && (
+                      <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
+                        <div>
+                          <div className={styles.blockTitle}>Cloud Prep Backup</div>
+                          <div className={styles.blockSub}>Backup/restore local data and run one-time cloud seed as owner/DM.</div>
+                        </div>
+                        <div className={styles.toolActions}>
+                          <button
+                            className={smallBtnClass('gold')}
+                            onMouseEnter={smallBtnHover}
+                            onClick={exportBackup}
+                            disabled={backupBusy || seedBusy}
+                          >
+                            Download Backup
+                          </button>
+                          <button
+                            className={smallBtnClass('ghost')}
+                            onMouseEnter={smallBtnHover}
+                            onClick={openRestorePicker}
+                            disabled={backupBusy || seedBusy}
+                          >
+                            Restore Backup
+                          </button>
+                          {canSeedCloud && (
+                            <button
+                              className={smallBtnClass('gold')}
+                              onMouseEnter={smallBtnHover}
+                              onClick={seedCloudFromThisDevice}
+                              disabled={backupBusy || seedBusy}
+                            >
+                              {seedBusy ? 'Seeding...' : 'Seed Cloud Once'}
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          ref={backupFileRef}
+                          type="file"
+                          accept="application/json"
+                          className={styles.hiddenFileInput}
+                          onChange={onBackupPicked}
+                        />
+                        <div className={styles.backupHint}>
+                          Each person should download their own backup from their own device/browser profile.
+                          {usingSupabase && (
+                            <>
+                              {' '}
+                              Sync: {cloudPendingWrites ? `${cloudPendingWrites} pending write(s)` : 'up to date'}.
+                            </>
+                          )}
+                        </div>
+                        {cloudError && <div className={styles.backupStatus}>Cloud sync warning: {cloudError}</div>}
+                        {backupStatus && <div className={styles.backupStatus}>{backupStatus}</div>}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -1108,184 +1123,197 @@ export default function CampaignHub(props) {
 
           {/* ========== INVENTORY (Bag of Holding) ========== */}
           {campaignTab === 'inventory' && (
-            <div className={styles.inventoryGrid}>
-              <div className={styles.inventoryControls}>
-                <div className={styles.softCard}>
-                  <div className={styles.cardHeaderRow}>
-                    <div>
-                      <div className={styles.cardTitle}>Bag of Holding</div>
-                      <div className={styles.cardSub}>Shared party inventory - loot, gold totals, quest items, and artifacts.</div>
-                    </div>
+            <div className={styles.questBoardStack}>
+              <div className={`${styles.questBoardFrame} ${styles.inventoryBoardFrame}`}>
+                <div className={styles.questBoardBanner}>
+                  <div>
+                    <div className={styles.questBoardEyebrow}>Supply Ledger</div>
+                    <div className={styles.questBoardTitle}>Party Inventory Board</div>
+                    <div className={styles.questBoardSub}>Track shared loot, valuables, and artifacts across the campaign.</div>
                   </div>
-                  <div className={styles.sectionDivider} />
-
-                  <div className={styles.filtersGrid}>
-                    <div>
-                      <div className={styles.inputLabel}>Search</div>
-                      <input value={invQuery} onChange={(e) => setInvQuery(e.target.value)} placeholder="name, notes..." className={styles.inputBase} />
-                    </div>
-                    <div>
-                      <div className={styles.inputLabel}>Category</div>
-                      <select value={invCat} onChange={(e) => setInvCat(e.target.value)} className={styles.inputBase}>
-                        {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <div className={styles.inputLabel}>Rarity</div>
-                      <select value={invRar} onChange={(e) => setInvRar(e.target.value)} className={styles.inputBase}>
-                        {RARITIES.map((r) => <option key={r}>{r}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <div className={styles.inputLabel}>Sort</div>
-                      <select value={invSort} onChange={(e) => setInvSort(e.target.value)} className={styles.inputBase}>
-                        <option value="name">Name</option>
-                        <option value="qty">Quantity</option>
-                        <option value="value">Value</option>
-                        <option value="updated">Recently Updated</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className={styles.controlsFooter}>
-                    <button className={smallBtnClass('gold', styles.addItemBtn)} onMouseEnter={smallBtnHover} onClick={invOpenAdd}>
-                      + Add Item
-                    </button>
-                  </div>
+                  <span className={styles.boardStatusPill}>Shared Access</span>
                 </div>
 
-                <div className={`${styles.softCard} ${styles.currencyCard}`}>
-                  <div className={styles.cardHeaderRow}>
-                    <div>
-                      <div className={styles.currencyTitle}>Currency</div>
-                      <div className={styles.currencySub}>
-                        <span className={`${styles.currencyToken} ${styles.currencyTokenPP}`}>
-                          <span className={styles.currencySubValue}>{bag.currency?.pp ?? 0}</span> PP
-                        </span>
-                        <span className={styles.currencySep}> / </span>
-                        <span className={`${styles.currencyToken} ${styles.currencyTokenGP}`}>
-                          <span className={styles.currencySubValue}>{bag.currency?.gp ?? 0}</span> GP
-                        </span>
-                        <span className={styles.currencySep}> / </span>
-                        <span className={`${styles.currencyToken} ${styles.currencyTokenSP}`}>
-                          <span className={styles.currencySubValue}>{bag.currency?.sp ?? 0}</span> SP
-                        </span>
-                        <span className={styles.currencySep}> / </span>
-                        <span className={`${styles.currencyToken} ${styles.currencyTokenCP}`}>
-                          <span className={styles.currencySubValue}>{bag.currency?.cp ?? 0}</span> CP
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`${styles.sectionDivider} ${styles.sectionDividerTight}`} />
-                  <div className={styles.currencyGrid}>
-                    {['pp', 'gp', 'sp', 'cp'].map((k) => (
-                      <div key={k} className={styles.currencyCell}>
-                        <div className={styles.currencyHead}>
-                          <div className={styles.currencyCodeLabel}>{k.toUpperCase()}</div>
-                        </div>
-                        <div className={styles.currencyAdjustRow}>
-                          <button
-                            type="button"
-                            className={`${styles.smallBtn} ${styles.btnGhost} ${styles.currencyStepBtn}`}
-                            onMouseEnter={smallBtnHover}
-                            onClick={() => applyCurrencyDelta(k, -1)}
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            min={1}
-                            value={currencyDelta[k]}
-                            onChange={(e) => setCurrencyDelta((prev) => ({ ...prev, [k]: e.target.value }))}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                applyCurrencyDelta(k, 1);
-                              }
-                            }}
-                            placeholder="Amt"
-                            className={styles.tinyInput}
-                          />
-                          <button
-                            type="button"
-                            className={`${styles.smallBtn} ${styles.btnGold} ${styles.currencyStepBtn}`}
-                            onMouseEnter={smallBtnHover}
-                            onClick={() => applyCurrencyDelta(k, 1)}
-                          >
-                            +
-                          </button>
+                <div className={styles.inventoryGrid}>
+                  <div className={styles.inventoryControls}>
+                    <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
+                      <div className={styles.cardHeaderRow}>
+                        <div>
+                          <div className={styles.cardTitle}>Bag of Holding</div>
+                          <div className={styles.cardSub}>Shared party inventory - loot, gold totals, quest items, and artifacts.</div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className={styles.currencyDanger}>
-                    <button className={smallBtnClass('ghost', styles.fullWidthBtn)} onMouseEnter={smallBtnHover} onClick={() => setDangerOpen((v) => !v)}>
-                      {dangerOpen ? 'Hide Danger' : 'Danger Zone'}
-                    </button>
-                    {dangerOpen && (
-                      <div className={styles.dangerBox}>
-                        <div className={styles.dangerTitle}>Clear Bag</div>
-                        <div className={styles.dangerBody}>This removes <strong>all</strong> items and currency.</div>
-                        <button
-                          className={smallBtnClass('danger', styles.fullWidthBtn)}
-                          onMouseEnter={smallBtnHover}
-                          onClick={() => {
-                            const ok = confirm('Clear the entire Bag of Holding? This cannot be undone.');
-                            if (!ok) return;
-                            setBag({ currency: { pp: 0, gp: 0, sp: 0, cp: 0 }, items: [] });
-                            setDangerOpen(false);
-                          }}
-                        >
-                          Clear Bag Forever
+                      <div className={styles.sectionDivider} />
+
+                      <div className={styles.filtersGrid}>
+                        <div>
+                          <div className={styles.inputLabel}>Search</div>
+                          <input value={invQuery} onChange={(e) => setInvQuery(e.target.value)} placeholder="name, notes..." className={styles.inputBase} />
+                        </div>
+                        <div>
+                          <div className={styles.inputLabel}>Category</div>
+                          <select value={invCat} onChange={(e) => setInvCat(e.target.value)} className={styles.inputBase}>
+                            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <div className={styles.inputLabel}>Rarity</div>
+                          <select value={invRar} onChange={(e) => setInvRar(e.target.value)} className={styles.inputBase}>
+                            {RARITIES.map((r) => <option key={r}>{r}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <div className={styles.inputLabel}>Sort</div>
+                          <select value={invSort} onChange={(e) => setInvSort(e.target.value)} className={styles.inputBase}>
+                            <option value="name">Name</option>
+                            <option value="qty">Quantity</option>
+                            <option value="value">Value</option>
+                            <option value="updated">Recently Updated</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className={styles.controlsFooter}>
+                        <button className={smallBtnClass('gold', styles.addItemBtn)} onMouseEnter={smallBtnHover} onClick={invOpenAdd}>
+                          + Add Item
                         </button>
                       </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+                    </div>
 
-              {invFilteredItems.length === 0 ? (
-                <div className={`${styles.softCard} ${styles.inventoryEmpty}`}>
-                  <div className={styles.inventoryEmptyTitle}>Bag is empty.</div>
-                  <div className={styles.bodyCopy}>Hit <strong>+ Add Item</strong> to start tracking loot.</div>
-                </div>
-              ) : (
-                <div className={styles.listCol}>
-                  {invFilteredItems.map((it) => (
-                    <div
-                      key={it.id}
-                      className={`${styles.softCard} ${styles.inventoryItemCard}`}
-                      style={{ '--ch-rarity-bg': rarityBadge(it.rarity) }}
-                      onMouseEnter={() => playHover()}
-                    >
-                      <div className={styles.questRow}>
-                        <div className={styles.itemBody}>
-                          <div className={styles.questTitleRow}>
-                            <div className={styles.itemTitle}>{it.name}</div>
-                            {it.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
-                            <span className={styles.itemMetaInline}>{it.rarity} - {it.category}</span>
+                    <div className={`${styles.softCard} ${styles.currencyCard} ${styles.boardNoteCard}`}>
+                      <div className={styles.cardHeaderRow}>
+                        <div>
+                          <div className={styles.currencyTitle}>Currency</div>
+                          <div className={styles.currencySub}>
+                            <span className={`${styles.currencyToken} ${styles.currencyTokenPP}`}>
+                              <span className={styles.currencySubValue}>{bag.currency?.pp ?? 0}</span> PP
+                            </span>
+                            <span className={styles.currencySep}> / </span>
+                            <span className={`${styles.currencyToken} ${styles.currencyTokenGP}`}>
+                              <span className={styles.currencySubValue}>{bag.currency?.gp ?? 0}</span> GP
+                            </span>
+                            <span className={styles.currencySep}> / </span>
+                            <span className={`${styles.currencyToken} ${styles.currencyTokenSP}`}>
+                              <span className={styles.currencySubValue}>{bag.currency?.sp ?? 0}</span> SP
+                            </span>
+                            <span className={styles.currencySep}> / </span>
+                            <span className={`${styles.currencyToken} ${styles.currencyTokenCP}`}>
+                              <span className={styles.currencySubValue}>{bag.currency?.cp ?? 0}</span> CP
+                            </span>
                           </div>
-                          {it.notes && <div className={styles.itemNotes}>{it.notes}</div>}
-                          <div className={styles.itemStats}>
-                            {it.assignedTo && <span>By: {it.assignedTo}</span>}
-                            {it.value != null && <span>Value: {it.value} gp</span>}
-                            {it.weight != null && <span>Wt: {it.weight} lb</span>}
-                          </div>
-                        </div>
-                        <div className={styles.actionsRow}>
-                          <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
-                          <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
-                          <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
-                          <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
-                          <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
-                          <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)}>Delete</button>
                         </div>
                       </div>
+                      <div className={`${styles.sectionDivider} ${styles.sectionDividerTight}`} />
+                      <div className={styles.currencyGrid}>
+                        {['pp', 'gp', 'sp', 'cp'].map((k) => (
+                          <div key={k} className={styles.currencyCell}>
+                            <div className={styles.currencyHead}>
+                              <div className={styles.currencyCodeLabel}>{k.toUpperCase()}</div>
+                            </div>
+                            <div className={styles.currencyAdjustRow}>
+                              <button
+                                type="button"
+                                className={`${styles.smallBtn} ${styles.btnGhost} ${styles.currencyStepBtn}`}
+                                onMouseEnter={smallBtnHover}
+                                onClick={() => applyCurrencyDelta(k, -1)}
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                value={currencyDelta[k]}
+                                onChange={(e) => setCurrencyDelta((prev) => ({ ...prev, [k]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    applyCurrencyDelta(k, 1);
+                                  }
+                                }}
+                                placeholder="Amt"
+                                className={styles.tinyInput}
+                              />
+                              <button
+                                type="button"
+                                className={`${styles.smallBtn} ${styles.btnGold} ${styles.currencyStepBtn}`}
+                                onMouseEnter={smallBtnHover}
+                                onClick={() => applyCurrencyDelta(k, 1)}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className={styles.currencyDanger}>
+                        <button className={smallBtnClass('ghost', styles.fullWidthBtn)} onMouseEnter={smallBtnHover} onClick={() => setDangerOpen((v) => !v)}>
+                          {dangerOpen ? 'Hide Danger' : 'Danger Zone'}
+                        </button>
+                        {dangerOpen && (
+                          <div className={styles.dangerBox}>
+                            <div className={styles.dangerTitle}>Clear Bag</div>
+                            <div className={styles.dangerBody}>This removes <strong>all</strong> items and currency.</div>
+                            <button
+                              className={smallBtnClass('danger', styles.fullWidthBtn)}
+                              onMouseEnter={smallBtnHover}
+                              onClick={() => {
+                                const ok = confirm('Clear the entire Bag of Holding? This cannot be undone.');
+                                if (!ok) return;
+                                setBag({ currency: { pp: 0, gp: 0, sp: 0, cp: 0 }, items: [] });
+                                setDangerOpen(false);
+                              }}
+                            >
+                              Clear Bag Forever
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {invFilteredItems.length === 0 ? (
+                    <div className={`${styles.softCard} ${styles.inventoryEmpty} ${styles.boardNoteCard} ${styles.questEmptyCard}`}>
+                      <div className={styles.inventoryEmptyTitle}>Bag is empty.</div>
+                      <div className={styles.bodyCopy}>Hit <strong>+ Add Item</strong> to start tracking loot.</div>
+                    </div>
+                  ) : (
+                    <div className={styles.listCol}>
+                      {invFilteredItems.map((it) => (
+                        <div
+                          key={it.id}
+                          className={`${styles.softCard} ${styles.inventoryItemCard} ${styles.boardNoteCard}`}
+                          style={{ '--ch-rarity-bg': rarityBadge(it.rarity) }}
+                          onMouseEnter={() => playHover()}
+                        >
+                          <div className={styles.questRow}>
+                            <div className={styles.itemBody}>
+                              <div className={styles.questTitleRow}>
+                                <div className={styles.itemTitle}>{it.name}</div>
+                                {it.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                                <span className={styles.itemMetaInline}>{it.rarity} - {it.category}</span>
+                              </div>
+                              {it.notes && <div className={styles.itemNotes}>{it.notes}</div>}
+                              <div className={styles.itemStats}>
+                                {it.assignedTo && <span>By: {it.assignedTo}</span>}
+                                {it.value != null && <span>Value: {it.value} gp</span>}
+                                {it.weight != null && <span>Wt: {it.weight} lb</span>}
+                              </div>
+                            </div>
+                            <div className={styles.actionsRow}>
+                              <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
+                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
+                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)}>Delete</button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
