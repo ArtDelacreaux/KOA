@@ -25,6 +25,26 @@ function normalizeRole(value) {
   return 'member';
 }
 
+function tryPlayAudio(audio, { reset = true } = {}) {
+  if (!audio) return Promise.resolve(false);
+
+  if (reset) {
+    try {
+      audio.currentTime = 0;
+    } catch {}
+  }
+
+  try {
+    const playResult = audio.play();
+    if (playResult && typeof playResult.then === 'function') {
+      return playResult.then(() => true).catch(() => false);
+    }
+    return Promise.resolve(true);
+  } catch {
+    return Promise.resolve(false);
+  }
+}
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -124,6 +144,7 @@ export default function PlayerChatDock({ mode = 'dock' }) {
   const resizeStartRef = useRef(null);
   const chatNotifRef = useRef(null);
   const dmNotifRef = useRef(null);
+  const audioUnlockedRef = useRef(false);
 
   const campaignId = useMemo(() => getCampaignId(), []);
   const supabase = useMemo(() => (enabled ? getSupabaseClient() : null), [enabled]);
@@ -171,15 +192,36 @@ export default function PlayerChatDock({ mode = 'dock' }) {
     return map;
   }, [members]);
 
+  const primeNotificationAudio = useCallback(() => {
+    if (audioUnlockedRef.current) return;
+    audioUnlockedRef.current = true;
+
+    const prime = (audio) => {
+      if (!audio) return;
+      const wasMuted = audio.muted;
+      audio.muted = true;
+      tryPlayAudio(audio, { reset: false }).finally(() => {
+        try {
+          audio.pause();
+        } catch {}
+        try {
+          audio.currentTime = 0;
+        } catch {}
+        audio.muted = wasMuted;
+      });
+    };
+
+    prime(chatNotifRef.current);
+    prime(dmNotifRef.current);
+  }, []);
+
   const playIncomingNotification = useCallback((isDmMessage) => {
-    const audio = isDmMessage ? dmNotifRef.current : chatNotifRef.current;
-    if (!audio) return;
-
-    try {
-      audio.currentTime = 0;
-    } catch {}
-
-    audio.play().catch(() => {});
+    const primary = isDmMessage ? dmNotifRef.current : chatNotifRef.current;
+    const fallback = isDmMessage ? chatNotifRef.current : dmNotifRef.current;
+    tryPlayAudio(primary).then((played) => {
+      if (played) return;
+      tryPlayAudio(fallback);
+    });
   }, []);
 
   useEffect(() => {
@@ -246,21 +288,24 @@ export default function PlayerChatDock({ mode = 'dock' }) {
   }, [selectedThreadId]);
 
   useEffect(() => {
-    if (typeof Audio === 'undefined') return () => {};
+    if (typeof window === 'undefined') return () => {};
+    const onUserInteract = () => {
+      primeNotificationAudio();
+      window.removeEventListener('pointerdown', onUserInteract, true);
+      window.removeEventListener('keydown', onUserInteract, true);
+      window.removeEventListener('touchstart', onUserInteract, true);
+    };
 
-    const chatAudio = new Audio(chatNotifSfx);
-    chatAudio.preload = 'auto';
-    const dmAudio = new Audio(dmNotifSfx);
-    dmAudio.preload = 'auto';
-
-    chatNotifRef.current = chatAudio;
-    dmNotifRef.current = dmAudio;
+    window.addEventListener('pointerdown', onUserInteract, true);
+    window.addEventListener('keydown', onUserInteract, true);
+    window.addEventListener('touchstart', onUserInteract, true);
 
     return () => {
-      chatNotifRef.current = null;
-      dmNotifRef.current = null;
+      window.removeEventListener('pointerdown', onUserInteract, true);
+      window.removeEventListener('keydown', onUserInteract, true);
+      window.removeEventListener('touchstart', onUserInteract, true);
     };
-  }, []);
+  }, [primeNotificationAudio]);
 
   useEffect(() => {
     if (!open) return;
@@ -618,6 +663,8 @@ export default function PlayerChatDock({ mode = 'dock' }) {
 
   return (
     <div className={`${styles.dock}${isPopoutMode ? ` ${styles.dockPopout}` : ''}`}>
+      <audio ref={chatNotifRef} src={chatNotifSfx} preload="auto" />
+      <audio ref={dmNotifRef} src={dmNotifSfx} preload="auto" />
       {!open && !isPopoutMode ? (
         <button type="button" className={styles.toggleButton} onClick={toggleOpen}>
           Chats
