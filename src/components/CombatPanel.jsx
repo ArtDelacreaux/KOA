@@ -2013,16 +2013,6 @@ export default function CombatPanel({
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
   }, [selected]);
-  const selectedHpToneClass = useMemo(() => {
-    if (!selected || selectedSensitiveStatsHidden) return '';
-    const hp = toInt(selected.hp, null);
-    const maxHP = toInt(selected.maxHP, null);
-    if (hp == null || maxHP == null || maxHP <= 0) return '';
-    const ratio = hp / maxHP;
-    if (ratio <= 0.25) return styles.restrictedHpCritical;
-    if (ratio <= 0.6) return styles.restrictedHpWounded;
-    return styles.restrictedHpHealthy;
-  }, [selected, selectedSensitiveStatsHidden]);
   const selectedNotableFeature = useMemo(
     () => cleanText(selected?.notableFeature),
     [selected]
@@ -3602,7 +3592,12 @@ export default function CombatPanel({
                       {selectedSensitiveStatsHidden ? (
                         <span className={styles.restrictedHiddenValue}>Hidden</span>
                       ) : (
-                        <span className={selectedHpToneClass}>{selectedCurrentHp}</span>
+                        <span
+                          className={`${styles.sheetCurrentHpValue} ${sheetCurrentHpVisual.isCritical ? styles.sheetCurrentHpValueCritical : ''}`}
+                          style={sheetCurrentHpVisual.style}
+                        >
+                          {selectedCurrentHp}
+                        </span>
                       )}
                     </div>
                   </div>
