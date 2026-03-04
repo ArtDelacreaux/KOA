@@ -1,123 +1,86 @@
 # Tavern Menu
 
-React + Vite app for Knights of Avalon campaign management.
+Knights of Avalon campaign control panel built with React + Vite.
 
-## Local Development
+## What This App Includes
 
-1. Install dependencies:
+- Hub-style UI for campaign ops, lore, character access, and encounter prep.
+- Combat system with encounter state, initiative flow, and character sheet import.
+- Party + DM chat with realtime sync when Supabase backend is enabled.
+- Local-first persistence with optional Supabase cloud sync and auth.
+- Backup/import tooling from the Campaign Hub.
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+
+### Run locally
 
 ```bash
 npm install
-```
-
-2. Start dev server:
-
-```bash
 npm run dev
 ```
 
-3. Build production bundle:
+### Production build
 
 ```bash
 npm run build
+npm run preview
 ```
 
-## Data Backend Modes
+## Environment Setup
 
-Set backend using `VITE_DATA_BACKEND`:
-
-- `local` (default): uses browser localStorage only.
-- `supabase`: enables auth + cloud sync.
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and fill values:
+Copy `.env.example` to `.env.local` (or `.env`) and configure:
 
 ```env
-VITE_DATA_BACKEND=supabase
-VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
-VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+VITE_DATA_BACKEND=local
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
 VITE_CAMPAIGN_ID=main-party
 ```
 
-Never use `service_role` key in frontend env.
+Backend modes:
 
-## Supabase Setup (Invite-Only + Shared Campaign)
+- `local` (default): localStorage only, no login required.
+- `supabase`: invite-only auth + cloud sync + realtime chat.
 
-### 1. Run schema SQL
+Do not use a Supabase `service_role` key in frontend env files.
 
-In Supabase SQL Editor, run:
+## Supabase Setup (Invite-Only)
 
-- [docs/supabase/schema.sql](docs/supabase/schema.sql)
+1. Run [docs/supabase/schema.sql](docs/supabase/schema.sql) in Supabase SQL Editor.
+2. Configure Auth:
+   - Enable email auth.
+   - Keep email confirmation on.
+   - Disable public self-signup.
+   - Set correct Site URL and Redirect URLs.
+3. Invite accounts in Supabase Auth (owner, DM, players).
+4. Insert invite allowlist rows into `campaign_invites` for your `campaign_id`.
+5. Sign in as owner/DM, then run **Campaign Hub -> Cloud Prep Backup -> Seed Cloud Once**.
 
-This creates:
-
-- `profiles`
-- `campaign_invites`
-- `campaign_members`
-- `shared_docs`
-- `private_docs`
-- `chat_messages`
-- RPCs:
-  - `claim_campaign_membership(p_campaign_id text)`
-  - `seed_campaign_once(p_campaign_id text, p_docs jsonb)`
-
-### 2. Configure Auth
-
-Supabase Dashboard -> Authentication -> Providers/Settings:
-
-1. Enable Email provider.
-2. Keep email confirmation enabled.
-3. Disable public self-signup.
-4. Set Site URL and Redirect URLs for your local/dev/prod app URLs.
-
-### 3. Invite users
-
-Dashboard -> Authentication -> Users -> Invite user
-
-- Invite owner + players by email.
-- Optional: invite a DM account (campaign-admin role).
-- Users finish account setup from invite email.
-
-### 4. Allowlist campaign membership
-
-Add invited emails to `campaign_invites` table (same `campaign_id` as `VITE_CAMPAIGN_ID`):
-
-```sql
-insert into public.campaign_invites (campaign_id, email, role)
-values
-  ('main-party', 'owner@example.com', 'owner'),
-  ('main-party', 'dm@example.com', 'dm'),
-  ('main-party', 'player1@example.com', 'member'),
-  ('main-party', 'player2@example.com', 'member')
-on conflict (campaign_id, email) do update set role = excluded.role;
-```
-
-Supported roles:
+Available roles:
 
 - `owner`: full campaign admin.
-- `dm`: owner-level campaign admin (seed + invite visibility).
-- `member`: normal shared-data access.
+- `dm`: campaign admin (same management abilities as owner in app).
+- `member`: standard participant.
 
-### 5. First cloud seed (owner/DM only)
+## Project Structure
 
-After owner/DM signs in:
+- `src/`: application code (components, auth, repository, migration tools).
+- `public/`: static media (tokens, lore images).
+- `docs/supabase/`: schema and SQL migrations.
+- `docs/CharacterSheetFRD.md`: character sheet parser functional requirements.
 
-1. Open Campaign Hub -> **Cloud Prep Backup**.
-2. Click **Seed Cloud Once**.
-3. This imports current local shared state to `shared_docs` only if campaign cloud data is still empty.
+## Documentation Index
 
-## Sync Model
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): module layout, data flow, storage model.
+- [docs/OPERATIONS.md](docs/OPERATIONS.md): Supabase operations, backup/restore, troubleshooting.
 
-- Shared data: synced through `shared_docs`.
-- Private data: session notes only, synced through `private_docs`.
-- Party chat: synced through `chat_messages` with realtime inserts (public + private member DMs).
-- Chat display names and member picker labels come from `profiles.username`.
-- Offline writes: queued locally and retried automatically.
-- Conflict strategy: last write wins.
-- Realtime: Supabase Realtime subscriptions for shared/private docs and chat.
+## Scripts
 
-## Notes
-
-- Existing local backup/restore flow remains available in Campaign Hub.
-- `VITE_DATA_BACKEND=local` keeps previous behavior with no auth required.
+- `npm run dev`: start Vite dev server.
+- `npm run build`: build production bundle.
+- `npm run preview`: preview production build locally.
