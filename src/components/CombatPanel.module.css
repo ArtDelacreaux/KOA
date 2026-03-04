@@ -1314,6 +1314,13 @@
   flex: 0 1 auto;
 }
 
+.sheetHeroActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .castorWilliamSyncToggle {
   height: 28px;
   padding: 0 6px 0 10px;
@@ -1824,16 +1831,14 @@
   background: linear-gradient(180deg, rgba(34, 24, 16, 0.74), rgba(10, 8, 6, 0.7));
   padding: 14px 16px;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 20px;
-  row-gap: 0;
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
 .sheetIdentity {
-  grid-column: 1;
-  grid-row: 1;
+  order: 2;
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1852,10 +1857,9 @@
 }
 
 .sheetHeroPortrait {
-  grid-column: 2;
-  grid-row: 1;
-  width: 64px;
-  height: 64px;
+  order: 1;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
@@ -2099,7 +2103,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   gap: 5px;
 }
@@ -2141,7 +2145,7 @@
 }
 
 .sheetHpCard .sheetHeroVitalsValue {
-  text-align: left;
+  text-align: center;
 }
 
 .sheetHpCard .sheetHeroVitalsValueMain {
@@ -2166,6 +2170,12 @@
   letter-spacing: 0.17em;
 }
 
+.sheetHpLongRestBtn {
+  width: 100%;
+  max-width: 160px;
+  margin-bottom: 2px;
+}
+
 .sheetHpCard .sheetHpMetaGrid {
   margin-top: 8px;
   padding-top: 8px;
@@ -2173,6 +2183,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+
+.sheetHeroActions {
+  order: 3;
 }
 
 .sheetHpCard .sheetHpMetaItem {
@@ -2867,6 +2881,10 @@
   gap: 10px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+}
+
+.sheetToolsToggleRow {
+  justify-content: center;
 }
 
 .toolsModeToggle {
@@ -3658,13 +3676,25 @@
   }
 
   .sheetHero {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: center;
     gap: 12px;
+  }
+
+  .sheetIdentity {
+    align-items: center;
+    text-align: center;
+  }
+
+  .sheetHeroActions {
+    margin-left: 0;
+    justify-content: center;
   }
 
   .sheetIdentity,
   .sheetHeroTools,
   .sheetHeroVitals,
+  .sheetHeroActions,
   .sheetHeroPortrait {
     grid-column: auto;
     grid-row: auto;
@@ -3703,6 +3733,16 @@
   .toolsHeaderRow {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .sheetToolsToggleRow {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sheetToolsToggleRow .toolsModeToggle {
+    justify-content: center;
   }
 
   .toolsModeToggle {

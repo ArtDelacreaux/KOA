@@ -1814,6 +1814,7 @@ export default function CombatPanel({
   const [spellbookDraftEntries, setSpellbookDraftEntries] = useState([]);
   const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
   const [sheetToolsMode, setSheetToolsMode] = useState('resources');
+  const [equipmentEditMode, setEquipmentEditMode] = useState('equipment');
   const [sheetActionDetail, setSheetActionDetail] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
@@ -2009,6 +2010,18 @@ export default function CombatPanel({
   const selectedSensitiveEquipment = useMemo(() => {
     return selectedEquippedItems;
   }, [selectedEquippedItems]);
+  const selectedEquippedWeapons = useMemo(() => {
+    if (!selectedWeaponActionRows.length || !selectedEquippedItemKeys.size) return [];
+    const seen = new Set();
+    return selectedWeaponActionRows
+      .map((weapon) => cleanText(weapon.attack))
+      .filter((name) => {
+        const key = tokenKey(name);
+        if (!key || !selectedEquippedItemKeys.has(key) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [selectedWeaponActionRows, selectedEquippedItemKeys]);
   const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
@@ -2132,6 +2145,7 @@ export default function CombatPanel({
     if (!editorOpen || !selectedId) return;
     setHpAdjustAmount('0');
     setStatusDraft(selected ? selected.status.join(', ') : '');
+    setEquipmentEditMode('equipment');
   }, [editorOpen, selectedId]);
 
   useEffect(() => {
@@ -3718,9 +3732,6 @@ export default function CombatPanel({
                           Pop Out
                         </button>
                       )}
-                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }} disabled={selectedReadOnly}>Spellbook</button>
-                      <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }} disabled={selectedReadOnly}>Class Features</button>
-                      <button className={btnClass('ghost', 'sm', styles.longRestBtn)} onMouseEnter={playHover} onClick={() => { playNav(); longRestSelected(); }} disabled={selectedReadOnly}>Long Rest</button>
                       <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   ) : (
@@ -3760,6 +3771,10 @@ export default function CombatPanel({
                             {selected.sourceSheetFormat ? ` (${selected.sourceSheetFormat.toUpperCase()})` : ''}
                           </div>
                         )}
+                      </div>
+                      <div className={styles.sheetHeroActions}>
+                        <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }} disabled={selectedReadOnly}>Spellbook</button>
+                        <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }} disabled={selectedReadOnly}>Class Features</button>
                       </div>
                       {selected.customImage && (
                         <div className={styles.sheetHeroPortrait}>
@@ -3833,6 +3848,15 @@ export default function CombatPanel({
                                 <span className={styles.sheetHpDivider}> / </span>
                                 <span className={styles.sheetMaxHpValue}>{selected.maxHP === '' ? '—' : selected.maxHP}</span>
                               </span>
+                              <button
+                                type="button"
+                                className={btnClass('ghost', 'sm', styles.longRestBtn, styles.sheetHpLongRestBtn)}
+                                onMouseEnter={playHover}
+                                onClick={() => { playNav(); longRestSelected(); }}
+                                disabled={selectedReadOnly}
+                              >
+                                Long Rest
+                              </button>
                             </div>
                             <div className={styles.sheetHpControlStack}>
                               <div className={`${styles.sheetHeroTempGroup} ${styles.sheetHpTempGroup}`}>
@@ -3890,8 +3914,7 @@ export default function CombatPanel({
 
                     <div className={`${styles.sectionTopGap} ${styles.sheetCardFull}`}>
                       <div className={styles.combatToolsCard}>
-                        <div className={styles.toolsHeaderRow}>
-                          <div className={styles.toolsTitle}>Combat Tools</div>
+                        <div className={`${styles.toolsHeaderRow} ${styles.sheetToolsToggleRow}`}>
                           <div className={styles.toolsModeToggle}>
                             <button
                               type="button"
@@ -4157,35 +4180,9 @@ export default function CombatPanel({
                           </div>
                         </div>
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
-                          <div className={styles.sheetSubTitle}>Equipment</div>
+                          <div className={styles.sheetSubTitle}>Equipped Weapons</div>
                           <div className={styles.sheetListBlock}>
-                            {selectedEquipment.length ? selectedEquipment.join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
-                          </div>
-                          <div className={styles.equippedPickerWrap}>
-                            <div className={styles.equippedPickerHeading}>Mark Equipped</div>
-                            {selectedEquipableItems.length ? (
-                              <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
-                                {selectedEquipableItems.map((item) => {
-                                  const itemKey = tokenKey(item);
-                                  const checked = selectedEquippedItemKeys.has(itemKey);
-                                  return (
-                                    <label key={`sheet-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => {
-                                          playNav();
-                                          toggleSelectedEquippedItem(item);
-                                        }}
-                                      />
-                                      <span>{item}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
-                            )}
+                            {selectedEquippedWeapons.length ? selectedEquippedWeapons.join(', ') : <span className={styles.sheetListFallback}>No equipped weapons marked.</span>}
                           </div>
                         </div>
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
@@ -4253,6 +4250,23 @@ export default function CombatPanel({
                       )}
                     </div>
                   </div>
+                </div>
+
+                <div className={styles.fieldGrid2}>
+                  <div><div className={styles.label}>Name</div><input className={styles.input} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
+                  <div><div className={styles.label}>Role / Class</div><input className={styles.input} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
+                </div>
+                <div className={styles.compactFields}>
+                  <div className={styles.compactSideField}><div className={styles.label}>Side</div>
+                    <select className={`${styles.input} ${styles.compactInput} ${styles.selectInput}`} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
+                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
+                    </select>
+                  </div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Initiative</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Max HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>Temp HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
+                  <div className={styles.compactStatField}><div className={styles.label}>AC</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
                 </div>
 
                 <div className={`${styles.sectionTopGap} ${styles.editToolsGrid}`}>
@@ -4339,58 +4353,67 @@ export default function CombatPanel({
                 </div>
 
                 <div className={styles.sectionTopGap}>
-                  <div className={styles.label}>Equipment (one per line)</div>
-                  <textarea
-                    className={`${styles.input} ${styles.textareaInput}`}
-                    value={normalizeStringList(selected.equipmentItems).join('\n')}
-                    onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
-                  />
-                  <div className={styles.equippedPickerWrap}>
-                    <div className={styles.equippedPickerHeading}>Mark Equipped Items</div>
-                    {selectedEquipableItems.length ? (
-                      <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
-                        {selectedEquipableItems.map((item) => {
-                          const itemKey = tokenKey(item);
-                          const checked = selectedEquippedItemKeys.has(itemKey);
-                          return (
-                            <label key={`edit-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => {
-                                  playNav();
-                                  toggleSelectedEquippedItem(item);
-                                }}
-                              />
-                              <span>{item}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
-                    )}
+                  <div className={styles.toolsHeaderRow}>
+                    <div className={styles.label}>Inventory</div>
+                    <div className={styles.toolsModeToggle}>
+                      <button
+                        type="button"
+                        className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipment' ? styles.toolsModeBtnActive : ''}`}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setEquipmentEditMode('equipment'); }}
+                      >
+                        Equipment
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipped' ? styles.toolsModeBtnActive : ''}`}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setEquipmentEditMode('equipped'); }}
+                      >
+                        Mark Equipped
+                      </button>
+                    </div>
                   </div>
+                  {equipmentEditMode === 'equipment' ? (
+                    <>
+                      <div className={styles.label}>Equipment (one per line)</div>
+                      <textarea
+                        className={`${styles.input} ${styles.textareaInput}`}
+                        value={normalizeStringList(selected.equipmentItems).join('\n')}
+                        onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
+                      />
+                    </>
+                  ) : (
+                    <div className={styles.equippedPickerWrap}>
+                      <div className={styles.equippedPickerHeading}>Mark Equipped Items</div>
+                      {selectedEquipableItems.length ? (
+                        <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
+                          {selectedEquipableItems.map((item) => {
+                            const itemKey = tokenKey(item);
+                            const checked = selectedEquippedItemKeys.has(itemKey);
+                            return (
+                              <label key={`edit-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    playNav();
+                                    toggleSelectedEquippedItem(item);
+                                  }}
+                                />
+                                <span>{item}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className={styles.divider}/>
-
-                <div className={styles.fieldGrid2}>
-                  <div><div className={styles.label}>Name</div><input className={styles.input} value={selected.name} onChange={e => setSelectedField({ name:e.target.value })}/></div>
-                  <div><div className={styles.label}>Role / Class</div><input className={styles.input} value={selected.role} onChange={e => setSelectedField({ role:e.target.value })}/></div>
-                </div>
-                <div className={styles.compactFields}>
-                  <div className={styles.compactSideField}><div className={styles.label}>Side</div>
-                    <select className={`${styles.input} ${styles.compactInput} ${styles.selectInput}`} value={selected.side} onChange={e => setSelectedField({ side:e.target.value })}>
-                      <option value="Enemy">Enemy</option><option value="PC">PC</option><option value="Ally">Ally</option>
-                    </select>
-                  </div>
-                  <div className={styles.compactStatField}><div className={styles.label}>Initiative</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.init} onChange={e => setSelectedField({ init:toInt(e.target.value,0) })}/></div>
-                  <div className={styles.compactStatField}><div className={styles.label}>HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.hp} onChange={e => setSelectedField({ hp:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div className={styles.compactStatField}><div className={styles.label}>Max HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.maxHP} onChange={e => setSelectedField({ maxHP:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                  <div className={styles.compactStatField}><div className={styles.label}>Temp HP</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.tempHP} onChange={e => setSelectedField({ tempHP:toInt(e.target.value,0) })}/></div>
-                  <div className={styles.compactStatField}><div className={styles.label}>AC</div><input className={`${styles.input} ${styles.compactInput}`} inputMode="numeric" maxLength={5} value={selected.ac} onChange={e => setSelectedField({ ac:e.target.value===''?'':toInt(e.target.value,0) })}/></div>
-                </div>
 
                 <div className={styles.divider}/>
 
@@ -4413,10 +4436,6 @@ export default function CombatPanel({
                   <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notableFeature || ''}
                     placeholder="Visible clue or detail others should notice right now..."
                     onChange={e => setSelectedField({ notableFeature:e.target.value })}/>
-                </div>
-                <div className={styles.sectionTopGap}><div className={styles.label}>Notes</div>
-                  <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notes}
-                    placeholder="Tactics, resistances, legendary uses..." onChange={e => setSelectedField({ notes:e.target.value })}/>
                 </div>
 
                 <div className={styles.sectionTopGap}><div className={styles.label}>Other Possessions (one per line)</div>
