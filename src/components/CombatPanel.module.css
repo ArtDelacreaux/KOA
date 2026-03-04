@@ -1805,7 +1805,7 @@
 }
 
 .sheetView {
-  padding: 14px;
+  padding: 16px;
   overflow-y: auto;
   flex: 1 1 auto;
   min-height: 0;
@@ -1889,6 +1889,64 @@
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.sheetStatusChips {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  max-width: 540px;
+}
+
+.sheetStatusChip {
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: linear-gradient(180deg, rgba(28, 20, 14, 0.74), rgba(10, 8, 6, 0.66));
+  padding: 3px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sheetStatusChipLabel {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sheetStatusChipValue {
+  color: var(--koa-cream);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.sheetStatusChipAc {
+  border-color: rgba(122, 199, 255, 0.36);
+  background: linear-gradient(180deg, rgba(26, 44, 64, 0.72), rgba(12, 24, 36, 0.66));
+}
+
+.sheetStatusChipSpeed {
+  border-color: rgba(120, 225, 200, 0.34);
+  background: linear-gradient(180deg, rgba(20, 54, 48, 0.72), rgba(10, 30, 26, 0.66));
+}
+
+.sheetStatusChipProf {
+  border-color: rgba(255, 214, 130, 0.4);
+  background: linear-gradient(180deg, rgba(58, 42, 18, 0.74), rgba(30, 22, 10, 0.66));
+}
+
+.sheetStatusChipDc {
+  border-color: rgba(198, 146, 255, 0.38);
+  background: linear-gradient(180deg, rgba(40, 24, 58, 0.74), rgba(20, 12, 30, 0.66));
 }
 
 .sheetImportMeta {
@@ -2046,13 +2104,13 @@
   margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .sheetCoreVitalsRow {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
-  gap: 10px;
+  gap: 12px;
   align-items: start;
 }
 
@@ -2217,8 +2275,25 @@
 
 .sheetCard {
   border-radius: 12px;
-  border: 1px solid rgba(255, 220, 160, 0.15);
-  background: linear-gradient(180deg, rgba(14, 10, 8, 0.72), rgba(6, 5, 4, 0.64));
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: linear-gradient(180deg, rgba(16, 12, 9, 0.78), rgba(7, 5, 4, 0.68));
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+  padding: 11px;
+}
+
+.sheetCardPrimary {
+  border-color: rgba(255, 220, 160, 0.24);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(255, 220, 160, 0.08) inset;
+}
+
+.sheetCardSecondary {
+  border-color: rgba(255, 220, 160, 0.14);
+}
+
+.sheetToolsCard {
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(17, 12, 9, 0.8), rgba(8, 6, 5, 0.7));
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
   padding: 10px;
 }
 
@@ -2228,11 +2303,11 @@
 
 .sheetCardTitle {
   color: rgba(255, 240, 210, 0.86);
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   font-weight: 950;
-  margin-bottom: 8px;
+  margin-bottom: 9px;
 }
 
 .sheetCardTitleCentered {
@@ -2455,13 +2530,13 @@
 .sheetStatRows {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .sheetSaveSenseGrid {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .sheetSaveSenseBlock {
@@ -2471,7 +2546,7 @@
 }
 
 .sheetSaveSenseBlock + .sheetSaveSenseBlock {
-  padding-top: 10px;
+  padding-top: 11px;
   border-top: 1px solid rgba(255, 220, 160, 0.1);
 }
 
@@ -2932,7 +3007,7 @@
 .actionsTable {
   border-radius: 10px;
   border: 1px solid rgba(255, 220, 160, 0.16);
-  background: rgba(0, 0, 0, 0.2);
+  background: linear-gradient(180deg, rgba(8, 6, 5, 0.78), rgba(4, 3, 2, 0.72));
   overflow: auto;
   max-height: 316px;
 }
@@ -2946,8 +3021,10 @@
   align-items: center;
   gap: 8px;
   padding: 8px;
-  border-bottom: 1px solid rgba(255, 220, 160, 0.12);
-  background: rgba(10, 8, 6, 0.92);
+  border-bottom: 1px solid rgba(255, 220, 160, 0.14);
+  background: rgba(12, 9, 7, 0.96);
+  box-shadow: 0 1px 0 rgba(255, 220, 160, 0.08);
+  backdrop-filter: blur(2px);
 }
 
 .actionsHeadRow span {
@@ -2996,15 +3073,20 @@
   color: rgba(255, 245, 220, 0.88);
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease;
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .actionsRowBtn:last-child {
   border-bottom: 0;
 }
 
+.actionsTable .actionsRowBtn:nth-of-type(even) {
+  background: rgba(255, 220, 160, 0.03);
+}
+
 .actionsRowBtn:hover {
-  background: rgba(255, 220, 160, 0.08);
+  background: linear-gradient(90deg, rgba(255, 220, 160, 0.13), rgba(255, 220, 160, 0.05));
+  border-color: rgba(255, 220, 160, 0.2);
 }
 
 .actionsAttackCell {
@@ -3244,8 +3326,8 @@
   gap: 8px;
   min-width: 0;
   border-radius: 9px;
-  border: 1px solid rgba(255, 220, 160, 0.16);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.14));
   padding: 6px 8px;
 }
 
@@ -3268,6 +3350,24 @@
 
 .spellSlotsReadBtn {
   line-height: 0;
+}
+
+.spellSlotsReadRow .slotBox {
+  border-color: rgba(255, 220, 160, 0.4);
+  transition: transform 120ms ease, filter 120ms ease, background 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.spellSlotsReadRow .slotBoxActive {
+  border-color: rgba(255, 216, 140, 0.9);
+  background: linear-gradient(180deg, rgba(226, 168, 68, 0.96), rgba(161, 104, 28, 0.96));
+  box-shadow: 0 0 10px rgba(224, 154, 40, 0.42), 0 0 0 1px rgba(255, 230, 160, 0.14) inset;
+}
+
+.spellSlotsReadRow .slotBoxInactive {
+  border-color: rgba(170, 190, 205, 0.48);
+  background: linear-gradient(180deg, rgba(12, 18, 22, 0.78), rgba(7, 10, 13, 0.82));
+  box-shadow: none;
+  filter: saturate(0.72);
 }
 
 .spellSlotsReadBox {
@@ -3684,6 +3784,16 @@
   .sheetIdentity {
     align-items: center;
     text-align: center;
+  }
+
+  .sheetStatusChips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: 360px;
+  }
+
+  .sheetStatusChip {
+    justify-content: center;
+    gap: 8px;
   }
 
   .sheetHeroActions {

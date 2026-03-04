@@ -3765,6 +3765,24 @@ export default function CombatPanel({
                         <div className={styles.sheetMeta}>
                           {[cleanText(selected.race) || 'Unknown', cleanText(selected.className || selected.role) || 'Unclassified', selected.level === '' || selected.level == null ? 'Level —' : `Level ${selected.level}`].join(' • ')}
                         </div>
+                        <div className={styles.sheetStatusChips}>
+                          <div className={`${styles.sheetStatusChip} ${styles.sheetStatusChipAc}`}>
+                            <span className={styles.sheetStatusChipLabel}>AC</span>
+                            <span className={styles.sheetStatusChipValue}>{selected.ac === '' || selected.ac == null ? '—' : selected.ac}</span>
+                          </div>
+                          <div className={`${styles.sheetStatusChip} ${styles.sheetStatusChipSpeed}`}>
+                            <span className={styles.sheetStatusChipLabel}>Speed</span>
+                            <span className={styles.sheetStatusChipValue}>{selected.speed === '' || selected.speed == null ? '—' : `${selected.speed} FT`}</span>
+                          </div>
+                          <div className={`${styles.sheetStatusChip} ${styles.sheetStatusChipProf}`}>
+                            <span className={styles.sheetStatusChipLabel}>Prof</span>
+                            <span className={styles.sheetStatusChipValue}>{selectedProficiencyBonus == null ? '—' : formatSigned(selectedProficiencyBonus)}</span>
+                          </div>
+                          <div className={`${styles.sheetStatusChip} ${styles.sheetStatusChipDc}`}>
+                            <span className={styles.sheetStatusChipLabel}>Spell DC</span>
+                            <span className={styles.sheetStatusChipValue}>{selected.spellSaveDC == null || selected.spellSaveDC === '' ? '—' : selected.spellSaveDC}</span>
+                          </div>
+                        </div>
                         {selected.sourceSheetFileName && (
                           <div className={styles.sheetImportMeta}>
                             {selected.sourceSheetFileName}
@@ -3807,7 +3825,7 @@ export default function CombatPanel({
 
                   <div className={styles.sheetSectionGrid}>
                     <div className={`${styles.sheetCoreVitalsRow} ${styles.sheetCardFull}`}>
-                      <div className={`${styles.sheetCard} ${styles.sheetCoreStatsCard}`}>
+                      <div className={`${styles.sheetCard} ${styles.sheetCardPrimary} ${styles.sheetCoreStatsCard}`}>
                         <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Stats</div>
                         <div className={`${styles.sheetAbilityChipGrid} ${styles.sheetAbilityChipGridCompact}`}>
                           {ABILITY_META.map((ability) => {
@@ -3832,7 +3850,7 @@ export default function CombatPanel({
                         </div>
                       </div>
 
-                      <div className={`${styles.sheetCard} ${styles.sheetHpCard}`}>
+                      <div className={`${styles.sheetCard} ${styles.sheetCardPrimary} ${styles.sheetHpCard}`}>
                         
                         <div className={styles.sheetHpCardBody}>
                           <div className={`${styles.sheetHeroVitalsRow} ${styles.sheetHpVitalsLayout}`}>
@@ -3884,18 +3902,6 @@ export default function CombatPanel({
 
                           <div className={styles.sheetHpMetaGrid}>
                             <div className={styles.sheetHpMetaItem}>
-                              <span className={styles.sheetHpMetaLabel}>Proficiency</span>
-                              <span className={styles.sheetHpMetaValue}>
-                                {selectedProficiencyBonus == null ? '—' : formatSigned(selectedProficiencyBonus)}
-                              </span>
-                            </div>
-                            <div className={styles.sheetHpMetaItem}>
-                              <span className={styles.sheetHpMetaLabel}>Spell Save DC</span>
-                              <span className={styles.sheetHpMetaValue}>
-                                {selected.spellSaveDC == null || selected.spellSaveDC === '' ? '—' : selected.spellSaveDC}
-                              </span>
-                            </div>
-                            <div className={styles.sheetHpMetaItem}>
                               <span className={styles.sheetHpMetaLabel}>Attack Mod</span>
                               <span className={styles.sheetHpMetaValue}>
                                 {selected.attackModifier == null || selected.attackModifier === '' ? '—' : formatSigned(selected.attackModifier)}
@@ -3913,7 +3919,7 @@ export default function CombatPanel({
                     </div>
 
                     <div className={`${styles.sectionTopGap} ${styles.sheetCardFull}`}>
-                      <div className={styles.combatToolsCard}>
+                      <div className={`${styles.combatToolsCard} ${styles.sheetToolsCard}`}>
                         <div className={`${styles.toolsHeaderRow} ${styles.sheetToolsToggleRow}`}>
                           <div className={styles.toolsModeToggle}>
                             <button
@@ -4117,7 +4123,7 @@ export default function CombatPanel({
                       </div>
                     </div>
 
-                    <div className={styles.sheetCard}>
+                    <div className={`${styles.sheetCard} ${styles.sheetCardSecondary}`}>
                       <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
                       <div className={styles.sheetStatRows}>
                         {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
@@ -4143,7 +4149,7 @@ export default function CombatPanel({
                       </div>
                     </div>
 
-                    <div className={styles.sheetCard}>
+                    <div className={`${styles.sheetCard} ${styles.sheetCardSecondary}`}>
                       <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Saving Throws & Senses</div>
                       <div className={styles.sheetSaveSenseGrid}>
                         <div className={styles.sheetSaveSenseBlock}>

@@ -617,6 +617,10 @@
   color: rgba(255, 245, 220, 0.72);
 }
 
+.detailSynopsisEditor {
+  margin-top: 8px;
+}
+
 .detailStatsGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -696,6 +700,14 @@
   gap: 12px;
 }
 
+.profileFloatingActions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
 .sectionTitle {
   font-size: 16px;
   font-weight: 950;
@@ -708,6 +720,10 @@
   line-height: 1.65;
   font-size: 13px;
   color: rgba(255, 245, 220, 0.72);
+}
+
+.sectionTextarea {
+  margin-top: 4px;
 }
 
 .partyHeader {

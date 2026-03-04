@@ -39,6 +39,7 @@ export default function CharacterBook({
   panelType,
   cinematicNav,
   characters = [],
+  setCharacters = () => {},
 
   selectedChar,
   setSelectedChar,
@@ -1341,9 +1342,62 @@ export default function CharacterBook({
     () => (selectedChar ? canControlCharacter(selectedChar) : true),
     [canControlCharacter, selectedChar]
   );
+  const [isProfileEditing, setIsProfileEditing] = useState(false);
+  const [profileDraft, setProfileDraft] = useState({ synopsis: '', lore: '', goals: '' });
   const selectedCharCanEditRelationships = selectedChar
     ? canEditRelationshipByName(selectedChar.name)
     : false;
+
+  useEffect(() => {
+    if (!selectedChar) {
+      setIsProfileEditing(false);
+      setProfileDraft({ synopsis: '', lore: '', goals: '' });
+      return;
+    }
+    setIsProfileEditing(false);
+    setProfileDraft({
+      synopsis: selectedChar.synopsis || '',
+      lore: selectedChar.lore || '',
+      goals: selectedChar.goals || '',
+    });
+  }, [selectedChar]);
+
+  const startProfileEdit = () => {
+    if (!selectedChar || !selectedCharCanEdit) return;
+    setIsProfileEditing(true);
+  };
+
+  const cancelProfileEdit = () => {
+    if (!selectedChar) return;
+    setIsProfileEditing(false);
+    setProfileDraft({
+      synopsis: selectedChar.synopsis || '',
+      lore: selectedChar.lore || '',
+      goals: selectedChar.goals || '',
+    });
+  };
+
+  const saveProfileEdit = () => {
+    if (!selectedChar || !selectedCharCanEdit) return;
+    const nextFields = {
+      synopsis: profileDraft.synopsis,
+      lore: profileDraft.lore,
+      goals: profileDraft.goals,
+    };
+    setCharacters((prev) => (Array.isArray(prev)
+      ? prev.map((char) => (
+        char?.name === selectedChar.name
+          ? { ...char, ...nextFields }
+          : char
+      ))
+      : prev));
+    setSelectedChar((prev) => (
+      prev?.name === selectedChar.name
+        ? { ...prev, ...nextFields }
+        : prev
+    ));
+    setIsProfileEditing(false);
+  };
 
   const formatControllerLabel = (assignment) => (
     assignment?.ownerUsername
@@ -1748,7 +1802,17 @@ export default function CharacterBook({
                   />
                   <div className={styles.detailHeader}>
                     <div className={styles.detailName}>{selectedChar.name}</div>
-                    <div className={styles.detailSynopsis}>{selectedChar.synopsis}</div>
+                    {isProfileEditing ? (
+                      <textarea
+                        value={profileDraft.synopsis}
+                        onChange={(e) => setProfileDraft((draft) => ({ ...draft, synopsis: e.target.value }))}
+                        placeholder="Character synopsis..."
+                        rows={3}
+                        className={`${styles.inputBase} ${styles.textareaSummary} ${styles.detailSynopsisEditor}`}
+                      />
+                    ) : (
+                      <div className={styles.detailSynopsis}>{selectedChar.synopsis}</div>
+                    )}
                     <div className={styles.divider} />
                     <div className={styles.detailStatsGrid}>
                       {[['Age', selectedChar.age], ['Height', selectedChar.height]].map(([k, v]) => (
@@ -1840,6 +1904,44 @@ export default function CharacterBook({
                             />
                           </div>
                         </div>
+
+                        {(selectedCharCanEdit || isProfileEditing) && (
+                          <div className={styles.profileFloatingActions}>
+                            {!isProfileEditing && selectedCharCanEdit && (
+                              <button
+                                className={styles.goldBtn}
+                                onMouseEnter={btnHover}
+                                onMouseLeave={btnLeave}
+                                onMouseDown={(e) => { btnDown(e); navClick(); }}
+                                onClick={startProfileEdit}
+                              >
+                                Edit Profile
+                              </button>
+                            )}
+                            {isProfileEditing && (
+                              <>
+                                <button
+                                  className={styles.backButton}
+                                  onMouseEnter={btnHover}
+                                  onMouseLeave={btnLeave}
+                                  onMouseDown={(e) => { btnDown(e); navClick(); }}
+                                  onClick={cancelProfileEdit}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className={styles.goldBtn}
+                                  onMouseEnter={btnHover}
+                                  onMouseLeave={btnLeave}
+                                  onMouseDown={(e) => { btnDown(e); navClick(); }}
+                                  onClick={saveProfileEdit}
+                                >
+                                  Save Profile
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1848,12 +1950,32 @@ export default function CharacterBook({
                 <div className={styles.rightColStack}>
                   <div className={styles.darkCard}>
                     <div className={styles.sectionTitle}>Lore</div>
-                    <div className={styles.sectionBody}>{selectedChar.lore}</div>
+                    {isProfileEditing ? (
+                      <textarea
+                        value={profileDraft.lore}
+                        onChange={(e) => setProfileDraft((draft) => ({ ...draft, lore: e.target.value }))}
+                        placeholder="Character lore..."
+                        rows={7}
+                        className={`${styles.inputBase} ${styles.textareaLore} ${styles.sectionTextarea}`}
+                      />
+                    ) : (
+                      <div className={styles.sectionBody}>{selectedChar.lore}</div>
+                    )}
                   </div>
 
                   <div className={styles.darkCard}>
                     <div className={styles.sectionTitle}>Current Goals</div>
-                    <div className={styles.sectionBody}>{selectedChar.goals}</div>
+                    {isProfileEditing ? (
+                      <textarea
+                        value={profileDraft.goals}
+                        onChange={(e) => setProfileDraft((draft) => ({ ...draft, goals: e.target.value }))}
+                        placeholder="Character goals..."
+                        rows={5}
+                        className={`${styles.inputBase} ${styles.textareaSummary} ${styles.sectionTextarea}`}
+                      />
+                    ) : (
+                      <div className={styles.sectionBody}>{selectedChar.goals}</div>
+                    )}
                   </div>
 
                   <div className={styles.darkCard}>
