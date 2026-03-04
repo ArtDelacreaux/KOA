@@ -1083,6 +1083,7 @@ function normalize(enc) {
       concentration: c.concentration || '',
       notes: c.notes || '',
       hideSensitiveStats: !!c.hideSensitiveStats,
+      notableFeature: cleanText(c.notableFeature),
       spellSlots: normalizeSpellSlots(c.spellSlots),
       featureCharges: normalizeFeatureCharges(c.featureCharges),
       equipmentItems: normalizeStringList(c.equipmentItems),
@@ -1738,6 +1739,10 @@ export default function CombatPanel({
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
   const selectedSensitiveStatsHidden = !!selected?.hideSensitiveStats;
+  const selectedRestrictedPortrait = useMemo(() => {
+    if (!selected) return '';
+    return cleanText(selected.customImage) || tokenImageForCharacter(selected.sourceCharacterId, selected.name) || '';
+  }, [selected]);
   const selectedStatusConditions = useMemo(
     () => normalizeStringList(selected?.status),
     [selected]
@@ -1746,12 +1751,14 @@ export default function CombatPanel({
     () => normalizeStringList(selected?.equipmentItems),
     [selected]
   );
-  const selectedHpSummary = useMemo(() => {
+  const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
-    const currentHp = selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
-    const maxHp = selected.maxHP === '' || selected.maxHP == null ? '' : ` / ${selected.maxHP}`;
-    return `${currentHp}${maxHp}`;
+    return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
   }, [selected]);
+  const selectedNotableFeature = useMemo(
+    () => cleanText(selected?.notableFeature),
+    [selected]
+  );
   const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
   const selectedCastorWilliamRole = useMemo(() => castorWilliamSyncRole(selected), [selected]);
   const castorWilliamResourceSyncAvailable = !!castorWilliamPair.castor && !!castorWilliamPair.william;
@@ -2090,6 +2097,7 @@ export default function CombatPanel({
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       hideSensitiveStats: false,
+      notableFeature: '',
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2131,6 +2139,7 @@ export default function CombatPanel({
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       hideSensitiveStats: false,
+      notableFeature: '',
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2962,11 +2971,6 @@ export default function CombatPanel({
                   Read-only. You do not have permission to modify combat.
                 </div>
               )}
-              {canWriteCombat && !canManageCombat && (
-                <div className={styles.lockedHint}>
-                  Members can add combatants and manage tokens they control. Reset and Clear are DM-only.
-                </div>
-              )}
               <fieldset className={styles.editorFieldset} disabled={!canWriteCombat}>
               <div className={`${styles.addModalBody} koa-scrollbar-thin`}>
                 {/* Add Adventurer */}
@@ -3077,11 +3081,25 @@ export default function CombatPanel({
                 </button>
               </div>
               <div className={`${styles.restrictedModalBody} koa-scrollbar-thin`}>
-                <div className={styles.restrictedIdentityGrid}>
-                  <div className={styles.restrictedIdentityField}>
-                    <div className={styles.label}>Name</div>
-                    <div className={styles.restrictedIdentityValue}>{selected.name}</div>
+                <div className={styles.restrictedProfileTop}>
+                  <div className={styles.restrictedPortraitWrap}>
+                    {selectedRestrictedPortrait ? (
+                      <img
+                        className={styles.restrictedPortraitImg}
+                        src={selectedRestrictedPortrait}
+                        alt={`${selected.name} portrait`}
+                      />
+                    ) : (
+                      <div className={styles.restrictedPortraitFallback}>{initials(selected.name)}</div>
+                    )}
                   </div>
+                  <div className={styles.restrictedNameBlock}>
+                    <div className={styles.label}>Name</div>
+                    <div className={styles.restrictedNameValue}>{selected.name}</div>
+                  </div>
+                </div>
+
+                <div className={styles.restrictedIdentityGrid}>
                   <div className={styles.restrictedIdentityField}>
                     <div className={styles.label}>Race</div>
                     <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
@@ -3098,6 +3116,13 @@ export default function CombatPanel({
                   </div>
                 </div>
 
+                <div className={styles.restrictedStatRow}>
+                  <div className={styles.label}>Notable Feature</div>
+                  <div className={styles.restrictedStatValue}>
+                    {selectedNotableFeature || 'None'}
+                  </div>
+                </div>
+
                 {selectedSensitiveStatsHidden && (
                   <div className={styles.restrictedHiddenHint}>
                     Sensitive combat stats are owner-hidden and redacted.
@@ -3111,7 +3136,7 @@ export default function CombatPanel({
                       {selectedSensitiveStatsHidden ? (
                         <span className={styles.restrictedHiddenValue}>Hidden</span>
                       ) : (
-                        selectedHpSummary
+                        selectedCurrentHp
                       )}
                     </div>
                   </div>
@@ -3723,6 +3748,11 @@ export default function CombatPanel({
                 </div>
                 <div className={styles.sectionTopGap}><div className={styles.label}>Concentration</div>
                   <input className={styles.input} value={selected.concentration} placeholder="Bless / Hold Person / Hex..." onChange={e => setSelectedField({ concentration:e.target.value })}/>
+                </div>
+                <div className={styles.sectionTopGap}><div className={styles.label}>Notable Feature</div>
+                  <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notableFeature || ''}
+                    placeholder="Visible clue or detail others should notice right now..."
+                    onChange={e => setSelectedField({ notableFeature:e.target.value })}/>
                 </div>
                 <div className={styles.sectionTopGap}><div className={styles.label}>Notes</div>
                   <textarea className={`${styles.input} ${styles.textareaInput}`} value={selected.notes}
