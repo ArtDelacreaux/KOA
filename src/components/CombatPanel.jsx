@@ -486,6 +486,7 @@ const SPELL_UNASSIGNED_NOISE_WORDS = new Set([
 function isBareSpellbookEntry(entry) {
   if (!entry || typeof entry !== 'object') return true;
   return [
+    'damage',
     'source',
     'saveAtk',
     'effect',
@@ -538,6 +539,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
           id: spellEntryId({ name }, index),
           name,
           level: null,
+          damage: '',
           source: '',
           saveAtk: '',
           effect: '',
@@ -559,6 +561,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
           entry.level ?? entry.spellLevel ?? entry.levelIndex ?? entry.circle ?? entry.slotLevel,
           null
         ),
+        damage: cleanText(entry.damage ?? entry.dmg ?? entry.effect ?? entry.summary),
         source: cleanText(entry.source ?? entry.origin ?? entry.class),
         saveAtk: cleanText(
           entry.saveAtk ??
@@ -587,6 +590,7 @@ function normalizeSpellbookEntries(raw, fallbackSpellList = []) {
     id: spellEntryId({ name }, index),
     name,
     level: null,
+    damage: '',
     source: '',
     saveAtk: '',
     effect: '',
@@ -639,6 +643,16 @@ function spellLevelLabel(level) {
   if (n === 2) return '2ND';
   if (n === 3) return '3RD';
   return `${n}TH`;
+}
+
+function spellLevelDividerLabel(level) {
+  if (level == null) return 'Unassigned';
+  const n = clamp(toInt(level, 0), 0, 9);
+  if (n === 0) return 'Cantrips';
+  if (n === 1) return '1st Level';
+  if (n === 2) return '2nd Level';
+  if (n === 3) return '3rd Level';
+  return `${n}th Level`;
 }
 
 function parseStatusText(raw) {
@@ -769,6 +783,174 @@ function parseFeatureSections(rawFeatures) {
   if (activeGroup.entries.length > 0) groups.push(activeGroup);
   if (!groups.length && lines.length) groups.push({ title: 'Features', entries: lines });
   return groups;
+}
+
+const WEAPON_KEYWORDS = [
+  'weapon',
+  'sword',
+  'axe',
+  'bow',
+  'crossbow',
+  'dagger',
+  'mace',
+  'spear',
+  'staff',
+  'whip',
+  'hammer',
+  'club',
+  'flail',
+  'rapier',
+  'scimitar',
+  'javelin',
+  'halberd',
+  'pike',
+  'trident',
+  'maul',
+  'lance',
+  'unarmed',
+  'bite',
+  'claw',
+];
+
+function looksLikeWeaponEquipmentLine(text) {
+  const line = cleanText(text).toLowerCase();
+  if (!line) return false;
+  if (line.includes('|')) return true;
+  if (/[+\-]\s*\d+/.test(line)) return true;
+  if (/\b\d+d\d+(?:\s*[+\-]\s*\d+)?\b/i.test(line)) return true;
+  return WEAPON_KEYWORDS.some((keyword) => line.includes(keyword));
+}
+
+function extractDamageNotation(text) {
+  const match = String(text || '').match(/\b\d+d\d+(?:\s*[+\-]\s*\d+)?\b/i);
+  return match ? cleanText(match[0]).replace(/\s+/g, '') : '';
+}
+
+function extractHitOrDcNotation(text) {
+  const source = String(text || '');
+  const dcMatch = source.match(/\bDC\s*\d+\b/i);
+  if (dcMatch) return dcMatch[0].replace(/\s+/g, ' ').toUpperCase();
+  const signedMatch = source.match(/[+\-]\s*\d+/);
+  if (signedMatch) return signedMatch[0].replace(/\s+/g, '');
+  return '';
+}
+
+function extractRangeNotation(text) {
+  const source = String(text || '');
+  const splitRangeMatch = source.match(/\b\d+\s*\/\s*\d+\b/);
+  if (splitRangeMatch) return splitRangeMatch[0].replace(/\s+/g, '');
+  const explicitRangeMatch = source.match(/\b(?:self|touch|reach|\d+\s*(?:ft|feet|mile|miles|mi))\.?\b/i);
+  if (explicitRangeMatch) {
+    return explicitRangeMatch[0]
+      .replace(/\bfeet\b/i, 'ft')
+      .replace(/\bft\b/i, 'ft.')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  return '';
+}
+
+function parseWeaponActionFromEquipmentLine(line, index) {
+  const text = cleanText(line);
+  if (!text || !looksLikeWeaponEquipmentLine(text)) return null;
+
+  const parts = text.split('|').map((part) => cleanText(part));
+  const hasStructuredParts = parts.length >= 4;
+  const attack = hasStructuredParts
+    ? cleanText(parts[0])
+    : cleanText(text.split(/[,:]/)[0]);
+  const range = hasStructuredParts ? cleanText(parts[1]) : extractRangeNotation(text);
+  const hitDc = hasStructuredParts ? cleanText(parts[2]) : extractHitOrDcNotation(text);
+  const damage = hasStructuredParts ? cleanText(parts[3]) : extractDamageNotation(text);
+  const notes = hasStructuredParts ? cleanText(parts.slice(4).join(' | ')) : text;
+
+  if (!attack) return null;
+  return {
+    id: `weapon-${index}-${tokenKey(attack) || index}`,
+    sourceIndex: index,
+    attack,
+    range,
+    hitDc,
+    damage,
+    notes,
+    sourceLine: text,
+  };
+}
+
+function normalizeWeaponField(value) {
+  const text = cleanText(value);
+  return text === '--' ? '' : text;
+}
+
+function weaponActionId(entry, index) {
+  const explicit = cleanText(entry?.id);
+  if (explicit) return explicit;
+  const attackKey = tokenKey(entry?.attack ?? entry?.name ?? entry?.weapon);
+  return `weapon-${index + 1}-${attackKey || 'entry'}`;
+}
+
+function normalizeWeaponActionEntries(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const attack = cleanText(entry.attack ?? entry.name ?? entry.weapon);
+      if (!attack) return null;
+      return {
+        id: weaponActionId(entry, index),
+        attack,
+        range: normalizeWeaponField(entry.range ?? entry.reach),
+        hitDc: normalizeWeaponField(entry.hitDc ?? entry.hitDC ?? entry.hit ?? entry.dc),
+        damage: normalizeWeaponField(entry.damage ?? entry.dmg),
+        notes: cleanText(entry.notes ?? entry.detail),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeWeaponActions(raw, fallbackEquipmentItems = []) {
+  const normalized = normalizeWeaponActionEntries(raw);
+  if (normalized.length || Array.isArray(raw)) return normalized;
+  const fallbackLayout = buildEquipmentLayoutRows(fallbackEquipmentItems);
+  return normalizeWeaponActionEntries(fallbackLayout.weapons);
+}
+
+function buildSpellActionRow(spell, index) {
+  const attack = cleanText(spell?.name) || `Spell ${index + 1}`;
+  const range = cleanText(spell?.range) || extractRangeNotation(spell?.effect || spell?.notes) || '--';
+  const hitDc = cleanText(spell?.saveAtk) || extractHitOrDcNotation(spell?.effect || spell?.notes) || '--';
+  const damage =
+    cleanText(spell?.damage)
+    || extractDamageNotation(`${spell?.effect || ''} ${spell?.notes || ''}`)
+    || '--';
+  const source = cleanText(spell?.source) || (normalizeSpellLevel(spell?.level, null) === 0 ? 'Cantrip' : '');
+  return {
+    id: cleanText(spell?.id) || `spell-action-${index}-${tokenKey(attack) || index}`,
+    attack,
+    range,
+    hitDc,
+    damage,
+    notes: cleanText(spell?.notes || spell?.effect),
+    source,
+    spell,
+  };
+}
+
+function buildEquipmentLayoutRows(rawEquipmentItems) {
+  const lines = normalizeStringList(rawEquipmentItems);
+  const weapons = [];
+  const gear = [];
+
+  lines.forEach((line, index) => {
+    const parsedWeapon = parseWeaponActionFromEquipmentLine(line, index);
+    if (parsedWeapon) {
+      weapons.push(parsedWeapon);
+      return;
+    }
+    gear.push(line);
+  });
+
+  return { weapons, gear };
 }
 
 function normalizeSavingThrowRows(rawSavingThrows, abilityScores, level) {
@@ -907,6 +1089,9 @@ function buildSheetPatch(combatant, parsedResult) {
   const hasParsedFeatureCharges = Array.isArray(parsed.featureCharges);
   const normalizedSpellbookEntries = normalizeSpellbookEntries(parsed.spellbookEntries, parsed.spellList);
   const normalizedSpellList = normalizeStringList(normalizedSpellbookEntries.map((entry) => entry.name));
+  const parsedEquipmentItems = normalizeStringList(parsed.equipmentItems || parsed.equipment);
+  const parsedEquipmentLayout = buildEquipmentLayoutRows(parsedEquipmentItems);
+  const parsedWeaponActions = normalizeWeaponActions(parsed.weaponActions, parsedEquipmentItems);
 
   return {
     name: cleanText(parsed.name) || combatant.name,
@@ -932,7 +1117,8 @@ function buildSheetPatch(combatant, parsedResult) {
     spellSlots: hasImportedSpellSlots ? importedSpellSlots : normalizeSpellSlots(combatant.spellSlots),
     classFeatures: normalizeFeatureList(parsed.classFeatures || parsed.abilitiesText),
     featureCharges: hasParsedFeatureCharges ? importedFeatureCharges : normalizeFeatureCharges(combatant.featureCharges),
-    equipmentItems: normalizeStringList(parsed.equipmentItems || parsed.equipment),
+    weaponActions: parsedWeaponActions,
+    equipmentItems: parsedEquipmentLayout.gear,
     otherPossessions: normalizeStringList(parsed.otherPossessions),
     sourceSheet: true,
     sourceSheetFileName: cleanText(parsedResult?.sourceFileName) || cleanText(combatant.sourceSheetFileName),
@@ -956,6 +1142,10 @@ function normalizeSheetProfile(raw) {
   const className = cleanText(raw?.className || raw?.role);
   const spellbookEntries = normalizeSpellbookEntries(raw?.spellbookEntries, raw?.spellList);
   const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
+  const parsedEquipmentItems = normalizeStringList(raw?.equipmentItems);
+  const hasExplicitWeaponActions = Array.isArray(raw?.weaponActions);
+  const separatedEquipmentLayout = buildEquipmentLayoutRows(parsedEquipmentItems);
+  const weaponActions = normalizeWeaponActions(raw?.weaponActions, parsedEquipmentItems);
   return {
     race: cleanText(raw?.race),
     className,
@@ -980,7 +1170,8 @@ function normalizeSheetProfile(raw) {
     spellSlots: normalizeSpellSlots(raw?.spellSlots),
     featureCharges: normalizeFeatureCharges(raw?.featureCharges),
     hideSensitiveStats: !!raw?.hideSensitiveStats,
-    equipmentItems: normalizeStringList(raw?.equipmentItems),
+    weaponActions,
+    equipmentItems: hasExplicitWeaponActions ? parsedEquipmentItems : separatedEquipmentLayout.gear,
     otherPossessions: normalizeStringList(raw?.otherPossessions),
     sourceSheet: !!raw?.sourceSheet,
     sourceSheetFileName: cleanText(raw?.sourceSheetFileName),
@@ -1049,6 +1240,10 @@ function normalize(enc) {
   e.combatants = e.combatants.map((c, i) => {
     const spellbookEntries = normalizeSpellbookEntries(c.spellbookEntries, c.spellList);
     const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
+    const rawEquipmentItems = normalizeStringList(c.equipmentItems);
+    const hasExplicitWeaponActions = Array.isArray(c.weaponActions);
+    const separatedEquipmentLayout = buildEquipmentLayoutRows(rawEquipmentItems);
+    const weaponActions = normalizeWeaponActions(c.weaponActions, rawEquipmentItems);
     return {
       sourceCharacterId: c.sourceCharacterId || '',
       createdByUserId: cleanText(c.createdByUserId),
@@ -1086,7 +1281,8 @@ function normalize(enc) {
       notableFeature: cleanText(c.notableFeature),
       spellSlots: normalizeSpellSlots(c.spellSlots),
       featureCharges: normalizeFeatureCharges(c.featureCharges),
-      equipmentItems: normalizeStringList(c.equipmentItems),
+      weaponActions,
+      equipmentItems: hasExplicitWeaponActions ? rawEquipmentItems : separatedEquipmentLayout.gear,
       otherPossessions: normalizeStringList(c.otherPossessions),
       sourceSheet: !!c.sourceSheet,
       sourceSheetFileName: c.sourceSheetFileName || '',
@@ -1566,6 +1762,8 @@ export default function CombatPanel({
   const [featureRawSnapshot, setFeatureRawSnapshot] = useState('');
   const [spellbookDraftEntries, setSpellbookDraftEntries] = useState([]);
   const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
+  const [sheetToolsMode, setSheetToolsMode] = useState('resources');
+  const [sheetActionDetail, setSheetActionDetail] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
@@ -1602,7 +1800,7 @@ export default function CombatPanel({
   const suppressNextPopoutSessionEndRef = useRef(false);
 
   useEffect(() => {
-    const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode;
+    const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode || !!sheetActionDetail;
     if (!anyModalOpen) return;
 
     const onKeyDown = (e) => {
@@ -1631,6 +1829,10 @@ export default function CombatPanel({
         setRestrictedModalOpen(false);
         return;
       }
+      if (sheetActionDetail) {
+        setSheetActionDetail(null);
+        return;
+      }
       if (editorOpen) {
         setEditorOpen(false);
       }
@@ -1638,7 +1840,7 @@ export default function CombatPanel({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, restrictedModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
+  }, [cropOpen, addModalOpen, restrictedModalOpen, sheetActionDetail, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -1737,6 +1939,23 @@ export default function CombatPanel({
     () => normalizeStringList(selected?.equipmentItems),
     [selected]
   );
+  const selectedWeaponActionRows = useMemo(
+    () => normalizeWeaponActions(selected?.weaponActions, selected?.equipmentItems),
+    [selected]
+  );
+  const selectedSensitiveEquipment = useMemo(() => {
+    const combined = [
+      ...selectedWeaponActionRows.map((weapon) => cleanText(weapon.attack)).filter(Boolean),
+      ...selectedEquipment,
+    ];
+    const seen = new Set();
+    return combined.filter((item) => {
+      const key = tokenKey(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [selectedEquipment, selectedWeaponActionRows]);
   const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
@@ -1768,6 +1987,18 @@ export default function CombatPanel({
   const selectedSpellbookEntries = useMemo(
     () => normalizeSpellbookEntries(selected?.spellbookEntries, selected?.spellList),
     [selected]
+  );
+  const selectedSpellActionRows = useMemo(
+    () => selectedSpellbookEntries.map((spell, index) => buildSpellActionRow(spell, index)),
+    [selectedSpellbookEntries]
+  );
+  const selectedSpellActionGroups = useMemo(
+    () => groupedSpellbookEntries(selectedSpellbookEntries).map((group) => ({
+      key: group.key,
+      label: spellLevelDividerLabel(group.level),
+      rows: group.entries.map((spell, index) => buildSpellActionRow(spell, index)),
+    })),
+    [selectedSpellbookEntries]
   );
   const spellbookDraftGroups = useMemo(
     () => groupedSpellbookEntries(spellbookDraftEntries),
@@ -1873,6 +2104,13 @@ export default function CombatPanel({
       setFeatureRawSnapshot('');
     }
   }, [listEditorMode, selected, selectedSpellbookEntries]);
+
+  useEffect(() => {
+    if (!sheetActionDetail) return;
+    if (!editorOpen || !selected || editorMode !== 'sheet') {
+      setSheetActionDetail(null);
+    }
+  }, [sheetActionDetail, editorOpen, selected, editorMode]);
 
   useEffect(() => {
     return () => {
@@ -2100,6 +2338,7 @@ export default function CombatPanel({
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       hideSensitiveStats: false,
       notableFeature: '',
+      weaponActions: [],
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2142,6 +2381,7 @@ export default function CombatPanel({
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
       hideSensitiveStats: false,
       notableFeature: '',
+      weaponActions: [],
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2424,6 +2664,111 @@ export default function CombatPanel({
     });
   };
 
+  const updateSheetActionDetailField = useCallback((field, value) => {
+    setSheetActionDetail((prev) => {
+      if (!prev || typeof prev !== 'object') return prev;
+      const payload = prev.payload && typeof prev.payload === 'object' ? prev.payload : {};
+      return {
+        ...prev,
+        payload: {
+          ...payload,
+          [field]: value,
+        },
+      };
+    });
+  }, []);
+
+  const addSheetWeaponAction = useCallback(() => {
+    if (!selectedCanEdit) return;
+    setSheetActionDetail({
+      type: 'weapon',
+      payload: {
+        id: createId('weapon'),
+        attack: '',
+        range: '',
+        hitDc: '',
+        damage: '',
+        notes: '',
+      },
+    });
+  }, [selectedCanEdit]);
+
+  const saveSheetActionDetail = useCallback(() => {
+    if (!sheetActionDetail || !selectedCanEdit) return;
+    const payload = sheetActionDetail.payload && typeof sheetActionDetail.payload === 'object'
+      ? sheetActionDetail.payload
+      : {};
+
+    if (sheetActionDetail.type === 'weapon') {
+      const attack = cleanText(payload.attack);
+      if (!attack) return;
+      setSelectedField((combatant) => {
+        const currentActions = normalizeWeaponActions(combatant.weaponActions, combatant.equipmentItems);
+        const targetId = cleanText(payload.id);
+        const nextWeapon = {
+          id: targetId || createId('weapon'),
+          attack,
+          range: cleanText(payload.range),
+          hitDc: cleanText(payload.hitDc),
+          damage: cleanText(payload.damage),
+          notes: cleanText(payload.notes),
+        };
+        let didUpdate = false;
+        const nextActions = currentActions.map((weapon) => {
+          if (didUpdate) return weapon;
+          const matchesById = !!targetId && cleanText(weapon.id) === targetId;
+          const matchesByName = !targetId && cleanText(weapon.attack) === attack;
+          if (!matchesById && !matchesByName) return weapon;
+          didUpdate = true;
+          return {
+            ...weapon,
+            ...nextWeapon,
+          };
+        });
+        if (!didUpdate) nextActions.push(nextWeapon);
+        return { weaponActions: nextActions };
+      });
+      setSheetActionDetail(null);
+      return;
+    }
+
+    if (sheetActionDetail.type === 'spell') {
+      const targetId = cleanText(payload.id);
+      const nextName = cleanText(payload.name);
+      if (!nextName) return;
+      setSelectedField((combatant) => {
+        const currentEntries = normalizeSpellbookEntries(combatant.spellbookEntries, combatant.spellList);
+        let didUpdate = false;
+        const nextEntries = currentEntries.map((entry) => {
+          if (didUpdate) return entry;
+          const matchesById = !!targetId && cleanText(entry.id) === targetId;
+          const matchesByName = !targetId && cleanText(entry.name) === nextName;
+          if (!matchesById && !matchesByName) return entry;
+          didUpdate = true;
+
+          const draftDamage = cleanText(payload.damage);
+          return {
+            ...entry,
+            name: nextName,
+            range: cleanText(payload.range),
+            saveAtk: cleanText(payload.saveAtk),
+            damage: draftDamage,
+            time: cleanText(payload.time),
+            duration: cleanText(payload.duration),
+            effect: draftDamage,
+            notes: cleanText(payload.notes),
+          };
+        });
+        if (!didUpdate) return {};
+        return {
+          spellbookEntries: nextEntries,
+          spellList: normalizeStringList(nextEntries.map((entry) => entry.name)),
+        };
+      });
+      setSheetActionDetail(null);
+    }
+  }, [selectedCanEdit, setSelectedField, sheetActionDetail]);
+
   const resetEncounter = () => {
     if (!canManageCombat) return;
     setEncounter(prev => {
@@ -2579,6 +2924,7 @@ export default function CombatPanel({
     id: createId('spell'),
     name: '',
     level,
+    damage: '',
     source: '',
     saveAtk: '',
     effect: '',
@@ -2605,6 +2951,10 @@ export default function CombatPanel({
       if (Object.prototype.hasOwnProperty.call(patch, 'name')) next.name = String(patch.name ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'source')) next.source = String(patch.source ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'saveAtk')) next.saveAtk = String(patch.saveAtk ?? '');
+      if (Object.prototype.hasOwnProperty.call(patch, 'damage')) {
+        next.damage = String(patch.damage ?? '');
+        next.effect = String(patch.damage ?? '');
+      }
       if (Object.prototype.hasOwnProperty.call(patch, 'effect')) next.effect = String(patch.effect ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'time')) next.time = String(patch.time ?? '');
       if (Object.prototype.hasOwnProperty.call(patch, 'range')) next.range = String(patch.range ?? '');
@@ -3181,7 +3531,7 @@ export default function CombatPanel({
                       {selectedSensitiveStatsHidden ? (
                         <span className={styles.restrictedHiddenValue}>Hidden</span>
                       ) : (
-                        selectedEquipment.length ? selectedEquipment.join(', ') : 'None listed'
+                        selectedSensitiveEquipment.length ? selectedSensitiveEquipment.join(', ') : 'None listed'
                       )}
                     </div>
                   </div>
@@ -3428,76 +3778,207 @@ export default function CombatPanel({
 
                     <div className={`${styles.sectionTopGap} ${styles.sheetCardFull}`}>
                       <div className={styles.combatToolsCard}>
-                        <div className={styles.toolsTitle}>Combat Tools</div>
-                        <div className={styles.sheetToolsResourceGrid}>
-                          <div className={styles.combatToolGroup}>
-                            <div className={styles.label}>Feature Charges</div>
-                            <div className={styles.spellSlotsReadGrid}>
-                              {visibleSheetFeatureCharges.length === 0 ? (
-                                <div className={styles.sheetListFallback}>No feature charges set.</div>
-                              ) : (
-                                visibleSheetFeatureCharges.map((feature) => {
-                                  const shownBoxes = Math.max(feature.max, 0);
-                                  return (
-                                    <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
-                                      <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
-                                      <div className={styles.spellSlotsReadBoxes}>
-                                        {Array.from({ length: shownBoxes }).map((_, i) => (
-                                          <button
-                                            type="button"
-                                            key={`sheet-feature-box-${feature.id}-${i}`}
-                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
-                                              i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
-                                            }`}
-                                            onMouseEnter={playHover}
-                                            onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
-                                            aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
-                                            title={`${feature.name || 'Feature'} charge ${i + 1}`}
-                                          />
-                                        ))}
-                                      </div>
-                                      <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
-
-                          <div className={styles.combatToolGroup}>
-                            <div className={styles.label}>Spell Slots</div>
-                            <div className={styles.spellSlotsReadGrid}>
-                              {visibleSheetSpellSlots.length === 0 ? (
-                                <div className={styles.sheetListFallback}>No spell slots set.</div>
-                              ) : (
-                                visibleSheetSpellSlots.map((slot) => {
-                                  const shownBoxes = Math.max(slot.max, 0);
-                                  return (
-                                    <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
-                                      <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
-                                      <div className={styles.spellSlotsReadBoxes}>
-                                        {Array.from({ length: shownBoxes }).map((_, i) => (
-                                          <button
-                                            type="button"
-                                            key={`sheet-slot-box-${slot.level}-${i}`}
-                                            className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
-                                              i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
-                                            }`}
-                                            onMouseEnter={playHover}
-                                            onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
-                                            aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                            title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                          />
-                                        ))}
-                                      </div>
-                                      <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
+                        <div className={styles.toolsHeaderRow}>
+                          <div className={styles.toolsTitle}>Combat Tools</div>
+                          <div className={styles.toolsModeToggle}>
+                            <button
+                              type="button"
+                              className={`${styles.toolsModeBtn} ${sheetToolsMode === 'resources' ? styles.toolsModeBtnActive : ''}`}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); setSheetToolsMode('resources'); }}
+                            >
+                              Resources
+                            </button>
+                            <button
+                              type="button"
+                              className={`${styles.toolsModeBtn} ${sheetToolsMode === 'actions' ? styles.toolsModeBtnActive : ''}`}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); setSheetToolsMode('actions'); }}
+                            >
+                              Attack / Spells
+                            </button>
                           </div>
                         </div>
+
+                        {sheetToolsMode === 'resources' ? (
+                          <div className={styles.sheetToolsResourceGrid}>
+                            <div className={styles.combatToolGroup}>
+                              <div className={styles.label}>Feature Charges</div>
+                              <div className={styles.spellSlotsReadGrid}>
+                                {visibleSheetFeatureCharges.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>No feature charges set.</div>
+                                ) : (
+                                  visibleSheetFeatureCharges.map((feature) => {
+                                    const shownBoxes = Math.max(feature.max, 0);
+                                    return (
+                                      <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
+                                        <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
+                                        <div className={styles.spellSlotsReadBoxes}>
+                                          {Array.from({ length: shownBoxes }).map((_, i) => (
+                                            <button
+                                              type="button"
+                                              key={`sheet-feature-box-${feature.id}-${i}`}
+                                              className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                                i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                              }`}
+                                              onMouseEnter={playHover}
+                                              onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
+                                              aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                              title={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                            />
+                                          ))}
+                                        </div>
+                                        <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+
+                            <div className={styles.combatToolGroup}>
+                              <div className={styles.label}>Spell Slots</div>
+                              <div className={styles.spellSlotsReadGrid}>
+                                {visibleSheetSpellSlots.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>No spell slots set.</div>
+                                ) : (
+                                  visibleSheetSpellSlots.map((slot) => {
+                                    const shownBoxes = Math.max(slot.max, 0);
+                                    return (
+                                      <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
+                                        <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
+                                        <div className={styles.spellSlotsReadBoxes}>
+                                          {Array.from({ length: shownBoxes }).map((_, i) => (
+                                            <button
+                                              type="button"
+                                              key={`sheet-slot-box-${slot.level}-${i}`}
+                                              className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                                i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                              }`}
+                                              onMouseEnter={playHover}
+                                              onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
+                                              aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                              title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                            />
+                                          ))}
+                                        </div>
+                                        <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={styles.sheetActionsGrid}>
+                            <div className={styles.combatToolGroup}>
+                              <div className={styles.combatToolGroupHead}>
+                                <div className={styles.label}>Weapons</div>
+                                {selectedCanEdit && (
+                                  <button
+                                    type="button"
+                                    className={btnClass('ghost', 'sm', styles.addWeaponBtn)}
+                                    onMouseEnter={playHover}
+                                    onClick={() => { playNav(); addSheetWeaponAction(); }}
+                                  >
+                                    + Add Weapon
+                                  </button>
+                                )}
+                              </div>
+                              <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
+                                <div className={styles.actionsHeadRow}>
+                                  <span>Attack</span>
+                                  <span>Range</span>
+                                  <span>Hit / DC</span>
+                                  <span>Damage</span>
+                                </div>
+                                {selectedWeaponActionRows.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>No weapons added.</div>
+                                ) : (
+                                  selectedWeaponActionRows.map((weapon) => (
+                                    <button
+                                      type="button"
+                                      key={weapon.id}
+                                      className={styles.actionsRowBtn}
+                                      onMouseEnter={playHover}
+                                      onClick={() => {
+                                        playNav();
+                                        setSheetActionDetail({
+                                          type: 'weapon',
+                                          payload: {
+                                            ...weapon,
+                                            range: normalizeWeaponField(weapon.range),
+                                            hitDc: normalizeWeaponField(weapon.hitDc),
+                                            damage: normalizeWeaponField(weapon.damage),
+                                          },
+                                        });
+                                      }}
+                                    >
+                                      <span className={styles.actionsAttackCell}>{weapon.attack}</span>
+                                      <span>{cleanText(weapon.range) || '--'}</span>
+                                      <span>{cleanText(weapon.hitDc) || '--'}</span>
+                                      <span>{cleanText(weapon.damage) || '--'}</span>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+
+                            <div className={styles.combatToolGroup}>
+                              <div className={styles.label}>Spells</div>
+                              <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
+                                <div className={styles.actionsHeadRow}>
+                                  <span>Attack</span>
+                                  <span>Range</span>
+                                  <span>Hit / DC</span>
+                                  <span>Damage</span>
+                                </div>
+                                {selectedSpellActionGroups.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>No spellbook entries found.</div>
+                                ) : (
+                                  selectedSpellActionGroups.map((group) => (
+                                    <React.Fragment key={`spell-action-group-${group.key}`}>
+                                      <div className={styles.actionsLevelDivider}>
+                                        <span>{group.label}</span>
+                                      </div>
+                                      {group.rows.map((spellRow) => (
+                                        <button
+                                          type="button"
+                                          key={spellRow.id}
+                                          className={styles.actionsRowBtn}
+                                          onMouseEnter={playHover}
+                                          onClick={() => {
+                                            playNav();
+                                            setSheetActionDetail({
+                                              type: 'spell',
+                                              payload: {
+                                                ...(spellRow.spell || {}),
+                                                id: cleanText(spellRow.spell?.id) || spellRow.id,
+                                                name: cleanText(spellRow.spell?.name) || spellRow.attack,
+                                                range: cleanText(spellRow.spell?.range) || (spellRow.range === '--' ? '' : spellRow.range),
+                                                saveAtk: cleanText(spellRow.spell?.saveAtk) || (spellRow.hitDc === '--' ? '' : spellRow.hitDc),
+                                                damage: spellRow.damage === '--' ? '' : spellRow.damage,
+                                                time: cleanText(spellRow.spell?.time),
+                                                duration: cleanText(spellRow.spell?.duration),
+                                                notes: cleanText(spellRow.spell?.notes),
+                                              },
+                                            });
+                                          }}
+                                        >
+                                          <span className={styles.actionsAttackCell}>{spellRow.attack}</span>
+                                          <span>{spellRow.range}</span>
+                                          <span>{spellRow.hitDc}</span>
+                                          <span>{spellRow.damage}</span>
+                                        </button>
+                                      ))}
+                                    </React.Fragment>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3566,7 +4047,7 @@ export default function CombatPanel({
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
                           <div className={styles.sheetSubTitle}>Equipment</div>
                           <div className={styles.sheetListBlock}>
-                            {normalizeStringList(selected.equipmentItems).length ? normalizeStringList(selected.equipmentItems).join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
+                            {selectedEquipment.length ? selectedEquipment.join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
                           </div>
                         </div>
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
@@ -3794,6 +4275,161 @@ export default function CombatPanel({
               </div>
               </fieldset>
               )}
+
+              {editorMode === 'sheet' && sheetActionDetail && (
+                <div className={styles.spellDetailOverlay}>
+                  <div className={`${styles.modalCard} ${styles.actionDetailCard}`}>
+                    <div className={styles.modalHeader}>
+                      <div className={styles.modalTitle}>
+                        {sheetActionDetail.type === 'spell' ? 'Spell Details' : 'Weapon Details'}
+                      </div>
+                      <button
+                        className={btnClass('danger', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setSheetActionDetail(null); }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className={styles.actionDetailBody}>
+                      {sheetActionDetail.type === 'spell' ? (
+                        <div className={styles.actionDetailGrid}>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Attack</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.name)}
+                              onChange={(e) => updateSheetActionDetailField('name', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Range</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.range)}
+                              onChange={(e) => updateSheetActionDetailField('range', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Hit / DC</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.saveAtk)}
+                              onChange={(e) => updateSheetActionDetailField('saveAtk', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Damage</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.damage)}
+                              onChange={(e) => updateSheetActionDetailField('damage', e.target.value)}
+                              placeholder="2d6+3"
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Casting Time</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.time)}
+                              onChange={(e) => updateSheetActionDetailField('time', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Duration</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.duration)}
+                              onChange={(e) => updateSheetActionDetailField('duration', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Notes</div>
+                            <textarea
+                              className={`${styles.input} ${styles.actionDetailTextarea}`}
+                              value={cleanText(sheetActionDetail.payload?.notes)}
+                              onChange={(e) => updateSheetActionDetailField('notes', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className={styles.actionDetailGrid}>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Attack</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.attack)}
+                              onChange={(e) => updateSheetActionDetailField('attack', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Range</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.range)}
+                              onChange={(e) => updateSheetActionDetailField('range', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Hit / DC</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.hitDc)}
+                              onChange={(e) => updateSheetActionDetailField('hitDc', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Damage</div>
+                            <input
+                              className={`${styles.input} ${styles.actionDetailInput}`}
+                              value={cleanText(sheetActionDetail.payload?.damage)}
+                              onChange={(e) => updateSheetActionDetailField('damage', e.target.value)}
+                              placeholder="1d6+2"
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Notes</div>
+                            <textarea
+                              className={`${styles.input} ${styles.actionDetailTextarea}`}
+                              value={cleanText(sheetActionDetail.payload?.notes)}
+                              onChange={(e) => updateSheetActionDetailField('notes', e.target.value)}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.managerActions}>
+                      <button
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); setSheetActionDetail(null); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={btnClass('gold', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); saveSheetActionDetail(); }}
+                        disabled={!selectedCanEdit}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -3889,7 +4525,7 @@ export default function CombatPanel({
                                     <th>Spell</th>
                                     <th>Source</th>
                                     <th>Save/Atk</th>
-                                    <th>Effect</th>
+                                    <th>Damage</th>
                                     <th>Time</th>
                                     <th>Range</th>
                                     <th>Duration</th>
@@ -3907,7 +4543,7 @@ export default function CombatPanel({
                                       <td className={styles.spellbookNameCell}>{spell.name || 'Untitled Spell'}</td>
                                       <td>{spell.source || '—'}</td>
                                       <td>{spell.saveAtk || '—'}</td>
-                                      <td>{spell.effect || '—'}</td>
+                                      <td>{spell.damage || spell.effect || '—'}</td>
                                       <td>{spell.time || '—'}</td>
                                       <td>{spell.range || '—'}</td>
                                       <td>{spell.duration || '—'}</td>
@@ -4049,11 +4685,11 @@ export default function CombatPanel({
                           />
                         </div>
                         <div>
-                          <div className={styles.label}>Effect</div>
+                          <div className={styles.label}>Damage</div>
                           <input
                             className={styles.input}
-                            value={activeSpellDraft.effect || ''}
-                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { effect: e.target.value })}
+                            value={activeSpellDraft.damage || activeSpellDraft.effect || ''}
+                            onChange={(e) => updateSpellbookDraftEntry(activeSpellDraft.id, { damage: e.target.value })}
                           />
                         </div>
                         <div>

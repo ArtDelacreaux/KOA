@@ -1592,6 +1592,49 @@
   resize: vertical;
 }
 
+.actionDetailCard {
+  width: min(760px, 92vw);
+  max-height: min(82vh, 760px);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.actionDetailBody {
+  padding: 12px;
+  overflow-y: auto;
+}
+
+.actionDetailGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.actionDetailFieldWide {
+  grid-column: 1 / -1;
+}
+
+.actionDetailInput {
+  min-height: 36px;
+}
+
+.actionDetailTextarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.actionDetailValue {
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(0, 0, 0, 0.24);
+  color: rgba(255, 245, 220, 0.9);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
 .sheetView {
   padding: 14px;
   overflow-y: auto;
@@ -2595,6 +2638,194 @@
   text-align: center;
 }
 
+.combatToolGroupHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.addWeaponBtn {
+  height: 26px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.toolsHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.toolsModeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.toolsModeBtn {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: rgba(255, 220, 160, 0.7);
+  font-family: var(--koa-font-display);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.toolsModeBtn:hover {
+  color: rgba(255, 245, 220, 0.92);
+}
+
+.toolsModeBtnActive {
+  color: var(--koa-cream);
+  border-color: rgba(255, 220, 160, 0.34);
+  background: linear-gradient(180deg, rgba(70, 46, 28, 0.72), rgba(32, 20, 12, 0.72));
+}
+
+.sheetActionsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.actionsTable {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: auto;
+  max-height: 316px;
+}
+
+.actionsHeadRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 84px 84px 84px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.12);
+  background: rgba(10, 8, 6, 0.92);
+}
+
+.actionsHeadRow span {
+  color: rgba(255, 220, 160, 0.74);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.actionsLevelDivider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.1);
+  background: linear-gradient(90deg, rgba(255, 220, 160, 0.08), rgba(255, 220, 160, 0.02));
+}
+
+.actionsLevelDivider span {
+  color: rgba(255, 220, 160, 0.8);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.actionsLevelDivider::after {
+  content: '';
+  height: 1px;
+  flex: 1 1 auto;
+  background: rgba(255, 220, 160, 0.22);
+}
+
+.actionsRowBtn {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.1);
+  background: transparent;
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 84px 84px 84px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  color: rgba(255, 245, 220, 0.88);
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.actionsRowBtn:last-child {
+  border-bottom: 0;
+}
+
+.actionsRowBtn:hover {
+  background: rgba(255, 220, 160, 0.08);
+}
+
+.actionsAttackCell {
+  min-width: 0;
+  color: rgba(255, 245, 220, 0.96);
+  font-size: 13px;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheetEquipmentTable {
+  border-radius: 9px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: rgba(0, 0, 0, 0.2);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.sheetEquipmentHeadRow,
+.sheetEquipmentRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 84px 84px 84px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+}
+
+.sheetEquipmentHeadRow {
+  border-bottom: 1px solid rgba(255, 220, 160, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sheetEquipmentHeadRow span {
+  color: rgba(255, 220, 160, 0.74);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.sheetEquipmentRow + .sheetEquipmentRow {
+  border-top: 1px solid rgba(255, 220, 160, 0.08);
+}
+
 .combatToolsCardCompact .toolsTitle {
   text-align: center;
 }
@@ -3258,6 +3489,23 @@
     grid-template-columns: 1fr;
   }
 
+  .sheetActionsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolsHeaderRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .toolsModeToggle {
+    justify-content: space-between;
+  }
+
+  .toolsModeBtn {
+    flex: 1 1 auto;
+  }
+
   .spellSlotsEditGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3288,6 +3536,10 @@
   }
 
   .spellDetailGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .actionDetailGrid {
     grid-template-columns: 1fr;
   }
 
@@ -3371,6 +3623,15 @@
 
   .spellDetailCard {
     width: min(96vw, 560px);
+  }
+
+  .actionsHeadRow,
+  .actionsRowBtn,
+  .sheetEquipmentHeadRow,
+  .sheetEquipmentRow {
+    grid-template-columns: minmax(0, 1fr) 70px 70px 70px;
+    gap: 6px;
+    padding: 7px 6px;
   }
 
   .spellSlotsEditGrid {
