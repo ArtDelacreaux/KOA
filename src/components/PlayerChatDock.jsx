@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../auth/AuthContext';
 import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import styles from './PlayerChatDock.module.css';
+import chatNotifSfx from '../assets/Sound Effects/chatnotif.mp3';
+import dmNotifSfx from '../assets/Sound Effects/dmnotif.mp3';
 
 const INITIAL_LOAD_LIMIT = 120;
 const MAX_RENDERED_MESSAGES = 200;
@@ -15,6 +17,12 @@ const PANEL_DEFAULT_SIZE = { width: 680, height: 620 };
 
 function normalizeText(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeRole(value) {
+  const role = normalizeText(value).toLowerCase();
+  if (role === 'owner' || role === 'dm') return role;
+  return 'member';
 }
 
 function clamp(value, min, max) {
@@ -114,6 +122,8 @@ export default function PlayerChatDock({ mode = 'dock' }) {
   const openRef = useRef(open);
   const selectedThreadRef = useRef(selectedThreadId);
   const resizeStartRef = useRef(null);
+  const chatNotifRef = useRef(null);
+  const dmNotifRef = useRef(null);
 
   const campaignId = useMemo(() => getCampaignId(), []);
   const supabase = useMemo(() => (enabled ? getSupabaseClient() : null), [enabled]);
@@ -152,6 +162,25 @@ export default function PlayerChatDock({ mode = 'dock' }) {
     });
     return map;
   }, [authorDisplay, currentUserId, members]);
+
+  const roleByUserId = useMemo(() => {
+    const map = new Map();
+    members.forEach((member) => {
+      if (member.userId) map.set(member.userId, member.role);
+    });
+    return map;
+  }, [members]);
+
+  const playIncomingNotification = useCallback((isDmMessage) => {
+    const audio = isDmMessage ? dmNotifRef.current : chatNotifRef.current;
+    if (!audio) return;
+
+    try {
+      audio.currentTime = 0;
+    } catch {}
+
+    audio.play().catch(() => {});
+  }, []);
 
   useEffect(() => {
     openRef.current = open;
@@ -217,6 +246,23 @@ export default function PlayerChatDock({ mode = 'dock' }) {
   }, [selectedThreadId]);
 
   useEffect(() => {
+    if (typeof Audio === 'undefined') return () => {};
+
+    const chatAudio = new Audio(chatNotifSfx);
+    chatAudio.preload = 'auto';
+    const dmAudio = new Audio(dmNotifSfx);
+    dmAudio.preload = 'auto';
+
+    chatNotifRef.current = chatAudio;
+    dmNotifRef.current = dmAudio;
+
+    return () => {
+      chatNotifRef.current = null;
+      dmNotifRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     setUnreadByThread((prev) => {
       if (!prev[selectedThreadId]) return prev;
@@ -257,7 +303,8 @@ export default function PlayerChatDock({ mode = 'dock' }) {
 
             const username = normalizeText(row?.username);
             const label = username || `Member ${index + 1}`;
-            return { userId, label };
+            const role = normalizeRole(row?.role);
+            return { userId, label, role };
           })
           .filter(Boolean)
           .sort((a, b) => a.label.localeCompare(b.label));
@@ -309,14 +356,21 @@ export default function PlayerChatDock({ mode = 'dock' }) {
           if (!active || !incoming || incoming.id == null) return;
           if (!canViewMessage(incoming, currentUserId)) return;
 
+          const incomingAuthorUserId = normalizeText(incoming.author_user_id);
+          const isIncomingFromAnotherUser = incomingAuthorUserId && incomingAuthorUserId !== currentUserId;
+          if (isIncomingFromAnotherUser) {
+            const incomingRole = roleByUserId.get(incomingAuthorUserId);
+            playIncomingNotification(incomingRole === 'dm');
+          }
+
           setMessages((prev) => upsertMessage(prev, incoming));
-          if (!openRef.current && normalizeText(incoming.author_user_id) !== currentUserId) {
+          if (!openRef.current && isIncomingFromAnotherUser) {
             const threadId = getThreadIdForMessage(incoming, currentUserId);
             setUnreadByThread((prev) => {
               const nextValue = Math.min((prev[threadId] || 0) + 1, 99);
               return { ...prev, [threadId]: nextValue };
             });
-          } else if (openRef.current && normalizeText(incoming.author_user_id) !== currentUserId) {
+          } else if (openRef.current && isIncomingFromAnotherUser) {
             const threadId = getThreadIdForMessage(incoming, currentUserId);
             if (selectedThreadRef.current !== threadId) {
               setUnreadByThread((prev) => {
@@ -366,7 +420,7 @@ export default function PlayerChatDock({ mode = 'dock' }) {
         supabase.removeChannel(channel);
       } catch {}
     };
-  }, [campaignId, currentUserId, enabled, hasSession, supabase]);
+  }, [campaignId, currentUserId, enabled, hasSession, playIncomingNotification, roleByUserId, supabase]);
 
   useEffect(() => {
     if (!open) return;
