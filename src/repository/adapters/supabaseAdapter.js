@@ -126,6 +126,7 @@ export function createSupabaseAdapter() {
   const pendingQueue = new Map();
   const lastSeenRemoteUpdatedAt = new Map();
   const suppressPullUntilByKey = new Map();
+  const minExpectedRemoteStampByKey = new Map();
   const status = {
     enabled: true,
     configured: isSupabaseConfigured(),
@@ -340,6 +341,11 @@ export function createSupabaseAdapter() {
 
     const remoteStamp = normalizeText(row?.updated_at);
     const stampKey = queueKey(scope, key);
+    const minExpectedStamp = minExpectedRemoteStampByKey.get(stampKey) || '';
+    if (minExpectedStamp) {
+      if (!remoteStamp || remoteStamp < minExpectedStamp) return;
+      minExpectedRemoteStampByKey.delete(stampKey);
+    }
     if (remoteStamp && lastSeenRemoteUpdatedAt.get(stampKey) === remoteStamp) return;
     if (remoteStamp) lastSeenRemoteUpdatedAt.set(stampKey, remoteStamp);
 
@@ -463,15 +469,17 @@ export function createSupabaseAdapter() {
       type: op.type === 'text' ? 'text' : 'json',
       value: sanitizeValueForTransport(op.type, op.value),
     };
+    const rowUpdatedAt = new Date().toISOString();
 
     const row = {
       campaign_id: campaignId,
       doc_key: op.key,
       payload,
       updated_by: userId,
-      updated_at: new Date().toISOString(),
+      updated_at: rowUpdatedAt,
     };
     if (isPrivate) row.user_id = userId;
+    minExpectedRemoteStampByKey.set(queueKey(op.scope, op.key), rowUpdatedAt);
 
     const { error } = await supabase.from(table).upsert(row, {
       onConflict: isPrivate ? 'campaign_id,user_id,doc_key' : 'campaign_id,doc_key',
