@@ -674,6 +674,48 @@ function normalizeStringList(raw) {
     .filter(Boolean);
 }
 
+function uniqueStringListByToken(raw) {
+  const seen = new Set();
+  return normalizeStringList(raw).filter((item) => {
+    const key = tokenKey(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildEquipableItems(rawWeaponActions, rawEquipmentItems) {
+  const weaponNames = normalizeWeaponActions(rawWeaponActions, rawEquipmentItems)
+    .map((weapon) => cleanText(weapon.attack))
+    .filter(Boolean);
+  const equipmentNames = normalizeStringList(rawEquipmentItems);
+  return uniqueStringListByToken([...weaponNames, ...equipmentNames]);
+}
+
+function normalizeEquippedItems(raw, equipableItems) {
+  const normalized = uniqueStringListByToken(raw);
+  if (!Array.isArray(equipableItems)) return normalized;
+
+  const canonicalByKey = new Map();
+  uniqueStringListByToken(equipableItems).forEach((item) => {
+    const key = tokenKey(item);
+    if (!key || canonicalByKey.has(key)) return;
+    canonicalByKey.set(key, item);
+  });
+
+  const seen = new Set();
+  const out = [];
+  normalized.forEach((item) => {
+    const key = tokenKey(item);
+    if (!key || seen.has(key)) return;
+    const canonical = canonicalByKey.get(key);
+    if (!canonical) return;
+    seen.add(key);
+    out.push(canonical);
+  });
+  return out;
+}
+
 function cleanText(value) {
   return String(value ?? '').trim();
 }
@@ -1092,6 +1134,8 @@ function buildSheetPatch(combatant, parsedResult) {
   const parsedEquipmentItems = normalizeStringList(parsed.equipmentItems || parsed.equipment);
   const parsedEquipmentLayout = buildEquipmentLayoutRows(parsedEquipmentItems);
   const parsedWeaponActions = normalizeWeaponActions(parsed.weaponActions, parsedEquipmentItems);
+  const parsedEquipableItems = buildEquipableItems(parsedWeaponActions, parsedEquipmentLayout.gear);
+  const parsedEquippedItems = normalizeEquippedItems(combatant.equippedItems, parsedEquipableItems);
 
   return {
     name: cleanText(parsed.name) || combatant.name,
@@ -1119,6 +1163,7 @@ function buildSheetPatch(combatant, parsedResult) {
     featureCharges: hasParsedFeatureCharges ? importedFeatureCharges : normalizeFeatureCharges(combatant.featureCharges),
     weaponActions: parsedWeaponActions,
     equipmentItems: parsedEquipmentLayout.gear,
+    equippedItems: parsedEquippedItems,
     otherPossessions: normalizeStringList(parsed.otherPossessions),
     sourceSheet: true,
     sourceSheetFileName: cleanText(parsedResult?.sourceFileName) || cleanText(combatant.sourceSheetFileName),
@@ -1146,6 +1191,8 @@ function normalizeSheetProfile(raw) {
   const hasExplicitWeaponActions = Array.isArray(raw?.weaponActions);
   const separatedEquipmentLayout = buildEquipmentLayoutRows(parsedEquipmentItems);
   const weaponActions = normalizeWeaponActions(raw?.weaponActions, parsedEquipmentItems);
+  const equipmentItems = hasExplicitWeaponActions ? parsedEquipmentItems : separatedEquipmentLayout.gear;
+  const equipableItems = buildEquipableItems(weaponActions, equipmentItems);
   return {
     race: cleanText(raw?.race),
     className,
@@ -1171,7 +1218,8 @@ function normalizeSheetProfile(raw) {
     featureCharges: normalizeFeatureCharges(raw?.featureCharges),
     hideSensitiveStats: !!raw?.hideSensitiveStats,
     weaponActions,
-    equipmentItems: hasExplicitWeaponActions ? parsedEquipmentItems : separatedEquipmentLayout.gear,
+    equipmentItems,
+    equippedItems: normalizeEquippedItems(raw?.equippedItems, equipableItems),
     otherPossessions: normalizeStringList(raw?.otherPossessions),
     sourceSheet: !!raw?.sourceSheet,
     sourceSheetFileName: cleanText(raw?.sourceSheetFileName),
@@ -1244,6 +1292,8 @@ function normalize(enc) {
     const hasExplicitWeaponActions = Array.isArray(c.weaponActions);
     const separatedEquipmentLayout = buildEquipmentLayoutRows(rawEquipmentItems);
     const weaponActions = normalizeWeaponActions(c.weaponActions, rawEquipmentItems);
+    const equipmentItems = hasExplicitWeaponActions ? rawEquipmentItems : separatedEquipmentLayout.gear;
+    const equipableItems = buildEquipableItems(weaponActions, equipmentItems);
     return {
       sourceCharacterId: c.sourceCharacterId || '',
       createdByUserId: cleanText(c.createdByUserId),
@@ -1282,7 +1332,8 @@ function normalize(enc) {
       spellSlots: normalizeSpellSlots(c.spellSlots),
       featureCharges: normalizeFeatureCharges(c.featureCharges),
       weaponActions,
-      equipmentItems: hasExplicitWeaponActions ? rawEquipmentItems : separatedEquipmentLayout.gear,
+      equipmentItems,
+      equippedItems: normalizeEquippedItems(c.equippedItems, equipableItems),
       otherPossessions: normalizeStringList(c.otherPossessions),
       sourceSheet: !!c.sourceSheet,
       sourceSheetFileName: c.sourceSheetFileName || '',
@@ -1943,19 +1994,21 @@ export default function CombatPanel({
     () => normalizeWeaponActions(selected?.weaponActions, selected?.equipmentItems),
     [selected]
   );
+  const selectedEquipableItems = useMemo(
+    () => buildEquipableItems(selectedWeaponActionRows, selectedEquipment),
+    [selectedEquipment, selectedWeaponActionRows]
+  );
+  const selectedEquippedItems = useMemo(
+    () => normalizeEquippedItems(selected?.equippedItems, selectedEquipableItems),
+    [selected, selectedEquipableItems]
+  );
+  const selectedEquippedItemKeys = useMemo(
+    () => new Set(selectedEquippedItems.map((item) => tokenKey(item)).filter(Boolean)),
+    [selectedEquippedItems]
+  );
   const selectedSensitiveEquipment = useMemo(() => {
-    const combined = [
-      ...selectedWeaponActionRows.map((weapon) => cleanText(weapon.attack)).filter(Boolean),
-      ...selectedEquipment,
-    ];
-    const seen = new Set();
-    return combined.filter((item) => {
-      const key = tokenKey(item);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [selectedEquipment, selectedWeaponActionRows]);
+    return selectedEquippedItems;
+  }, [selectedEquippedItems]);
   const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
@@ -2339,7 +2392,7 @@ export default function CombatPanel({
       hideSensitiveStats: false,
       notableFeature: '',
       weaponActions: [],
-      equipmentItems:[], otherPossessions:[],
+      equipmentItems:[], equippedItems: [], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
       sourceSheetFormat: '',
@@ -2382,7 +2435,7 @@ export default function CombatPanel({
       hideSensitiveStats: false,
       notableFeature: '',
       weaponActions: [],
-      equipmentItems:[], otherPossessions:[],
+      equipmentItems:[], equippedItems: [], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
       sourceSheetFormat: '',
@@ -2467,7 +2520,19 @@ export default function CombatPanel({
       if (!patchCandidate || typeof patchCandidate !== 'object') return prev;
       if (Object.keys(patchCandidate).length === 0) return prev;
 
-      const patch = patchCandidate;
+      const patch = { ...patchCandidate };
+      if (Object.prototype.hasOwnProperty.call(patch, 'equipmentItems')) {
+        patch.equipmentItems = normalizeStringList(patch.equipmentItems);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'weaponActions')) {
+        const weaponFallbackItems = Object.prototype.hasOwnProperty.call(patch, 'equipmentItems')
+          ? patch.equipmentItems
+          : selectedCombatant.equipmentItems;
+        patch.weaponActions = normalizeWeaponActions(patch.weaponActions, weaponFallbackItems);
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'equippedItems')) {
+        patch.equippedItems = normalizeStringList(patch.equippedItems);
+      }
       const previousProfileKey = sheetProfileKey(selectedCombatant.sourceCharacterId, selectedCombatant.name);
       const pair = findCastorWilliamPair(next.combatants);
       const syncRole = castorWilliamSyncRole(selectedCombatant);
@@ -2483,7 +2548,18 @@ export default function CombatPanel({
           : null;
 
       next.combatants = next.combatants.map((combatant) => {
-        if (combatant.id === selectedCombatant.id) return { ...combatant, ...patch };
+        if (combatant.id === selectedCombatant.id) {
+          const merged = { ...combatant, ...patch };
+          if (
+            Object.prototype.hasOwnProperty.call(patch, 'weaponActions')
+            || Object.prototype.hasOwnProperty.call(patch, 'equipmentItems')
+            || Object.prototype.hasOwnProperty.call(patch, 'equippedItems')
+          ) {
+            const equipableItems = buildEquipableItems(merged.weaponActions, merged.equipmentItems);
+            merged.equippedItems = normalizeEquippedItems(merged.equippedItems, equipableItems);
+          }
+          return merged;
+        }
         if (mirroredResourcePatch && combatant.id === mirrorTargetId) {
           return { ...combatant, ...cloneCastorWilliamResourcePatch(mirroredResourcePatch) };
         }
@@ -2517,6 +2593,28 @@ export default function CombatPanel({
 
   const toggleSelectedSensitiveStats = () => {
     setSelectedField((combatant) => ({ hideSensitiveStats: !combatant.hideSensitiveStats }));
+  };
+
+  const toggleSelectedEquippedItem = (itemName) => {
+    const normalizedName = cleanText(itemName);
+    if (!normalizedName) return;
+    setSelectedField((combatant) => {
+      const equipableItems = buildEquipableItems(combatant.weaponActions, combatant.equipmentItems);
+      if (!equipableItems.length) return { equippedItems: [] };
+      const current = normalizeEquippedItems(combatant.equippedItems, equipableItems);
+      const targetKey = tokenKey(normalizedName);
+      if (!targetKey) return {};
+      const hasItem = current.some((entry) => tokenKey(entry) === targetKey);
+      if (hasItem) {
+        return {
+          equippedItems: current.filter((entry) => tokenKey(entry) !== targetKey),
+        };
+      }
+      const canonical = equipableItems.find((entry) => tokenKey(entry) === targetKey) || normalizedName;
+      return {
+        equippedItems: normalizeEquippedItems([...current, canonical], equipableItems),
+      };
+    });
   };
 
   const adjustSelectedTempHp = (delta) => {
@@ -3453,37 +3551,38 @@ export default function CombatPanel({
               </div>
               <div className={`${styles.restrictedModalBody} koa-scrollbar-thin`}>
                 <div className={styles.restrictedProfileTop}>
-                  <div className={styles.restrictedPortraitWrap}>
-                    {selectedRestrictedPortrait ? (
-                      <img
-                        className={styles.restrictedPortraitImg}
-                        src={selectedRestrictedPortrait}
-                        alt={`${selected.name} portrait`}
-                      />
-                    ) : (
-                      <div className={styles.restrictedPortraitFallback}>{initials(selected.name)}</div>
-                    )}
+                  <div className={styles.restrictedHeroRow}>
+                    <div className={styles.restrictedSideStack}>
+                      <div className={styles.restrictedIdentityField}>
+                        <div className={styles.label}>Race</div>
+                        <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
+                      </div>
+                      <div className={styles.restrictedIdentityField}>
+                        <div className={styles.label}>Level</div>
+                        <div className={styles.restrictedIdentityValue}>
+                          {selected.level === '' || selected.level == null ? '—' : selected.level}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={styles.restrictedPortraitWrap}>
+                      {selectedRestrictedPortrait ? (
+                        <img
+                          className={styles.restrictedPortraitImg}
+                          src={selectedRestrictedPortrait}
+                          alt={`${selected.name} portrait`}
+                        />
+                      ) : (
+                        <div className={styles.restrictedPortraitFallback}>{initials(selected.name)}</div>
+                      )}
+                    </div>
+                    <div className={`${styles.restrictedIdentityField} ${styles.restrictedClassField}`}>
+                      <div className={styles.label}>Class</div>
+                      <div className={styles.restrictedIdentityValue}>{cleanText(selected.className || selected.role) || 'Unclassified'}</div>
+                    </div>
                   </div>
                   <div className={styles.restrictedNameBlock}>
                     <div className={styles.label}>Name</div>
                     <div className={styles.restrictedNameValue}>{selected.name}</div>
-                  </div>
-                </div>
-
-                <div className={styles.restrictedIdentityGrid}>
-                  <div className={styles.restrictedIdentityField}>
-                    <div className={styles.label}>Race</div>
-                    <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
-                  </div>
-                  <div className={styles.restrictedIdentityField}>
-                    <div className={styles.label}>Class</div>
-                    <div className={styles.restrictedIdentityValue}>{cleanText(selected.className || selected.role) || 'Unclassified'}</div>
-                  </div>
-                  <div className={styles.restrictedIdentityField}>
-                    <div className={styles.label}>Level</div>
-                    <div className={styles.restrictedIdentityValue}>
-                      {selected.level === '' || selected.level == null ? '—' : selected.level}
-                    </div>
                   </div>
                 </div>
 
@@ -4049,6 +4148,32 @@ export default function CombatPanel({
                           <div className={styles.sheetListBlock}>
                             {selectedEquipment.length ? selectedEquipment.join(', ') : <span className={styles.sheetListFallback}>No equipment parsed.</span>}
                           </div>
+                          <div className={styles.equippedPickerWrap}>
+                            <div className={styles.equippedPickerHeading}>Mark Equipped</div>
+                            {selectedEquipableItems.length ? (
+                              <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
+                                {selectedEquipableItems.map((item) => {
+                                  const itemKey = tokenKey(item);
+                                  const checked = selectedEquippedItemKeys.has(itemKey);
+                                  return (
+                                    <label key={`sheet-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => {
+                                          playNav();
+                                          toggleSelectedEquippedItem(item);
+                                        }}
+                                      />
+                                      <span>{item}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
+                            )}
+                          </div>
                         </div>
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
                           <div className={styles.sheetSubTitle}>Other Possessions</div>
@@ -4207,6 +4332,32 @@ export default function CombatPanel({
                     value={normalizeStringList(selected.equipmentItems).join('\n')}
                     onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
                   />
+                  <div className={styles.equippedPickerWrap}>
+                    <div className={styles.equippedPickerHeading}>Mark Equipped Items</div>
+                    {selectedEquipableItems.length ? (
+                      <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
+                        {selectedEquipableItems.map((item) => {
+                          const itemKey = tokenKey(item);
+                          const checked = selectedEquippedItemKeys.has(itemKey);
+                          return (
+                            <label key={`edit-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  playNav();
+                                  toggleSelectedEquippedItem(item);
+                                }}
+                              />
+                              <span>{item}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
+                    )}
+                  </div>
                 </div>
 
                 <div className={styles.divider}/>
