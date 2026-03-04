@@ -121,6 +121,7 @@ export function createSupabaseAdapter() {
   let visibilityListenerBound = false;
 
   const pendingQueue = new Map();
+  const lastSeenRemoteUpdatedAt = new Map();
   const status = {
     enabled: true,
     configured: isSupabaseConfigured(),
@@ -309,6 +310,11 @@ export function createSupabaseAdapter() {
     const ownScope = getScope(key);
     if (ownScope !== scope) return;
 
+    const remoteStamp = normalizeText(row?.updated_at);
+    const stampKey = queueKey(scope, key);
+    if (remoteStamp && lastSeenRemoteUpdatedAt.get(stampKey) === remoteStamp) return;
+    if (remoteStamp) lastSeenRemoteUpdatedAt.set(stampKey, remoteStamp);
+
     const payload = normalizePayload(row?.payload);
     writeLocalValue(key, payload.type, payload.value);
     emitRemoteChange(key, payload.value, { type: payload.type, reason });
@@ -317,6 +323,7 @@ export function createSupabaseAdapter() {
   function applyRemoteDelete(scope, row, reason) {
     const key = normalizeText(row?.doc_key);
     if (!key) return;
+    lastSeenRemoteUpdatedAt.delete(queueKey(scope, key));
     removeLocalValue(key);
     emitRemoteChange(key, undefined, { type: 'remove', reason });
   }

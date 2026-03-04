@@ -208,6 +208,63 @@ const ENEMY_TYPES = [
 const PC_COLORS = ['#a0c4ff','#c0a8ff','#ffd6a0','#a0ffcc','#ffb3b3','#ffe4a0','#b3e0ff'];
 const SPELL_SLOT_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const SPELLBOOK_LEVELS = [0, ...SPELL_SLOT_LEVELS];
+const ENCOUNTER_PERSIST_DEBOUNCE_MS = 120;
+const PROFILE_SYNC_FIELDS = new Set([
+  'race',
+  'className',
+  'role',
+  'level',
+  'hp',
+  'maxHP',
+  'ac',
+  'speed',
+  'initiativeBonus',
+  'proficiencyBonus',
+  'spellSaveDC',
+  'attackModifier',
+  'spellAttackModifier',
+  'abilities',
+  'savingThrows',
+  'skills',
+  'senses',
+  'spellbookEntries',
+  'spellList',
+  'classFeatures',
+  'spellSlots',
+  'featureCharges',
+  'hideSensitiveStats',
+  'weaponActions',
+  'equipmentItems',
+  'equippedItems',
+  'otherPossessions',
+  'sourceSheet',
+  'sourceSheetFileName',
+  'sourceSheetFormat',
+  'sheetWarnings',
+  'sheetMissingFields',
+  'sheetUnknownFields',
+  'sheetImportedAt',
+]);
+const PROFILE_SIMPLE_SYNC_FIELDS = new Set([
+  'race',
+  'className',
+  'role',
+  'level',
+  'hp',
+  'maxHP',
+  'ac',
+  'speed',
+  'initiativeBonus',
+  'proficiencyBonus',
+  'spellSaveDC',
+  'attackModifier',
+  'spellAttackModifier',
+  'hideSensitiveStats',
+  'sourceSheet',
+  'sourceSheetFileName',
+  'sourceSheetFormat',
+  'sheetImportedAt',
+]);
 const TOKEN_IMAGE_BY_ID = {
   arlis: '/Token/arlis.png',
   castor: '/Token/castor.png',
@@ -1802,6 +1859,8 @@ export default function CombatPanel({
   const active = panelType === 'combat';
   const repositorySourceIdRef = useRef(createId('combat-sync'));
   const suppressNextPersistRef = useRef(false);
+  const persistTimerRef = useRef(null);
+  const pendingPersistEncounterRef = useRef(null);
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
   const [selectedId, setSelectedId] = useState(null);
@@ -1945,12 +2004,11 @@ export default function CombatPanel({
     const unsubscribe = repository.subscribe(LS_KEY, (event) => {
       if (event?.meta?.sourceId === repositorySourceIdRef.current) return;
       if (event?.meta?.type && event.meta.type !== 'json' && event.meta.type !== 'remove') return;
+      if (event?.meta?.source === 'remote' && pendingPersistEncounterRef.current) return;
 
       const incoming = normalize(event?.value) || defaultEncounter();
       setEncounter((prev) => {
-        try {
-          if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
-        } catch {}
+        if (Object.is(prev, incoming)) return prev;
         suppressNextPersistRef.current = true;
         return incoming;
       });
@@ -1962,10 +2020,37 @@ export default function CombatPanel({
     if (!hydrated.current) { hydrated.current = true; return; }
     if (suppressNextPersistRef.current) {
       suppressNextPersistRef.current = false;
+      pendingPersistEncounterRef.current = null;
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
       return;
     }
-    saveState(encounter, { sourceId: repositorySourceIdRef.current });
+    pendingPersistEncounterRef.current = encounter;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+    }
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      const pendingEncounter = pendingPersistEncounterRef.current;
+      if (!pendingEncounter) return;
+      saveState(pendingEncounter, { sourceId: repositorySourceIdRef.current });
+    }, ENCOUNTER_PERSIST_DEBOUNCE_MS);
   }, [encounter]);
+
+  useEffect(() => {
+    return () => {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+      }
+      const pendingEncounter = pendingPersistEncounterRef.current;
+      if (pendingEncounter) {
+        saveState(pendingEncounter, { sourceId: repositorySourceIdRef.current });
+      }
+    };
+  }, []);
 
   const combatants = encounter.combatants;
   const selected = useMemo(() => combatants.find(c => c.id === selectedId) || null, [combatants, selectedId]);
@@ -1982,18 +2067,18 @@ export default function CombatPanel({
   const selectedRestrictedPortrait = useMemo(() => {
     if (!selected) return '';
     return cleanText(selected.customImage) || tokenImageForCharacter(selected.sourceCharacterId, selected.name) || '';
-  }, [selected]);
+  }, [selected?.customImage, selected?.sourceCharacterId, selected?.name]);
   const selectedStatusConditions = useMemo(
     () => normalizeStringList(selected?.status),
-    [selected]
+    [selected?.status]
   );
   const selectedEquipment = useMemo(
     () => normalizeStringList(selected?.equipmentItems),
-    [selected]
+    [selected?.equipmentItems]
   );
   const selectedWeaponActionRows = useMemo(
     () => normalizeWeaponActions(selected?.weaponActions, selected?.equipmentItems),
-    [selected]
+    [selected?.weaponActions, selected?.equipmentItems]
   );
   const selectedEquipableItems = useMemo(
     () => buildEquipableItems(selectedWeaponActionRows, selectedEquipment),
@@ -2001,7 +2086,7 @@ export default function CombatPanel({
   );
   const selectedEquippedItems = useMemo(
     () => normalizeEquippedItems(selected?.equippedItems, selectedEquipableItems),
-    [selected, selectedEquipableItems]
+    [selected?.equippedItems, selectedEquipableItems]
   );
   const selectedEquippedItemKeys = useMemo(
     () => new Set(selectedEquippedItems.map((item) => tokenKey(item)).filter(Boolean)),
@@ -2025,13 +2110,16 @@ export default function CombatPanel({
   const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
-  }, [selected]);
+  }, [selected?.hp]);
   const selectedNotableFeature = useMemo(
     () => cleanText(selected?.notableFeature),
-    [selected]
+    [selected?.notableFeature]
   );
   const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
-  const selectedCastorWilliamRole = useMemo(() => castorWilliamSyncRole(selected), [selected]);
+  const selectedCastorWilliamRole = useMemo(
+    () => castorWilliamSyncRole(selected),
+    [selected?.sourceCharacterId, selected?.name]
+  );
   const castorWilliamResourceSyncAvailable = !!castorWilliamPair.castor && !!castorWilliamPair.william;
   const castorWilliamResourceSyncEnabled = !!encounter.castorWilliamResourceSync;
   const castorWilliamSyncSwitchTitle = castorWilliamResourceSyncAvailable
@@ -2040,19 +2128,19 @@ export default function CombatPanel({
   const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
   const selectedSavingThrowRows = useMemo(
     () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
-    [selected]
+    [selected?.savingThrows, selected?.abilities, selected?.level]
   );
   const selectedSkillRows = useMemo(
     () => normalizeSkillRows(selected?.skills, selected?.abilities, selected?.level),
-    [selected]
+    [selected?.skills, selected?.abilities, selected?.level]
   );
   const selectedSenseRows = useMemo(
     () => normalizeSenseRows(selected?.senses),
-    [selected]
+    [selected?.senses]
   );
   const selectedSpellbookEntries = useMemo(
     () => normalizeSpellbookEntries(selected?.spellbookEntries, selected?.spellList),
-    [selected]
+    [selected?.spellbookEntries, selected?.spellList]
   );
   const selectedSpellActionRows = useMemo(
     () => selectedSpellbookEntries.map((spell, index) => buildSpellActionRow(spell, index)),
@@ -2104,7 +2192,7 @@ export default function CombatPanel({
       return { style, isCritical: true };
     }
     return { style, isCritical: false };
-  }, [selected]);
+  }, [selected?.hp, selected?.maxHP]);
   const selectedProficiencyBonus = useMemo(() => {
     if (!selected) return null;
     if (selected.proficiencyBonus != null && selected.proficiencyBonus !== '') {
@@ -2112,10 +2200,10 @@ export default function CombatPanel({
     }
     if (selected.level === '' || selected.level == null) return null;
     return proficiencyBonusFromLevel(selected.level);
-  }, [selected]);
+  }, [selected?.proficiencyBonus, selected?.level]);
   const allSpellSlots = useMemo(
     () => normalizeSpellSlots(selected?.spellSlots),
-    [selected]
+    [selected?.spellSlots]
   );
   const visibleSheetSpellSlots = useMemo(
     () => allSpellSlots.filter((slot) => Number(slot.max) > 0),
@@ -2123,7 +2211,7 @@ export default function CombatPanel({
   );
   const allFeatureCharges = useMemo(
     () => normalizeFeatureCharges(selected?.featureCharges),
-    [selected]
+    [selected?.featureCharges]
   );
   const visibleSheetFeatureCharges = useMemo(
     () => allFeatureCharges.filter((feature) => Number(feature.max) > 0),
@@ -2522,9 +2610,9 @@ export default function CombatPanel({
   const setSelectedField = (patchOrBuilder) => {
     if (!selectedId) return;
     setEncounter((prev) => {
-      const next = normalize(prev);
-      const activeId = next.combatants[next.activeIndex]?.id || null;
-      const selectedCombatant = next.combatants.find((combatant) => combatant.id === selectedId);
+      if (!prev || !Array.isArray(prev.combatants)) return prev;
+      const activeId = prev.combatants[prev.activeIndex]?.id || null;
+      const selectedCombatant = prev.combatants.find((combatant) => combatant.id === selectedId);
       if (!selectedCombatant || !canControlCombatant(selectedCombatant)) return prev;
 
       const patchCandidate =
@@ -2547,8 +2635,11 @@ export default function CombatPanel({
       if (Object.prototype.hasOwnProperty.call(patch, 'equippedItems')) {
         patch.equippedItems = normalizeStringList(patch.equippedItems);
       }
+
+      const patchKeys = Object.keys(patch);
+      if (!patchKeys.length) return prev;
       const previousProfileKey = sheetProfileKey(selectedCombatant.sourceCharacterId, selectedCombatant.name);
-      const pair = findCastorWilliamPair(next.combatants);
+      const pair = findCastorWilliamPair(prev.combatants);
       const syncRole = castorWilliamSyncRole(selectedCombatant);
       const mirrorTargetId =
         syncRole === 'castor'
@@ -2557,12 +2648,19 @@ export default function CombatPanel({
             ? pair.castor?.id || ''
             : '';
       const mirroredResourcePatch =
-        next.castorWilliamResourceSync && mirrorTargetId
+        prev.castorWilliamResourceSync && mirrorTargetId
           ? pickCastorWilliamResourcePatch(patch)
           : null;
+      const mirroredPatch = mirroredResourcePatch ? cloneCastorWilliamResourcePatch(mirroredResourcePatch) : null;
+      const mirroredPatchKeys = mirroredPatch ? Object.keys(mirroredPatch) : [];
+      let selectedChanged = false;
+      let mirroredChanged = false;
 
-      next.combatants = next.combatants.map((combatant) => {
+      let nextCombatants = prev.combatants.map((combatant) => {
         if (combatant.id === selectedCombatant.id) {
+          const hasSelectedFieldChanges = patchKeys.some((key) => !Object.is(combatant[key], patch[key]));
+          if (!hasSelectedFieldChanges) return combatant;
+          selectedChanged = true;
           const merged = { ...combatant, ...patch };
           if (
             Object.prototype.hasOwnProperty.call(patch, 'weaponActions')
@@ -2574,31 +2672,88 @@ export default function CombatPanel({
           }
           return merged;
         }
-        if (mirroredResourcePatch && combatant.id === mirrorTargetId) {
-          return { ...combatant, ...cloneCastorWilliamResourcePatch(mirroredResourcePatch) };
+        if (mirroredPatch && combatant.id === mirrorTargetId) {
+          const hasMirrorFieldChanges = mirroredPatchKeys.some((key) => !Object.is(combatant[key], mirroredPatch[key]));
+          if (!hasMirrorFieldChanges) return combatant;
+          mirroredChanged = true;
+          return { ...combatant, ...mirroredPatch };
         }
         return combatant;
       });
 
-      const updatedSelected = next.combatants.find((combatant) => combatant.id === selectedCombatant.id);
+      if (!selectedChanged && !mirroredChanged) return prev;
+
+      const next = {
+        ...prev,
+        combatants: nextCombatants,
+      };
+      const updatedSelected = nextCombatants.find((combatant) => combatant.id === selectedCombatant.id);
       if (updatedSelected) {
         const nextProfileKey = sheetProfileKey(updatedSelected.sourceCharacterId, updatedSelected.name);
-        if (nextProfileKey && (updatedSelected.sourceSheet || next.sheetProfiles?.[nextProfileKey] || next.sheetProfiles?.[previousProfileKey])) {
-          const nextProfiles = { ...(next.sheetProfiles || {}) };
+        if (nextProfileKey && (updatedSelected.sourceSheet || prev.sheetProfiles?.[nextProfileKey] || prev.sheetProfiles?.[previousProfileKey])) {
+          const nextProfiles = { ...(prev.sheetProfiles || {}) };
           if (previousProfileKey && previousProfileKey !== nextProfileKey) delete nextProfiles[previousProfileKey];
-          nextProfiles[nextProfileKey] = buildSheetProfileFromCombatant(updatedSelected);
+          const patchTouchesProfile = patchKeys.some((key) => PROFILE_SYNC_FIELDS.has(key));
+          const patchNeedsFullProfileSync = patchKeys.some(
+            (key) => PROFILE_SYNC_FIELDS.has(key) && !PROFILE_SIMPLE_SYNC_FIELDS.has(key)
+          );
+          const existingProfile = nextProfiles[nextProfileKey] || nextProfiles[previousProfileKey];
+
+          if (!patchTouchesProfile && existingProfile) {
+            nextProfiles[nextProfileKey] = existingProfile;
+          } else if (!patchNeedsFullProfileSync && existingProfile) {
+            nextProfiles[nextProfileKey] = {
+              ...existingProfile,
+              race: cleanText(updatedSelected.race),
+              className: cleanText(updatedSelected.className || updatedSelected.role),
+              role: cleanText(updatedSelected.className || updatedSelected.role),
+              level: updatedSelected.level === '' || updatedSelected.level == null ? '' : toInt(updatedSelected.level, ''),
+              hp: updatedSelected.hp === '' || updatedSelected.hp == null ? '' : toInt(updatedSelected.hp, 0),
+              maxHP: updatedSelected.maxHP === '' || updatedSelected.maxHP == null ? '' : toInt(updatedSelected.maxHP, 0),
+              ac: updatedSelected.ac === '' || updatedSelected.ac == null ? '' : toInt(updatedSelected.ac, 0),
+              speed: updatedSelected.speed === '' || updatedSelected.speed == null ? '' : toInt(updatedSelected.speed, 0),
+              initiativeBonus:
+                updatedSelected.initiativeBonus == null || updatedSelected.initiativeBonus === ''
+                  ? 0
+                  : toInt(updatedSelected.initiativeBonus, 0),
+              proficiencyBonus:
+                updatedSelected.proficiencyBonus == null || updatedSelected.proficiencyBonus === ''
+                  ? null
+                  : toInt(updatedSelected.proficiencyBonus, null),
+              spellSaveDC:
+                updatedSelected.spellSaveDC == null || updatedSelected.spellSaveDC === ''
+                  ? null
+                  : toInt(updatedSelected.spellSaveDC, null),
+              attackModifier:
+                updatedSelected.attackModifier == null || updatedSelected.attackModifier === ''
+                  ? null
+                  : toInt(updatedSelected.attackModifier, null),
+              spellAttackModifier:
+                updatedSelected.spellAttackModifier == null || updatedSelected.spellAttackModifier === ''
+                  ? null
+                  : toInt(updatedSelected.spellAttackModifier, null),
+              hideSensitiveStats: !!updatedSelected.hideSensitiveStats,
+              sourceSheet: !!updatedSelected.sourceSheet,
+              sourceSheetFileName: cleanText(updatedSelected.sourceSheetFileName),
+              sourceSheetFormat: cleanText(updatedSelected.sourceSheetFormat),
+              sheetImportedAt: toInt(updatedSelected.sheetImportedAt, 0),
+            };
+          } else {
+            nextProfiles[nextProfileKey] = buildSheetProfileFromCombatant(updatedSelected);
+          }
           next.sheetProfiles = nextProfiles;
         }
       }
 
       if (Object.prototype.hasOwnProperty.call(patch, 'init') || Object.prototype.hasOwnProperty.call(patch, 'side') || Object.prototype.hasOwnProperty.call(patch, 'name')) {
-        next.combatants = sortCombatants(next.combatants);
-        if (next.combatants.length === 0) next.activeIndex = 0;
+        nextCombatants = sortCombatants(nextCombatants);
+        next.combatants = nextCombatants;
+        if (nextCombatants.length === 0) next.activeIndex = 0;
         else if (activeId) {
-          const idx = next.combatants.findIndex((combatant) => combatant.id === activeId);
-          next.activeIndex = idx >= 0 ? idx : clamp(next.activeIndex, 0, next.combatants.length - 1);
+          const idx = nextCombatants.findIndex((combatant) => combatant.id === activeId);
+          next.activeIndex = idx >= 0 ? idx : clamp(prev.activeIndex, 0, nextCombatants.length - 1);
         } else {
-          next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
+          next.activeIndex = clamp(prev.activeIndex, 0, nextCombatants.length - 1);
         }
       }
       return next;
