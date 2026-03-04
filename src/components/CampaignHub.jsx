@@ -155,6 +155,7 @@ export default function CampaignHub(props) {
   const [assignablePlayers, setAssignablePlayers] = useState([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [playersError, setPlayersError] = useState('');
+  const [questBoardView, setQuestBoardView] = useState('party');
 
   useEffect(() => {
     if (!authEnabled || !canManageCampaign) {
@@ -286,6 +287,35 @@ export default function CampaignHub(props) {
     () => visiblePersonalQuests.filter((q) => questStatusType(q) === 'completed'),
     [visiblePersonalQuests]
   );
+  const showingPersonalQuestBoard = questBoardView === 'personal';
+  const displayedActiveQuests = showingPersonalQuestBoard ? activePersonalQuests : activePartyQuests;
+  const displayedCompletedQuests = showingPersonalQuestBoard ? completedPersonalQuests : completedPartyQuests;
+  const displayedBoardTitle = showingPersonalQuestBoard ? 'Personal Quest Board' : 'Party Quest Board';
+  const displayedBoardSub = showingPersonalQuestBoard
+    ? (
+      canManageCampaign
+        ? 'Assign quests to specific players. Only they can view them.'
+        : 'Only quests assigned to your account show here.'
+    )
+    : 'Shared with the whole party.';
+  const displayedEmptyActiveTitle = showingPersonalQuestBoard ? 'No active personal quests.' : 'No active party quests.';
+  const displayedEmptyActiveBody = showingPersonalQuestBoard
+    ? (
+      canManageCampaign
+        ? <>Hit <strong>+ Add Quest</strong> and assign it to a player.</>
+        : (authEnabled && !currentUserId && !currentUserEmail)
+          ? 'Sign in to view personal quests.'
+          : 'Your assigned personal quests will appear here.'
+    )
+    : (
+      canManageQuests
+        ? <>Hit <strong>+ Add Quest</strong> to start tracking hooks.</>
+        : 'Party quests created by your owner/DM will appear here.'
+    );
+  const displayedEmptyCompletedTitle = showingPersonalQuestBoard ? 'No completed personal quests.' : 'Nothing completed yet.';
+  const displayedEmptyCompletedBody = showingPersonalQuestBoard
+    ? 'Completed personal quests appear here.'
+    : 'Completed party quests appear here.';
 
   const newId = () => createId('quest');
 
@@ -301,7 +331,7 @@ export default function CampaignHub(props) {
     setQuestDraft({
       title: '',
       type: 'Side',
-      board: 'party',
+      board: showingPersonalQuestBoard ? 'personal' : 'party',
       assignedUserId: '',
       assignedEmail: '',
       assignedUsername: '',
@@ -941,36 +971,69 @@ export default function CampaignHub(props) {
           {/* ========== QUEST BOARD ========== */}
           {campaignTab === 'quests' && (
             <div className={styles.questBoardStack}>
-              <div className={styles.questBoardSection}>
-                <div className={styles.questBoardHeader}>
-                  <div className={styles.questBoardTitle}>Party Quest Board</div>
-                  <div className={styles.questBoardSub}>Shared with the whole party.</div>
-                </div>
-                <div className={styles.questGrid}>
+              <div className={`${styles.questBoardFrame} ${showingPersonalQuestBoard ? styles.questBoardFramePersonal : styles.questBoardFrameParty}`}>
+                <div className={styles.questBoardBanner}>
                   <div>
+                    <div className={styles.questBoardEyebrow}>Pinned Notices</div>
+                    <div className={styles.questBoardTitle}>{displayedBoardTitle}</div>
+                    <div className={styles.questBoardSub}>{displayedBoardSub}</div>
+                  </div>
+
+                  <div className={styles.questBoardToggleWrap}>
+                    <div className={styles.questBoardToggleLabel}>Board View</div>
+                    <div className={styles.questBoardToggle} role="group" aria-label="Quest board view">
+                      <span
+                        aria-hidden="true"
+                        className={`${styles.questBoardToggleThumb}${showingPersonalQuestBoard ? ` ${styles.questBoardToggleThumbPersonal}` : ''}`}
+                      />
+                      <button
+                        type="button"
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => setQuestBoardView('party')}
+                        className={`${styles.questBoardToggleBtn}${!showingPersonalQuestBoard ? ` ${styles.questBoardToggleBtnActive}` : ''}`}
+                        aria-pressed={!showingPersonalQuestBoard}
+                      >
+                        Party
+                      </button>
+                      <button
+                        type="button"
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => setQuestBoardView('personal')}
+                        className={`${styles.questBoardToggleBtn}${showingPersonalQuestBoard ? ` ${styles.questBoardToggleBtnActive}` : ''}`}
+                        aria-pressed={showingPersonalQuestBoard}
+                      >
+                        Personal
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.questGrid}>
+                  <div className={styles.questColumn}>
                     <div className={styles.sectionHeader}>
                       <div className={styles.sectionHeaderTitle}>Active Quests</div>
-                      <div className={styles.sectionHeaderCount}>{activePartyQuests.length} active</div>
+                      <div className={styles.sectionHeaderCount}>{displayedActiveQuests.length} active</div>
                     </div>
                     <div className={styles.listCol}>
-                      {activePartyQuests.length === 0 ? (
-                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                          <div className={styles.blockTitle}>No active party quests.</div>
-                          <div className={styles.bodyCopy}>
-                            {canManageQuests
-                              ? <>Hit <strong>+ Add Quest</strong> to start tracking hooks.</>
-                              : 'Party quests created by your owner/DM will appear here.'}
-                          </div>
+                      {displayedActiveQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted} ${styles.questNoticeCard} ${styles.questEmptyCard}`}>
+                          <div className={styles.blockTitle}>{displayedEmptyActiveTitle}</div>
+                          <div className={styles.bodyCopy}>{displayedEmptyActiveBody}</div>
                         </div>
                       ) : (
-                        activePartyQuests.map((q) => (
-                          <div key={q.id} className={styles.softCard} onMouseEnter={() => playHover()}>
+                        displayedActiveQuests.map((q) => (
+                          <div key={q.id} className={`${styles.softCard} ${styles.questNoticeCard}`} onMouseEnter={() => playHover()}>
                             <div className={styles.questRow}>
                               <div className={styles.questBody}>
                                 <div className={styles.questTitleRow}>
                                   <div className={styles.questTitle}>{q.title}</div>
                                   <span className={pillClass(q.type)}>{q.type}</span>
                                 </div>
+                                {showingPersonalQuestBoard && (
+                                  <div className={styles.questMeta}>
+                                    <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
+                                  </div>
+                                )}
                                 {(q.giver || q.location) && (
                                   <div className={styles.questMeta}>
                                     {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
@@ -993,133 +1056,31 @@ export default function CampaignHub(props) {
                     </div>
                   </div>
 
-                  <div>
+                  <div className={styles.questColumn}>
                     <div className={styles.sectionHeader}>
                       <div className={styles.sectionHeaderTitle}>Completed</div>
-                      <div className={styles.sectionHeaderCount}>{completedPartyQuests.length} done</div>
+                      <div className={styles.sectionHeaderCount}>{displayedCompletedQuests.length} done</div>
                     </div>
                     <div className={styles.listCol}>
-                      {completedPartyQuests.length === 0 ? (
-                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                          <div className={styles.blockTitle}>Nothing completed yet.</div>
-                          <div className={styles.bodyCopy}>Completed party quests appear here.</div>
+                      {displayedCompletedQuests.length === 0 ? (
+                        <div className={`${styles.softCard} ${styles.softCardMuted} ${styles.questNoticeCard} ${styles.questEmptyCard}`}>
+                          <div className={styles.blockTitle}>{displayedEmptyCompletedTitle}</div>
+                          <div className={styles.bodyCopy}>{displayedEmptyCompletedBody}</div>
                         </div>
                       ) : (
-                        completedPartyQuests.map((q) => (
-                          <div key={q.id} className={`${styles.softCard} ${styles.completedCard}`} onMouseEnter={() => playHover()}>
+                        displayedCompletedQuests.map((q) => (
+                          <div key={q.id} className={`${styles.softCard} ${styles.completedCard} ${styles.questNoticeCard} ${styles.questNoticeCompleted}`} onMouseEnter={() => playHover()}>
                             <div className={styles.questRow}>
                               <div className={styles.questBody}>
                                 <div className={styles.questTitleRow}>
                                   <div className={`${styles.questTitle} ${styles.questTitleDone}`}>{q.title}</div>
                                   <span className={pillClass(q.type)}>{q.type}</span>
                                 </div>
-                                {(q.giver || q.location) && (
+                                {showingPersonalQuestBoard && (
                                   <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
-                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
-                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
+                                    <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
                                   </div>
                                 )}
-                                {q.description && <div className={`${styles.questDesc} ${styles.questMetaMuted}`}>{q.description}</div>}
-                              </div>
-                              {canManageQuests && (
-                                <div className={styles.actionsRow}>
-                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => reopenQuest(q.id)}>Reopen</button>
-                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.questBoardSection}>
-                <div className={styles.questBoardHeader}>
-                  <div className={styles.questBoardTitle}>Personal Quest Board</div>
-                  <div className={styles.questBoardSub}>
-                    {canManageCampaign
-                      ? 'Assign quests to specific players. Only they can view them.'
-                      : 'Only quests assigned to your account show here.'}
-                  </div>
-                </div>
-                <div className={styles.questGrid}>
-                  <div>
-                    <div className={styles.sectionHeader}>
-                      <div className={styles.sectionHeaderTitle}>Active Quests</div>
-                      <div className={styles.sectionHeaderCount}>{activePersonalQuests.length} active</div>
-                    </div>
-                    <div className={styles.listCol}>
-                      {activePersonalQuests.length === 0 ? (
-                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                          <div className={styles.blockTitle}>No active personal quests.</div>
-                          <div className={styles.bodyCopy}>
-                            {canManageCampaign
-                              ? <>Hit <strong>+ Add Quest</strong> and assign it to a player.</>
-                              : (authEnabled && !currentUserId && !currentUserEmail)
-                                ? 'Sign in to view personal quests.'
-                                : 'Your assigned personal quests will appear here.'}
-                          </div>
-                        </div>
-                      ) : (
-                        activePersonalQuests.map((q) => (
-                          <div key={q.id} className={styles.softCard} onMouseEnter={() => playHover()}>
-                            <div className={styles.questRow}>
-                              <div className={styles.questBody}>
-                                <div className={styles.questTitleRow}>
-                                  <div className={styles.questTitle}>{q.title}</div>
-                                  <span className={pillClass(q.type)}>{q.type}</span>
-                                </div>
-                                <div className={styles.questMeta}>
-                                  <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
-                                </div>
-                                {(q.giver || q.location) && (
-                                  <div className={styles.questMeta}>
-                                    {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
-                                    {q.location && <div><strong>Location:</strong> {q.location}</div>}
-                                  </div>
-                                )}
-                                {q.description && <div className={styles.questDesc}>{q.description}</div>}
-                              </div>
-                              {canManageQuests && (
-                                <div className={styles.actionsRow}>
-                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openEditQuest(q)}>Edit</button>
-                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => completeQuest(q.id)}>Complete</button>
-                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className={styles.sectionHeader}>
-                      <div className={styles.sectionHeaderTitle}>Completed</div>
-                      <div className={styles.sectionHeaderCount}>{completedPersonalQuests.length} done</div>
-                    </div>
-                    <div className={styles.listCol}>
-                      {completedPersonalQuests.length === 0 ? (
-                        <div className={`${styles.softCard} ${styles.softCardMuted}`}>
-                          <div className={styles.blockTitle}>No completed personal quests.</div>
-                          <div className={styles.bodyCopy}>Completed personal quests appear here.</div>
-                        </div>
-                      ) : (
-                        completedPersonalQuests.map((q) => (
-                          <div key={q.id} className={`${styles.softCard} ${styles.completedCard}`} onMouseEnter={() => playHover()}>
-                            <div className={styles.questRow}>
-                              <div className={styles.questBody}>
-                                <div className={styles.questTitleRow}>
-                                  <div className={`${styles.questTitle} ${styles.questTitleDone}`}>{q.title}</div>
-                                  <span className={pillClass(q.type)}>{q.type}</span>
-                                </div>
-                                <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
-                                  <div><strong>Assigned:</strong> {questAssigneeLabel(q)}</div>
-                                </div>
                                 {(q.giver || q.location) && (
                                   <div className={`${styles.questMeta} ${styles.questMetaMuted}`}>
                                     {q.giver && <div><strong>Giver:</strong> {q.giver}</div>}
