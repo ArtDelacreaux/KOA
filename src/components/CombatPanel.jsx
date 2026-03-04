@@ -3552,16 +3552,14 @@ export default function CombatPanel({
               <div className={`${styles.restrictedModalBody} koa-scrollbar-thin`}>
                 <div className={styles.restrictedProfileTop}>
                   <div className={styles.restrictedHeroRow}>
-                    <div className={styles.restrictedSideStack}>
-                      <div className={styles.restrictedIdentityField}>
-                        <div className={styles.label}>Race</div>
-                        <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
+                    <div className={styles.restrictedNameClassStack}>
+                      <div className={styles.restrictedNameBlock}>
+                        <div className={styles.label}>Name</div>
+                        <div className={styles.restrictedNameValue}>{selected.name}</div>
                       </div>
-                      <div className={styles.restrictedIdentityField}>
-                        <div className={styles.label}>Level</div>
-                        <div className={styles.restrictedIdentityValue}>
-                          {selected.level === '' || selected.level == null ? '—' : selected.level}
-                        </div>
+                      <div className={`${styles.restrictedIdentityField} ${styles.restrictedClassField}`}>
+                        <div className={styles.label}>Class</div>
+                        <div className={styles.restrictedIdentityValue}>{cleanText(selected.className || selected.role) || 'Unclassified'}</div>
                       </div>
                     </div>
                     <div className={styles.restrictedPortraitWrap}>
@@ -3575,14 +3573,18 @@ export default function CombatPanel({
                         <div className={styles.restrictedPortraitFallback}>{initials(selected.name)}</div>
                       )}
                     </div>
-                    <div className={`${styles.restrictedIdentityField} ${styles.restrictedClassField}`}>
-                      <div className={styles.label}>Class</div>
-                      <div className={styles.restrictedIdentityValue}>{cleanText(selected.className || selected.role) || 'Unclassified'}</div>
+                    <div className={styles.restrictedSideStack}>
+                      <div className={styles.restrictedIdentityField}>
+                        <div className={styles.label}>Race</div>
+                        <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
+                      </div>
+                      <div className={styles.restrictedIdentityField}>
+                        <div className={styles.label}>Level</div>
+                        <div className={styles.restrictedIdentityValue}>
+                          {selected.level === '' || selected.level == null ? '—' : selected.level}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className={styles.restrictedNameBlock}>
-                    <div className={styles.label}>Name</div>
-                    <div className={styles.restrictedNameValue}>{selected.name}</div>
                   </div>
                 </div>
 
