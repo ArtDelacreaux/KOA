@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import styles from './TavernMenu.module.css';
 import useLocalStorageState from './lib/useLocalStorageState';
 import { STORAGE_KEYS } from './lib/storageKeys';
+import { readJson, writeJson } from './lib/localStore';
 import { useAuth } from './auth/AuthContext';
 import {
   canUserControlCharacter,
@@ -50,6 +51,10 @@ function useAudioLoop(ref, { volume, loop = true }) {
   }, [ref, volume, loop]);
 }
 
+function loadStoredMusicPreference() {
+  return !!readJson(STORAGE_KEYS.musicOn, true);
+}
+
 /* ---------- component ---------- */
 export default function TavernMenu() {
   const {
@@ -61,7 +66,7 @@ export default function TavernMenu() {
   } = useAuth();
 
   /* ================= STATE ================= */
-  const [musicOn, setMusicOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(loadStoredMusicPreference);
   const [panelType, setPanelType] = useState('menu');
   const [bgVideoReady, setBgVideoReady] = useState(false);
   const [bgVideoFailed, setBgVideoFailed] = useState(false);
@@ -102,6 +107,10 @@ export default function TavernMenu() {
   const [musicVol, setMusicVol] = useState(0.06);
   const [fireVol, setFireVol] = useState(0.07);
   const [showMix, setShowMix] = useState(false);
+
+  useEffect(() => {
+    writeJson(STORAGE_KEYS.musicOn, !!musicOn);
+  }, [musicOn]);
 
   const currentUserId = String(session?.user?.id || '');
   const currentUserEmail = String(session?.user?.email || '').trim().toLowerCase();
@@ -303,14 +312,15 @@ export default function TavernMenu() {
     musicRef.current.volume = musicVol;
     fireRef.current.volume = fireVol;
 
-    if (!musicOn) {
+    const shouldEnableAudio = !musicOn;
+    if (shouldEnableAudio) {
       musicRef.current.play().catch(() => {});
       fireRef.current.play().catch(() => {});
     } else {
       musicRef.current.pause();
       fireRef.current.pause();
     }
-    setMusicOn(!musicOn);
+    setMusicOn(shouldEnableAudio);
   };
 
   const toggleNightMode = () => {
@@ -327,13 +337,12 @@ export default function TavernMenu() {
 
   const autoPlayAudio = () => {
     setMenuEntered(true);
-    if (musicOn) return; // already playing
+    if (!musicOn) return; // user preference is muted
     if (!musicRef.current || !fireRef.current) return;
     musicRef.current.volume = musicVol;
     fireRef.current.volume = fireVol;
-    musicRef.current.play().catch(() => {});
-    fireRef.current.play().catch(() => {});
-    setMusicOn(true);
+    if (musicRef.current.paused) musicRef.current.play().catch(() => {});
+    if (fireRef.current.paused) fireRef.current.play().catch(() => {});
   };
   
   const pauseAmbient = () => {

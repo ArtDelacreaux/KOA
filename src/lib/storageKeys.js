@@ -5,6 +5,7 @@ export const STORAGE_KEYS = {
   relationships: 'koa:relationships:v1',
   launcher: 'koa:launcher:v1',
   launcherNotes: 'koa:launcher:notes:v1',
+  musicOn: 'koa:audio:music:on:v1',
   bag: 'koa:bagofholding:v1',
   worldNpcs: 'koa:worldnpcs:v1',
   worldNpcDeepLink: 'koa:worldnpcs:deeplink:v1',
