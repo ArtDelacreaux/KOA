@@ -979,6 +979,7 @@ function normalizeSheetProfile(raw) {
     classFeatures: normalizeFeatureList(raw?.classFeatures),
     spellSlots: normalizeSpellSlots(raw?.spellSlots),
     featureCharges: normalizeFeatureCharges(raw?.featureCharges),
+    hideSensitiveStats: !!raw?.hideSensitiveStats,
     equipmentItems: normalizeStringList(raw?.equipmentItems),
     otherPossessions: normalizeStringList(raw?.otherPossessions),
     sourceSheet: !!raw?.sourceSheet,
@@ -1081,6 +1082,7 @@ function normalize(enc) {
       status: Array.isArray(c.status) ? c.status : String(c.status || '').split(',').map(s => s.trim()).filter(Boolean),
       concentration: c.concentration || '',
       notes: c.notes || '',
+      hideSensitiveStats: !!c.hideSensitiveStats,
       spellSlots: normalizeSpellSlots(c.spellSlots),
       featureCharges: normalizeFeatureCharges(c.featureCharges),
       equipmentItems: normalizeStringList(c.equipmentItems),
@@ -1564,6 +1566,7 @@ export default function CombatPanel({
   const [spellbookDraftEntries, setSpellbookDraftEntries] = useState([]);
   const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
   const [draft, setDraft] = useState({ name:'', side:'Enemy', init:'10', hp:'', maxHP:'', ac:'', enemyType:'goblin' });
   const [adventurerPick, setAdventurerPick] = useState(() => adventurers[0]?.name || '');
   const [hpAdjustAmount, setHpAdjustAmount] = useState('0');
@@ -1598,7 +1601,7 @@ export default function CombatPanel({
   const suppressNextPopoutSessionEndRef = useRef(false);
 
   useEffect(() => {
-    const anyModalOpen = cropOpen || addModalOpen || editorOpen || !!listEditorMode;
+    const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode;
     if (!anyModalOpen) return;
 
     const onKeyDown = (e) => {
@@ -1623,6 +1626,10 @@ export default function CombatPanel({
         setAddModalOpen(false);
         return;
       }
+      if (restrictedModalOpen) {
+        setRestrictedModalOpen(false);
+        return;
+      }
       if (editorOpen) {
         setEditorOpen(false);
       }
@@ -1630,7 +1637,7 @@ export default function CombatPanel({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
+  }, [cropOpen, addModalOpen, restrictedModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -1730,6 +1737,21 @@ export default function CombatPanel({
     [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
+  const selectedSensitiveStatsHidden = !!selected?.hideSensitiveStats;
+  const selectedStatusConditions = useMemo(
+    () => normalizeStringList(selected?.status),
+    [selected]
+  );
+  const selectedEquipment = useMemo(
+    () => normalizeStringList(selected?.equipmentItems),
+    [selected]
+  );
+  const selectedHpSummary = useMemo(() => {
+    if (!selected) return '—';
+    const currentHp = selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
+    const maxHp = selected.maxHP === '' || selected.maxHP == null ? '' : ` / ${selected.maxHP}`;
+    return `${currentHp}${maxHp}`;
+  }, [selected]);
   const castorWilliamPair = useMemo(() => findCastorWilliamPair(combatants), [combatants]);
   const selectedCastorWilliamRole = useMemo(() => castorWilliamSyncRole(selected), [selected]);
   const castorWilliamResourceSyncAvailable = !!castorWilliamPair.castor && !!castorWilliamPair.william;
@@ -1834,6 +1856,13 @@ export default function CombatPanel({
     setHpAdjustAmount('0');
     setStatusDraft(selected ? selected.status.join(', ') : '');
   }, [editorOpen, selectedId]);
+
+  useEffect(() => {
+    if (!restrictedModalOpen) return;
+    if (!selected || !selectedReadOnly) {
+      setRestrictedModalOpen(false);
+    }
+  }, [restrictedModalOpen, selected, selectedReadOnly]);
 
   useEffect(() => {
     if (!listEditorMode || !selected) return;
@@ -2060,6 +2089,7 @@ export default function CombatPanel({
       spellList: [],
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
+      hideSensitiveStats: false,
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2100,6 +2130,7 @@ export default function CombatPanel({
       spellList: [],
       classFeatures: [],
       tempHP:0, status:[], concentration:'', notes:'', spellSlots: defaultSpellSlots(), featureCharges: [], dead:false,
+      hideSensitiveStats: false,
       equipmentItems:[], otherPossessions:[],
       sourceSheet: false,
       sourceSheetFileName: '',
@@ -2125,7 +2156,11 @@ export default function CombatPanel({
       else if (idx >= 0) next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
       return next;
     });
-    if (selectedId === id) { setSelectedId(null); setEditorOpen(false); }
+    if (selectedId === id) {
+      setSelectedId(null);
+      setEditorOpen(false);
+      setRestrictedModalOpen(false);
+    }
   };
 
   const toggleDead = (id) => {
@@ -2213,6 +2248,11 @@ export default function CombatPanel({
       }
       return next;
     });
+  };
+
+  const toggleSelectedSensitiveStats = () => {
+    if (!selected || !selectedCanEdit) return;
+    setSelectedField({ hideSensitiveStats: !selected.hideSensitiveStats });
   };
 
   const adjustSelectedTempHp = (delta) => {
@@ -2373,10 +2413,21 @@ export default function CombatPanel({
     });
     setSelectedId(null);
     setEditorOpen(false);
+    setRestrictedModalOpen(false);
   };
   const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
+    if (!target) return;
     setSelectedId(id);
+    if (!canControlCombatant(target)) {
+      setEditorOpen(false);
+      setListEditorMode('');
+      setActiveSpellDraftId('');
+      setFeatureRawEditorOpen(false);
+      setRestrictedModalOpen(true);
+      return;
+    }
+    setRestrictedModalOpen(false);
     setEditorMode(forceMode || (target?.sourceSheet ? 'sheet' : 'edit'));
     setEditorOpen(true);
   };
@@ -3012,6 +3063,94 @@ export default function CombatPanel({
           </div>
         )}
 
+        {restrictedModalOpen && selected && selectedReadOnly && (
+          <div className={styles.modalBack}>
+            <div className={`${styles.modalCard} ${styles.restrictedModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Combatant Details</div>
+                <button
+                  className={btnClass('danger', 'sm')}
+                  onMouseEnter={playHover}
+                  onClick={() => { playNav(); setRestrictedModalOpen(false); }}
+                >
+                  Close
+                </button>
+              </div>
+              <div className={`${styles.restrictedModalBody} koa-scrollbar-thin`}>
+                <div className={styles.restrictedIdentityGrid}>
+                  <div className={styles.restrictedIdentityField}>
+                    <div className={styles.label}>Name</div>
+                    <div className={styles.restrictedIdentityValue}>{selected.name}</div>
+                  </div>
+                  <div className={styles.restrictedIdentityField}>
+                    <div className={styles.label}>Race</div>
+                    <div className={styles.restrictedIdentityValue}>{cleanText(selected.race) || 'Unknown'}</div>
+                  </div>
+                  <div className={styles.restrictedIdentityField}>
+                    <div className={styles.label}>Class</div>
+                    <div className={styles.restrictedIdentityValue}>{cleanText(selected.className || selected.role) || 'Unclassified'}</div>
+                  </div>
+                  <div className={styles.restrictedIdentityField}>
+                    <div className={styles.label}>Level</div>
+                    <div className={styles.restrictedIdentityValue}>
+                      {selected.level === '' || selected.level == null ? '—' : selected.level}
+                    </div>
+                  </div>
+                </div>
+
+                {selectedSensitiveStatsHidden && (
+                  <div className={styles.restrictedHiddenHint}>
+                    Sensitive combat stats are owner-hidden and redacted.
+                  </div>
+                )}
+
+                <div className={styles.restrictedStatsGrid}>
+                  <div className={styles.restrictedStatRow}>
+                    <div className={styles.label}>Current HP</div>
+                    <div className={styles.restrictedStatValue}>
+                      {selectedSensitiveStatsHidden ? (
+                        <span className={styles.restrictedHiddenValue}>Hidden</span>
+                      ) : (
+                        selectedHpSummary
+                      )}
+                    </div>
+                  </div>
+                  <div className={styles.restrictedStatRow}>
+                    <div className={styles.label}>Status Conditions</div>
+                    <div className={styles.restrictedStatValue}>
+                      {selectedSensitiveStatsHidden ? (
+                        <span className={styles.restrictedHiddenValue}>Hidden</span>
+                      ) : (
+                        selectedStatusConditions.length ? selectedStatusConditions.join(', ') : 'None'
+                      )}
+                    </div>
+                  </div>
+                  <div className={styles.restrictedStatRow}>
+                    <div className={styles.label}>Concentration</div>
+                    <div className={styles.restrictedStatValue}>
+                      {selectedSensitiveStatsHidden ? (
+                        <span className={styles.restrictedHiddenValue}>Hidden</span>
+                      ) : (
+                        cleanText(selected.concentration) || 'None'
+                      )}
+                    </div>
+                  </div>
+                  <div className={styles.restrictedStatRow}>
+                    <div className={styles.label}>Equipped Items</div>
+                    <div className={styles.restrictedStatValue}>
+                      {selectedSensitiveStatsHidden ? (
+                        <span className={styles.restrictedHiddenValue}>Hidden</span>
+                      ) : (
+                        selectedEquipment.length ? selectedEquipment.join(', ') : 'None listed'
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── EDITOR MODAL ── */}
         {(() => {
           if (!editorOpen || !selected) return null;
@@ -3046,6 +3185,25 @@ export default function CombatPanel({
                       <span className={styles.castorWilliamSyncToggleTrack}>
                         <span className={styles.castorWilliamSyncToggleThumb} />
                       </span>
+                    </button>
+                  )}
+                  {selectedCanEdit && (
+                    <button
+                      type="button"
+                      className={btnClass(
+                        selectedSensitiveStatsHidden ? 'gold' : 'ghost',
+                        'sm',
+                        selectedSensitiveStatsHidden ? styles.visibilityToggleOn : ''
+                      )}
+                      onMouseEnter={playHover}
+                      onClick={() => { playNav(); toggleSelectedSensitiveStats(); }}
+                      title={
+                        selectedSensitiveStatsHidden
+                          ? 'Sensitive stats are hidden from players who cannot control this combatant.'
+                          : 'Show sensitive stats in restricted details when unauthorized players inspect this combatant.'
+                      }
+                    >
+                      {selectedSensitiveStatsHidden ? 'Stats Hidden' : 'Hide Stats'}
                     </button>
                   )}
                   {editorMode === 'sheet' ? (

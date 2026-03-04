@@ -932,6 +932,94 @@
   flex-direction: column;
 }
 
+.restrictedModal {
+  width: min(640px, 94vw);
+  max-height: 86vh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.restrictedModalBody {
+  padding: 14px 16px 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.restrictedIdentityGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.restrictedIdentityField {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.02));
+  padding: 8px 10px;
+}
+
+.restrictedIdentityValue {
+  color: var(--koa-cream);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.restrictedHiddenHint {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 142, 110, 0.34);
+  background: linear-gradient(180deg, rgba(64, 20, 16, 0.52), rgba(42, 14, 12, 0.62));
+  color: rgba(255, 206, 188, 0.92);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.45;
+  padding: 8px 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.restrictedStatsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.restrictedStatRow {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  background: rgba(0, 0, 0, 0.28);
+  padding: 8px 10px;
+}
+
+.restrictedStatValue {
+  color: rgba(255, 238, 210, 0.92);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.restrictedHiddenValue {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 184, 152, 0.44);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(52, 20, 16, 0.95),
+    rgba(52, 20, 16, 0.95) 8px,
+    rgba(76, 30, 22, 0.95) 8px,
+    rgba(76, 30, 22, 0.95) 16px
+  );
+  color: rgba(255, 220, 196, 0.94);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .editorModal {
   width: min(950px, 92vw);
   max-height: 82vh;
@@ -1101,6 +1189,11 @@
   border-color: rgba(150, 205, 255, 0.62) !important;
   color: rgba(232, 244, 255, 0.98) !important;
   filter: brightness(1.06);
+}
+
+.visibilityToggleOn {
+  border-color: rgba(255, 180, 120, 0.62) !important;
+  box-shadow: 0 8px 18px rgba(48, 20, 10, 0.42);
 }
 
 .editorCloseButton {
@@ -3190,6 +3283,10 @@
 
   .sheetAbilityChipGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .restrictedIdentityGrid {
+    grid-template-columns: 1fr;
   }
 
   .sheetAbilityChipMod {
