@@ -181,6 +181,33 @@ const INITIAL_ATRIA_POINTS = [
   { locationId: 7, x: 27.4, y: 45.8 }, // SkulPol
 ];
 
+const ABSOLUTE_URL_RE = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
+
+function resolveLoreImageSrc(src) {
+  const raw = String(src || '').trim();
+  if (!raw) return '';
+  if (ABSOLUTE_URL_RE.test(raw)) return raw;
+
+  const normalizedPath = raw
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '');
+
+  if (!normalizedPath) return '';
+
+  const base = String(import.meta.env.BASE_URL || '/');
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+
+  // Avoid duplicating the app base if the stored path already includes it.
+  if (normalizedBase !== '/' && normalizedPath.startsWith(normalizedBase.slice(1))) {
+    return `/${normalizedPath}`;
+  }
+
+  return normalizedBase === '/'
+    ? `/${normalizedPath}`
+    : `${normalizedBase}${normalizedPath}`;
+}
+
 // helper that merges stored edits with defaults
 function mergeGallery(defaultGallery, storedGallery) {
   if (!storedGallery || typeof storedGallery !== 'object') return defaultGallery;
@@ -309,6 +336,7 @@ function InteractiveAtriaMap({
 
   const selectedPoint = (points || []).find((point) => point.locationId === selectedPointId) || null;
   const selectedLocation = selectedPoint ? getLocationById(selectedPoint.locationId) : null;
+  const atriaMapSrc = resolveLoreImageSrc(ATRIA_MAP_SRC);
 
   const exportPoints = (points || []).map((point) => ({
     locationId: point.locationId,
@@ -581,7 +609,7 @@ function InteractiveAtriaMap({
           }}
         >
           <img
-            src={ATRIA_MAP_SRC}
+            src={atriaMapSrc}
             alt="The Continent of Atria"
             draggable={false}
             className={styles.atriaMapImage}
@@ -638,11 +666,12 @@ function ImageCard({ item, onClick }) {
   // Allow per-card preview control:
   // item.pos: 'center top' etc
   // item.fit: 'cover' or 'contain'
+  const resolvedSrc = resolveLoreImageSrc(item.src);
   const pos = item.pos || 'center';
   const fit = item.fit || 'cover';
-  const mediaVars = item.src
+  const mediaVars = resolvedSrc
     ? {
-      '--wl-image-url': `url(${item.src})`,
+      '--wl-image-url': `url(${resolvedSrc})`,
       '--wl-image-pos': pos,
       '--wl-image-fit': fit,
     }
@@ -654,10 +683,10 @@ function ImageCard({ item, onClick }) {
       className={styles.imageCard}
     >
       <div
-        className={`${styles.imageCardMedia} ${!item.src ? styles.imageCardMediaEmpty : ''}`}
+        className={`${styles.imageCardMedia} ${!resolvedSrc ? styles.imageCardMediaEmpty : ''}`}
         style={mediaVars}
       >
-        {!item.src && (
+        {!resolvedSrc && (
           <div className={styles.imageCardPlaceholder}>
             <div className={styles.imageCardPlaceholderIcon}>🖼️</div>
             <div className={styles.imageCardPlaceholderText}>
@@ -736,6 +765,7 @@ function Lightbox({
   }, [item, onClose]);
 
   if (!item) return null;
+  const resolvedSrc = resolveLoreImageSrc(item.src);
 
 
   const tab = item._tab || 'maps';
@@ -853,14 +883,14 @@ function Lightbox({
   const setZoomClamped = (val) => setZoom(clamp(val, 1, 5));
 
   const onWheel = (e) => {
-    if (!item?.src) return;
+    if (!resolvedSrc) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.12 : 0.12;
     setZoomClamped(+(zoom + delta).toFixed(2));
   };
 
   const startDrag = (e) => {
-    if (!item?.src) return;
+    if (!resolvedSrc) return;
     setDragging(true);
     dragRef.current = { startX: e.clientX, startY: e.clientY, panX: pan.x, panY: pan.y };
   };
@@ -904,9 +934,9 @@ function Lightbox({
             className={`koa-scrollbar-thin ${styles.lightboxInfoGrid}`}
           >
             <div className={styles.lightboxImageFrame}>
-              {item.src ? (
+              {resolvedSrc ? (
                 <img
-                  src={item.src}
+                  src={resolvedSrc}
                   alt={item.title}
                   className={styles.lightboxInfoImage}
                 />
@@ -1020,7 +1050,7 @@ function Lightbox({
           <div className={styles.lightboxControls}>
             <button
               onClick={zoomOut}
-              disabled={!item.src || zoom <= 1}
+              disabled={!resolvedSrc || zoom <= 1}
               className={styles.lightboxCtrlBtn}
               title="Zoom out"
             >−</button>
@@ -1031,7 +1061,7 @@ function Lightbox({
               max={5}
               step={0.05}
               value={zoom}
-              disabled={!item.src}
+              disabled={!resolvedSrc}
               onChange={(e) => setZoomClamped(parseFloat(e.target.value))}
               className={styles.lightboxRange}
               title="Zoom"
@@ -1039,14 +1069,14 @@ function Lightbox({
 
             <button
               onClick={zoomIn}
-              disabled={!item.src || zoom >= 5}
+              disabled={!resolvedSrc || zoom >= 5}
               className={styles.lightboxCtrlBtn}
               title="Zoom in"
             >+</button>
 
             <button
               onClick={resetView}
-              disabled={!item.src}
+              disabled={!resolvedSrc}
               className={`${styles.lightboxCtrlBtn} ${styles.lightboxResetBtn}`}
               title="Reset view"
             >Reset</button>
@@ -1064,9 +1094,9 @@ function Lightbox({
           onWheel={onWheel}
           className={styles.lightboxImageStage}
         >
-          {item.src ? (
+          {resolvedSrc ? (
             <img
-              src={item.src}
+              src={resolvedSrc}
               alt={item.title}
               draggable={false}
               onMouseDown={startDrag}
@@ -1087,7 +1117,7 @@ function Lightbox({
             </div>
           )}
 
-          {item.src && (
+          {resolvedSrc && (
             <div className={styles.lightboxHint}>
               Wheel: Zoom • Drag: Pan • Double-click: Reset
             </div>
