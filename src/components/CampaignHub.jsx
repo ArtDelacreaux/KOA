@@ -61,6 +61,11 @@ function fallbackPlayerLabel(index, prefix = 'Player') {
   return `${prefix} ${position}`;
 }
 
+function formatPossessiveLabel(label, fallback = 'Player') {
+  const base = normalizeText(label) || fallback;
+  return /s$/i.test(base) ? `${base}'` : `${base}'s`;
+}
+
 function playerPresenceKey({ userId = '', email = '', label = '' }) {
   const normalizedUserId = normalizeText(userId);
   if (normalizedUserId) return normalizedUserId.toLowerCase();
@@ -1160,6 +1165,10 @@ export default function CampaignHub(props) {
     if (byUserId?.label) return byUserId.label;
     return normalizeText(profile?.username || 'Player');
   }, [activeInventoryUserId, authEnabled, inventoryOwnerChoices, profile?.username]);
+  const activeInventoryPossessiveLabel = useMemo(
+    () => formatPossessiveLabel(activeInventoryLabel, 'Player'),
+    [activeInventoryLabel]
+  );
 
   const playerInventories = useMemo(() => (
     bag?.playerInventories && typeof bag.playerInventories === 'object' && !Array.isArray(bag.playerInventories)
@@ -2579,39 +2588,48 @@ export default function CampaignHub(props) {
                 </div>
 
                 <div className={styles.hubQuickRow}>
-                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain}`} onMouseEnter={() => playHover()}>
-                    <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>
-                        <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
-                      </div>
-                      <div>
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain} ${styles.hubTileCentered}`} onMouseEnter={() => playHover()}>
+                    <div className={styles.hubSharedToolsHeader}>
+                      <div className={`${styles.iconRow} ${styles.hubTileHeaderRow}`}>
+                        <div className={styles.toolIcon}>
+                          <img src={watchPartyLogo} alt="Watch Party logo" className={styles.toolLogo} />
+                        </div>
                         <div className={styles.toolTitle}>Watch Party</div>
-                        <div className={styles.toolSub}>Music / Videos / Friends</div>
                       </div>
-                    </div>
-                    <div className={styles.hubTileActions}>
-                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Open Room</button>
-                    </div>
-                  </div>
-
-                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain}`} onMouseEnter={() => playHover()}>
-                    <div className={styles.iconRow}>
-                      <div className={styles.toolIcon}>
-                        <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
-                      </div>
-                      <div>
+                      <div className={`${styles.iconRow} ${styles.hubTileHeaderRow}`}>
+                        <div className={styles.toolIcon}>
+                          <img src={owlbearLogo} alt="Owlbear logo" className={styles.toolLogo} />
+                        </div>
                         <div className={styles.toolTitle}>Owlbear Table</div>
-                        <div className={styles.toolSub}>Maps / Tokens / Encounters</div>
                       </div>
+                      <div className={styles.toolSub}>Music / Videos / Maps / Tokens</div>
                     </div>
                     <div className={styles.hubTileActions}>
-                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Open Room</button>
+                      <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openTool('watch')}>Watch Room</button>
+                      <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => openTool('owlbear')}>Owlbear Room</button>
                     </div>
                   </div>
 
-                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile}`} onMouseEnter={() => playHover()}>
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileMain} ${styles.hubTileCentered}`} onMouseEnter={() => playHover()}>
                     <div className={styles.iconRow}>
-                      <div className={styles.hubPlayersGlyph}>PR</div>
+                      <div>
+                        <div className={styles.toolTitle}>My Character Sheet</div>
+                        <div className={styles.toolSub}>Quick access to your sheet in Combat Tracker.</div>
+                      </div>
+                    </div>
+                    <div className={styles.hubTileActions}>
+                      <button
+                        className={smallBtnClass('gold', styles.hubCharacterSheetBtn)}
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => { playNav(); cinematicNav('combat'); }}
+                      >
+                        {`${activeInventoryPossessiveLabel} Character Sheet`}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.hubTile} ${styles.hubTileCentered}`} onMouseEnter={() => playHover()}>
+                    <div className={styles.iconRow}>
                       <div>
                         <div className={styles.toolTitle}>Players</div>
                         <div className={styles.toolSub}>{onlinePlayerCount} online · {awayPlayerCount} away</div>

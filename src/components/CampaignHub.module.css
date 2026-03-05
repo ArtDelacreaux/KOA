@@ -390,6 +390,15 @@
   min-height: 164px;
 }
 
+.hubTileCentered {
+  align-items: center;
+  text-align: center;
+}
+
+.hubTileCentered .iconRow {
+  justify-content: center;
+}
+
 .hubTileMeta {
   margin-top: 8px;
   font-size: 11px;
@@ -400,20 +409,34 @@
   margin-top: 12px;
   display: flex;
   justify-content: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.hubPlayersGlyph {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 220, 160, 0.22);
-  display: inline-flex;
-  align-items: center;
+.hubTileCentered .hubTileActions {
   justify-content: center;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: rgba(255, 245, 220, 0.94);
+}
+
+.hubTileCentered .hubTileMeta {
+  text-align: center;
+}
+
+.hubSharedToolsHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.hubTileHeaderRow {
+  width: 100%;
+}
+
+.hubCharacterSheetBtn {
+  width: 100%;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.2;
 }
 
 .questBoardStack {

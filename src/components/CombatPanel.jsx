@@ -3264,6 +3264,14 @@ export default function CombatPanel({
     closeSheetInventoryEditor();
   }, [closeSheetInventoryEditor]);
 
+  const openSelectedInventoryModal = useCallback(() => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    setSheetInventoryEditorOpen(false);
+    setSheetInventoryEditingId('');
+    setSheetInventoryDraft(createSheetInventoryDraft());
+    setSheetInventoryModalOpen(true);
+  }, [selectedCanEdit, selectedInventoryOwnerUserId]);
+
   const updateSelectedPersonalInventoryItems = useCallback((updater) => {
     if (!selectedInventoryOwnerUserId) return;
     const now = new Date().toISOString();
@@ -4346,47 +4354,63 @@ export default function CombatPanel({
                       </span>
                     </button>
                   )}
-                  {selectedCanEdit && (
-                    <button
-                      type="button"
-                      className={btnClass(
-                        selectedSensitiveStatsHidden ? 'gold' : 'ghost',
-                        'sm',
-                        selectedSensitiveStatsHidden ? styles.visibilityToggleOn : ''
-                      )}
-                      onMouseEnter={playHover}
-                      onClick={() => { playNav(); toggleSelectedSensitiveStats(); }}
-                      title={
-                        selectedSensitiveStatsHidden
-                          ? 'Sensitive stats are hidden from players who cannot control this combatant.'
-                          : 'Show sensitive stats in restricted details when unauthorized players inspect this combatant.'
-                      }
-                    >
-                      {selectedSensitiveStatsHidden ? 'Stats Hidden' : 'Hide Stats'}
-                    </button>
-                  )}
                   {editorMode === 'sheet' ? (
                     <>
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
-                        Edit
-                      </button>
                       {!sheetPopoutOpen && (
                         <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); openSheetPopout(); }}>
                           Pop Out
                         </button>
                       )}
+                      {selectedCanEdit && (
+                        <button
+                          type="button"
+                          className={btnClass(
+                            selectedSensitiveStatsHidden ? 'gold' : 'ghost',
+                            'sm',
+                            selectedSensitiveStatsHidden ? styles.visibilityToggleOn : ''
+                          )}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); toggleSelectedSensitiveStats(); }}
+                          title={
+                            selectedSensitiveStatsHidden
+                              ? 'Sensitive stats are hidden from players who cannot control this combatant.'
+                              : 'Show sensitive stats in restricted details when unauthorized players inspect this combatant.'
+                          }
+                        >
+                          {selectedSensitiveStatsHidden ? 'Stats Hidden' : 'Hide Stats'}
+                        </button>
+                      )}
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('edit'); }}>
+                        Edit
+                      </button>
                       <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   ) : (
                     <>
+                      {selectedCanEdit && (
+                        <button
+                          type="button"
+                          className={btnClass(
+                            selectedSensitiveStatsHidden ? 'gold' : 'ghost',
+                            'sm',
+                            selectedSensitiveStatsHidden ? styles.visibilityToggleOn : ''
+                          )}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); toggleSelectedSensitiveStats(); }}
+                          title={
+                            selectedSensitiveStatsHidden
+                              ? 'Sensitive stats are hidden from players who cannot control this combatant.'
+                              : 'Show sensitive stats in restricted details when unauthorized players inspect this combatant.'
+                          }
+                        >
+                          {selectedSensitiveStatsHidden ? 'Stats Hidden' : 'Hide Stats'}
+                        </button>
+                      )}
                       {selected.sourceSheet && (
                         <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setEditorMode('sheet'); }}>
                           Character Sheet
                         </button>
                       )}
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }} disabled={selectedReadOnly}>
-                        {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
-                      </button>
                       <button className={btnClass('danger', 'sm', styles.editorCloseButton)} onMouseEnter={playHover} onClick={() => { playNav(); setEditorOpen(false); }}>✕</button>
                     </>
                   )}
@@ -4434,6 +4458,16 @@ export default function CombatPanel({
                         )}
                       </div>
                       <div className={styles.sheetHeroActions}>
+                        {selectedInventoryManagedInPartyHub && (
+                          <button
+                            className={btnClass('ghost', 'sm')}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); openSelectedInventoryModal(); }}
+                            disabled={!selectedCanEdit || !selectedInventoryOwnerUserId}
+                          >
+                            My Inventory
+                          </button>
+                        )}
                         <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('spellbook'); }} disabled={selectedReadOnly}>Spellbook</button>
                         <button className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setListEditorMode('features'); }} disabled={selectedReadOnly}>Class Features</button>
                       </div>
@@ -4584,183 +4618,185 @@ export default function CombatPanel({
                           </div>
                         </div>
 
-                        {sheetToolsMode === 'resources' ? (
-                          <div className={styles.sheetToolsResourceGrid}>
-                            <div className={styles.combatToolGroup}>
-                              <div className={styles.label}>Feature Charges</div>
-                              <div className={styles.spellSlotsReadGrid}>
-                                {visibleSheetFeatureCharges.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>No feature charges set.</div>
-                                ) : (
-                                  visibleSheetFeatureCharges.map((feature) => {
-                                    const shownBoxes = Math.max(feature.max, 0);
-                                    return (
-                                      <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
-                                        <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
-                                        <div className={styles.spellSlotsReadBoxes}>
-                                          {Array.from({ length: shownBoxes }).map((_, i) => (
-                                            <button
-                                              type="button"
-                                              key={`sheet-feature-box-${feature.id}-${i}`}
-                                              className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
-                                                i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
-                                              }`}
-                                              onMouseEnter={playHover}
-                                              onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
-                                              aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
-                                              title={`${feature.name || 'Feature'} charge ${i + 1}`}
-                                            />
-                                          ))}
+                        <div className={styles.sheetToolsModeBody}>
+                          {sheetToolsMode === 'resources' ? (
+                            <div className={styles.sheetToolsResourceGrid}>
+                              <div className={styles.combatToolGroup}>
+                                <div className={styles.label}>Feature Charges</div>
+                                <div className={styles.spellSlotsReadGrid}>
+                                  {visibleSheetFeatureCharges.length === 0 ? (
+                                    <div className={styles.sheetListFallback}>No feature charges set.</div>
+                                  ) : (
+                                    visibleSheetFeatureCharges.map((feature) => {
+                                      const shownBoxes = Math.max(feature.max, 0);
+                                      return (
+                                        <div key={`sheet-feature-${feature.id}`} className={`${styles.spellSlotsReadRow} ${styles.featureChargesReadRow}`}>
+                                          <span className={styles.spellSlotsReadLevel}>{feature.name || 'Feature'}</span>
+                                          <div className={styles.spellSlotsReadBoxes}>
+                                            {Array.from({ length: shownBoxes }).map((_, i) => (
+                                              <button
+                                                type="button"
+                                                key={`sheet-feature-box-${feature.id}-${i}`}
+                                                className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                                  i < feature.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                                }`}
+                                                onMouseEnter={playHover}
+                                                onClick={() => { playNav(); setFeatureChargesFromBox(feature.id, i); }}
+                                                aria-label={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                                title={`${feature.name || 'Feature'} charge ${i + 1}`}
+                                              />
+                                            ))}
+                                          </div>
+                                          <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
                                         </div>
-                                        <span className={styles.spellSlotsReadCount}>{feature.current}/{feature.max}</span>
-                                      </div>
-                                    );
-                                  })
-                                )}
+                                      );
+                                    })
+                                  )}
+                                </div>
                               </div>
-                            </div>
 
-                            <div className={styles.combatToolGroup}>
-                              <div className={styles.label}>Spell Slots</div>
-                              <div className={styles.spellSlotsReadGrid}>
-                                {visibleSheetSpellSlots.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>No spell slots set.</div>
-                                ) : (
-                                  visibleSheetSpellSlots.map((slot) => {
-                                    const shownBoxes = Math.max(slot.max, 0);
-                                    return (
-                                      <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
-                                        <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
-                                        <div className={styles.spellSlotsReadBoxes}>
-                                          {Array.from({ length: shownBoxes }).map((_, i) => (
-                                            <button
-                                              type="button"
-                                              key={`sheet-slot-box-${slot.level}-${i}`}
-                                              className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
-                                                i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
-                                              }`}
-                                              onMouseEnter={playHover}
-                                              onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
-                                              aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                              title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
-                                            />
-                                          ))}
+                              <div className={styles.combatToolGroup}>
+                                <div className={styles.label}>Spell Slots</div>
+                                <div className={styles.spellSlotsReadGrid}>
+                                  {visibleSheetSpellSlots.length === 0 ? (
+                                    <div className={styles.sheetListFallback}>No spell slots set.</div>
+                                  ) : (
+                                    visibleSheetSpellSlots.map((slot) => {
+                                      const shownBoxes = Math.max(slot.max, 0);
+                                      return (
+                                        <div key={`sheet-slot-${slot.level}`} className={styles.spellSlotsReadRow}>
+                                          <span className={styles.spellSlotsReadLevel}>{spellLevelLabel(slot.level)} Level</span>
+                                          <div className={styles.spellSlotsReadBoxes}>
+                                            {Array.from({ length: shownBoxes }).map((_, i) => (
+                                              <button
+                                                type="button"
+                                                key={`sheet-slot-box-${slot.level}-${i}`}
+                                                className={`${styles.slotBox} ${styles.spellSlotsReadBtn} ${
+                                                  i < slot.current ? styles.slotBoxActive : styles.slotBoxInactive
+                                                }`}
+                                                onMouseEnter={playHover}
+                                                onClick={() => { playNav(); setSpellSlotsFromBox(slot.level, i); }}
+                                                aria-label={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                                title={`${spellLevelLabel(slot.level)} level slot ${i + 1}`}
+                                              />
+                                            ))}
+                                          </div>
+                                          <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
                                         </div>
-                                        <span className={styles.spellSlotsReadCount}>{slot.current}/{slot.max}</span>
-                                      </div>
-                                    );
-                                  })
-                                )}
+                                      );
+                                    })
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ) : (
-                          <div className={styles.sheetActionsGrid}>
-                            <div className={styles.combatToolGroup}>
-                              <div className={styles.combatToolGroupHead}>
-                                <div className={styles.label}>Weapons</div>
-                              </div>
-                              <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
-                                <div className={styles.actionsHeadRow}>
-                                  <span>Attack</span>
-                                  <span>Range</span>
-                                  <span>Hit / DC</span>
-                                  <span>Damage</span>
+                          ) : (
+                            <div className={styles.sheetActionsGrid}>
+                              <div className={styles.combatToolGroup}>
+                                <div className={styles.combatToolGroupHead}>
+                                  <div className={styles.label}>Weapons</div>
                                 </div>
-                                {selectedEquippedInventoryWeaponRows.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>No equipped weapons in inventory.</div>
-                                ) : (
-                                  selectedEquippedInventoryWeaponRows.map((weapon) => (
-                                    <button
-                                      type="button"
-                                      key={weapon.id}
-                                      className={styles.actionsRowBtn}
-                                      onMouseEnter={playHover}
-                                      onClick={() => {
-                                        playNav();
-                                        setSheetActionDetail({
-                                          type: 'inventoryWeapon',
-                                          payload: { ...weapon },
-                                        });
-                                      }}
-                                    >
-                                      <span className={styles.actionsAttackCell}>{weapon.attack}</span>
-                                      <span>{cleanText(weapon.range) || '--'}</span>
-                                      <span>{cleanText(weapon.hitDc) || '--'}</span>
-                                      <span>{cleanText(weapon.damage) || '--'}</span>
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-
-                            <div className={styles.combatToolGroup}>
-                              <div className={styles.combatToolGroupHead}>
-                                <div className={styles.label}>Spells</div>
-                                <div className={styles.spellSearchWrap}>
-                                  <input
-                                    className={`${styles.input} ${styles.spellSearchInput}`}
-                                    value={spellSearchQuery}
-                                    onChange={(e) => setSpellSearchQuery(e.target.value)}
-                                    placeholder="Search spells..."
-                                    aria-label="Search spells"
-                                  />
-                                </div>
-                              </div>
-                              <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
-                                <div className={styles.actionsHeadRow}>
-                                  <span>Attack</span>
-                                  <span>Range</span>
-                                  <span>Hit / DC</span>
-                                  <span>Damage</span>
-                                </div>
-                                {filteredSelectedSpellActionGroups.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>
-                                    {hasSpellSearchQuery ? 'No spells match your search.' : 'No spellbook entries found.'}
+                                <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
+                                  <div className={styles.actionsHeadRow}>
+                                    <span>Attack</span>
+                                    <span>Range</span>
+                                    <span>Hit / DC</span>
+                                    <span>Damage</span>
                                   </div>
-                                ) : (
-                                  filteredSelectedSpellActionGroups.map((group) => (
-                                    <React.Fragment key={`spell-action-group-${group.key}`}>
-                                      <div className={styles.actionsLevelDivider}>
-                                        <span>{group.label}</span>
-                                      </div>
-                                      {group.rows.map((spellRow) => (
-                                        <button
-                                          type="button"
-                                          key={spellRow.id}
-                                          className={styles.actionsRowBtn}
-                                          onMouseEnter={playHover}
-                                          onClick={() => {
-                                            playNav();
-                                            setSheetActionDetail({
-                                              type: 'spell',
-                                              payload: {
-                                                ...(spellRow.spell || {}),
-                                                id: cleanText(spellRow.spell?.id) || spellRow.id,
-                                                name: cleanText(spellRow.spell?.name) || spellRow.attack,
-                                                range: cleanText(spellRow.spell?.range) || (spellRow.range === '--' ? '' : spellRow.range),
-                                                saveAtk: cleanText(spellRow.spell?.saveAtk) || (spellRow.hitDc === '--' ? '' : spellRow.hitDc),
-                                                damage: spellRow.damage === '--' ? '' : spellRow.damage,
-                                                time: cleanText(spellRow.spell?.time),
-                                                duration: cleanText(spellRow.spell?.duration),
-                                                notes: cleanText(spellRow.spell?.notes),
-                                              },
-                                            });
-                                          }}
-                                        >
-                                          <span className={styles.actionsAttackCell}>{spellRow.attack}</span>
-                                          <span>{spellRow.range}</span>
-                                          <span>{spellRow.hitDc}</span>
-                                          <span>{spellRow.damage}</span>
-                                        </button>
-                                      ))}
-                                    </React.Fragment>
-                                  ))
-                                )}
+                                  {selectedEquippedInventoryWeaponRows.length === 0 ? (
+                                    <div className={styles.sheetListFallback}>No equipped weapons in inventory.</div>
+                                  ) : (
+                                    selectedEquippedInventoryWeaponRows.map((weapon) => (
+                                      <button
+                                        type="button"
+                                        key={weapon.id}
+                                        className={styles.actionsRowBtn}
+                                        onMouseEnter={playHover}
+                                        onClick={() => {
+                                          playNav();
+                                          setSheetActionDetail({
+                                            type: 'inventoryWeapon',
+                                            payload: { ...weapon },
+                                          });
+                                        }}
+                                      >
+                                        <span className={styles.actionsAttackCell}>{weapon.attack}</span>
+                                        <span>{cleanText(weapon.range) || '--'}</span>
+                                        <span>{cleanText(weapon.hitDc) || '--'}</span>
+                                        <span>{cleanText(weapon.damage) || '--'}</span>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className={styles.combatToolGroup}>
+                                <div className={styles.combatToolGroupHead}>
+                                  <div className={styles.label}>Spells</div>
+                                  <div className={styles.spellSearchWrap}>
+                                    <input
+                                      className={`${styles.input} ${styles.spellSearchInput}`}
+                                      value={spellSearchQuery}
+                                      onChange={(e) => setSpellSearchQuery(e.target.value)}
+                                      placeholder="Search spells..."
+                                      aria-label="Search spells"
+                                    />
+                                  </div>
+                                </div>
+                                <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
+                                  <div className={styles.actionsHeadRow}>
+                                    <span>Attack</span>
+                                    <span>Range</span>
+                                    <span>Hit / DC</span>
+                                    <span>Damage</span>
+                                  </div>
+                                  {filteredSelectedSpellActionGroups.length === 0 ? (
+                                    <div className={styles.sheetListFallback}>
+                                      {hasSpellSearchQuery ? 'No spells match your search.' : 'No spellbook entries found.'}
+                                    </div>
+                                  ) : (
+                                    filteredSelectedSpellActionGroups.map((group) => (
+                                      <React.Fragment key={`spell-action-group-${group.key}`}>
+                                        <div className={styles.actionsLevelDivider}>
+                                          <span>{group.label}</span>
+                                        </div>
+                                        {group.rows.map((spellRow) => (
+                                          <button
+                                            type="button"
+                                            key={spellRow.id}
+                                            className={styles.actionsRowBtn}
+                                            onMouseEnter={playHover}
+                                            onClick={() => {
+                                              playNav();
+                                              setSheetActionDetail({
+                                                type: 'spell',
+                                                payload: {
+                                                  ...(spellRow.spell || {}),
+                                                  id: cleanText(spellRow.spell?.id) || spellRow.id,
+                                                  name: cleanText(spellRow.spell?.name) || spellRow.attack,
+                                                  range: cleanText(spellRow.spell?.range) || (spellRow.range === '--' ? '' : spellRow.range),
+                                                  saveAtk: cleanText(spellRow.spell?.saveAtk) || (spellRow.hitDc === '--' ? '' : spellRow.hitDc),
+                                                  damage: spellRow.damage === '--' ? '' : spellRow.damage,
+                                                  time: cleanText(spellRow.spell?.time),
+                                                  duration: cleanText(spellRow.spell?.duration),
+                                                  notes: cleanText(spellRow.spell?.notes),
+                                                },
+                                              });
+                                            }}
+                                          >
+                                            <span className={styles.actionsAttackCell}>{spellRow.attack}</span>
+                                            <span>{spellRow.range}</span>
+                                            <span>{spellRow.hitDc}</span>
+                                            <span>{spellRow.damage}</span>
+                                          </button>
+                                        ))}
+                                      </React.Fragment>
+                                    ))
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -4864,23 +4900,33 @@ export default function CombatPanel({
                   <div className={styles.appearanceGrid}>
                     <div className={styles.appearanceCol}>
                       <div className={styles.uploadRow}>
-                        {/* Preview circle */}
-                        {selected.customImage && (
-                          <div className={styles.tokenPreview}>
-                            <img src={selected.customImage} alt="token preview" />
-                          </div>
-                        )}
-                        <label className={styles.uploadLabel}>
-                          {selected.customImage ? 'Replace Image' : 'Upload & Crop'}
-                          <input type="file" accept="image/*" className={styles.hiddenInput} onChange={handleImageUpload}/>
-                        </label>
-                        {selected.customImage && (
-                          <button onClick={() => setSelectedField({ customImage:'' })}
-                            onMouseEnter={playHover}
-                            className={btnClass('danger', 'sm', styles.btnTiny)}>
-                            Remove
-                          </button>
-                        )}
+                        <div className={styles.uploadRowLeft}>
+                          {/* Preview circle */}
+                          {selected.customImage && (
+                            <div className={styles.tokenPreview}>
+                              <img src={selected.customImage} alt="token preview" />
+                            </div>
+                          )}
+                          <label className={styles.uploadLabel}>
+                            {selected.customImage ? 'Replace Image' : 'Upload & Crop'}
+                            <input type="file" accept="image/*" className={styles.hiddenInput} onChange={handleImageUpload}/>
+                          </label>
+                          {selected.customImage && (
+                            <button onClick={() => setSelectedField({ customImage:'' })}
+                              onMouseEnter={playHover}
+                              className={btnClass('danger', 'sm', styles.btnTiny)}>
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          className={btnClass('gold', 'sm', styles.importSheetInlineBtn)}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); triggerSheetImport(selected.id, !!selected.sourceSheet); }}
+                          disabled={selectedReadOnly}
+                        >
+                          {selected.sourceSheet ? 'Import New Sheet' : 'Import Sheet'}
+                        </button>
                       </div>
                       {selected.side === 'Enemy' && (
                         <div className={styles.sectionTopGap}>
@@ -5063,31 +5109,6 @@ export default function CombatPanel({
                 )}
 
                 <div className={styles.divider}/>
-
-                <div className={styles.divider}/>
-
-                {selectedInventoryManagedInPartyHub && (
-                  <div className={styles.sectionTopGap}>
-                    <div className={styles.toolsHeaderRow}>
-                      <div className={styles.label}>Inventory</div>
-                      <button
-                        type="button"
-                        className={btnClass('ghost', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => {
-                          playNav();
-                          setSheetInventoryEditorOpen(false);
-                          setSheetInventoryEditingId('');
-                          setSheetInventoryDraft(createSheetInventoryDraft());
-                          setSheetInventoryModalOpen(true);
-                        }}
-                        disabled={!selectedCanEdit || !selectedInventoryOwnerUserId}
-                      >
-                        Open Inventory
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <div><div className={styles.label}>Status (comma separated)</div>
                   <input
