@@ -2725,27 +2725,6 @@ export default function CampaignHub(props) {
         </div>
 
         <div className={styles.bodyContent}>
-          <div className={styles.actionRow}>
-            {((campaignTab === 'quests' && canAddQuestFromCurrentView) || (campaignTab === 'inventory' && canEditInventory)) && (
-              <button
-                type="button"
-                onMouseEnter={smallBtnHover}
-                onClick={() => {
-                  if (campaignTab === 'quests') {
-                    openAddQuest();
-                    return;
-                  }
-                  invOpenAdd();
-                }}
-                className={smallBtnClass('gold', styles.actionAddBtn)}
-              >
-                {campaignTab === 'quests'
-                  ? '+ Add Quest'
-                  : '+ Add Item'}
-              </button>
-            )}
-          </div>
-
           <div className={styles.tabRow}>
             {[
               { key: 'launcher', label: 'Hub' },
@@ -3106,6 +3085,16 @@ export default function CampaignHub(props) {
                         Personal
                       </button>
                     </div>
+                    {canAddQuestFromCurrentView && (
+                      <button
+                        type="button"
+                        onMouseEnter={smallBtnHover}
+                        onClick={openAddQuest}
+                        className={smallBtnClass('gold', styles.questBoardInlineAddBtn)}
+                      >
+                        + Add Quest
+                      </button>
+                    )}
                   </div>
                 </div>
 
