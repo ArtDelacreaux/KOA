@@ -6,6 +6,7 @@ import chatNotifSfx from '../assets/Sound Effects/chatnotif.mp3';
 import dmNotifSfx from '../assets/Sound Effects/dmnotif.mp3';
 import arlisChatGif from '../assets/Chat Anim/arlisChat.gif';
 import castorChatGif from '../assets/Chat Anim/castorChat.gif';
+import fenChatGif from '../assets/Chat Anim/fenChat.gif';
 import ghuliChatGif from '../assets/Chat Anim/ghuliChat.gif';
 import willChatGif from '../assets/Chat Anim/willChat.gif';
 
@@ -22,6 +23,7 @@ const CHAT_ANIM_BY_NAME_KEY = {
   arlis: arlisChatGif,
   arlisghoth: arlisChatGif,
   castor: castorChatGif,
+  fen: fenChatGif,
   ghul: ghuliChatGif,
   vonghul: ghuliChatGif,
   ghulichat: ghuliChatGif,
@@ -50,6 +52,7 @@ function getChatAnimForName(value) {
   if (CHAT_ANIM_BY_NAME_KEY[key]) return CHAT_ANIM_BY_NAME_KEY[key];
   if (key.includes('arlis')) return CHAT_ANIM_BY_NAME_KEY.arlis;
   if (key.includes('castor')) return CHAT_ANIM_BY_NAME_KEY.castor;
+  if (key.startsWith('fen')) return CHAT_ANIM_BY_NAME_KEY.fen;
   if (key.includes('ghul')) return CHAT_ANIM_BY_NAME_KEY.vonghul;
   if (key.includes('william') || key.includes('will')) return CHAT_ANIM_BY_NAME_KEY.william;
   return '';
