@@ -1,7 +1,7 @@
 import { createId } from '../domain/ids';
 
 export const INVENTORY_CATEGORIES = ['Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
-export const INVENTORY_RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+export const INVENTORY_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary'];
 const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied']);
 
 function newBagItemId() {
@@ -40,6 +40,7 @@ function normalizeItemCategory(value) {
 
 function normalizeItemRarity(value) {
   const normalized = normalizeText(value);
+  if (normalized.toLowerCase() === 'epic') return 'Very Rare';
   return INVENTORY_RARITIES.includes(normalized) ? normalized : 'Common';
 }
 
@@ -75,6 +76,12 @@ export function normalizeInventoryItem(rawItem, options = {}) {
     notes: normalizeText(source.notes),
     tags: normalizeItemTags(source.tags),
     assignedTo: normalizeText(source.assignedTo),
+    weaponProficiency: normalizeText(source.weaponProficiency ?? source.proficiency),
+    weaponAttackType: normalizeText(source.weaponAttackType ?? source.attackType),
+    weaponReach: normalizeText(source.weaponReach ?? source.reach),
+    weaponDamage: normalizeText(source.weaponDamage ?? source.damage),
+    weaponDamageType: normalizeText(source.weaponDamageType ?? source.damageType),
+    weaponProperties: normalizeText(source.weaponProperties ?? source.properties),
     equipped: !!source.equipped,
     createdAt: normalizeIso(source.createdAt) || now,
     updatedAt: normalizeIso(source.updatedAt) || now,

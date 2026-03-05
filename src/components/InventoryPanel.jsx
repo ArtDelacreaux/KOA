@@ -16,7 +16,13 @@ export default function InventoryPanel({
   const newId = () => createId('bag');
 
   const CATEGORIES = ['All', 'Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
-  const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+  const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary'];
+  const ITEM_RARITIES = RARITIES.filter((entry) => entry !== 'All');
+  const normalizeRarity = (value) => {
+    const normalized = String(value || '').trim();
+    if (normalized.toLowerCase() === 'epic') return 'Very Rare';
+    return ITEM_RARITIES.includes(normalized) ? normalized : 'Common';
+  };
 
   const rarityBadge = (rarity) => {
     const r = (rarity || 'Common').toLowerCase();
@@ -24,7 +30,7 @@ export default function InventoryPanel({
       common: 'rgba(255,255,255,0.12)',
       uncommon: 'rgba(110,231,183,0.16)',
       rare: 'rgba(96,165,250,0.16)',
-      epic: 'rgba(216,180,254,0.16)',
+      'very rare': 'rgba(186,136,245,0.18)',
       legendary: 'rgba(251,191,36,0.18)',
     };
     return map[r] || map.common;
@@ -43,7 +49,12 @@ export default function InventoryPanel({
         sp: prev?.currency?.sp ?? 0,
         cp: prev?.currency?.cp ?? 0,
       },
-      items: Array.isArray(prev?.items) ? prev.items : [],
+      items: Array.isArray(prev?.items)
+        ? prev.items.map((item) => ({
+            ...item,
+            rarity: normalizeRarity(item?.rarity),
+          }))
+        : [],
     }));
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,7 +102,7 @@ export default function InventoryPanel({
       name: item.name || '',
       qty: typeof item.qty === 'number' ? item.qty : 1,
       category: item.category || 'Gear',
-      rarity: item.rarity || 'Common',
+      rarity: normalizeRarity(item.rarity),
       weight: item.weight ?? '',
       value: item.value ?? '',
       notes: item.notes || '',
@@ -127,7 +138,7 @@ export default function InventoryPanel({
           name,
           qty,
           category: draft.category || 'Gear',
-          rarity: draft.rarity || 'Common',
+          rarity: normalizeRarity(draft.rarity),
           weight: Number.isFinite(weight) ? weight : null,
           value: Number.isFinite(value) ? value : null,
           notes: (draft.notes || '').trim(),
@@ -148,7 +159,7 @@ export default function InventoryPanel({
                 name,
                 qty,
                 category: draft.category || it.category || 'Gear',
-                rarity: draft.rarity || it.rarity || 'Common',
+                rarity: normalizeRarity(draft.rarity || it.rarity || 'Common'),
                 weight: Number.isFinite(weight) ? weight : null,
                 value: Number.isFinite(value) ? value : null,
                 notes: (draft.notes || '').trim(),

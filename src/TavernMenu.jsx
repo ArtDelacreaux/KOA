@@ -618,6 +618,7 @@ export default function TavernMenu() {
           panelType={panelType}
           cinematicNav={cinematicNav}
           characters={characters}
+          characterControllers={characterAccess}
           canManageCombat={canManageCharacterAccess}
           canWriteCombat={canEditCampaignData}
           viewerIdentity={viewerIdentity}

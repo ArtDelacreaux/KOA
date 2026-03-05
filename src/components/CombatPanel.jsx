@@ -7,6 +7,7 @@ import { createId } from '../domain/ids';
 import { repository } from '../repository';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import { parseCharacterSheetFile } from '../lib/sheetParser';
+import { getCharacterAccessEntry } from '../lib/characterAccess';
 import useLocalStorageState from '../lib/useLocalStorageState';
 import {
   defaultBagInventoryState,
@@ -1727,6 +1728,7 @@ export default function CombatPanel({
   panelType,
   cinematicNav,
   characters = [],
+  characterControllers = {},
   canManageCombat = true,
   canWriteCombat = true,
   viewerIdentity = null,
@@ -1896,6 +1898,7 @@ export default function CombatPanel({
   const [activeSpellDraftId, setActiveSpellDraftId] = useState('');
   const [sheetToolsMode, setSheetToolsMode] = useState('resources');
   const [equipmentEditMode, setEquipmentEditMode] = useState('equipment');
+  const [spellSearchQuery, setSpellSearchQuery] = useState('');
   const [sheetActionDetail, setSheetActionDetail] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
@@ -2091,18 +2094,32 @@ export default function CombatPanel({
     [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
+  const resolveCombatantInventoryAssignment = useCallback(
+    (combatant) => {
+      if (!combatant) return null;
+      const linkedCharacter = resolveCharacterForCombatant(combatant);
+      return getCharacterAccessEntry(characterControllers, linkedCharacter || combatant);
+    },
+    [characterControllers, resolveCharacterForCombatant]
+  );
   const selectedInventoryOwnerUserId = useMemo(() => {
     if (!selected) return '';
     if ((selected.side || 'Enemy') === 'Enemy') return '';
-    if (!canManageCombat && viewerUserId && canControlCombatant(selected)) return viewerUserId;
+    const assignment = resolveCombatantInventoryAssignment(selected);
+    const assignmentOwnerUserId = cleanText(assignment?.ownerUserId);
+    if (assignmentOwnerUserId) return assignmentOwnerUserId;
     const explicitOwnerId = cleanText(selected.createdByUserId);
     if (explicitOwnerId) return explicitOwnerId;
+    if (!canManageCombat && viewerUserId && canControlCombatant(selected)) return viewerUserId;
     return '';
-  }, [canControlCombatant, canManageCombat, selected, viewerUserId]);
+  }, [canControlCombatant, canManageCombat, resolveCombatantInventoryAssignment, selected, viewerUserId]);
   const selectedInventoryOwnerLabel = useMemo(() => {
     if (!selected) return '';
+    const assignment = resolveCombatantInventoryAssignment(selected);
+    const assignmentOwnerLabel = cleanText(assignment?.ownerUsername);
+    if (assignmentOwnerLabel) return assignmentOwnerLabel;
     return cleanText(selected.createdByUsername) || viewerUsername || selected.name || 'Player';
-  }, [selected, viewerUsername]);
+  }, [resolveCombatantInventoryAssignment, selected, viewerUsername]);
   const selectedPersonalInventoryEntry = useMemo(
     () => getPersonalInventoryEntry(normalizedBagInventory, selectedInventoryOwnerUserId),
     [normalizedBagInventory, selectedInventoryOwnerUserId]
@@ -2115,6 +2132,10 @@ export default function CombatPanel({
     () => inventoryItemsToEquippedLines(selectedPersonalInventoryEntry.items),
     [selectedPersonalInventoryEntry.items]
   );
+  const selectedInventoryManagedInPartyHub = useMemo(() => {
+    if (!selected) return false;
+    return (selected.side || 'Enemy') !== 'Enemy';
+  }, [selected?.id, selected?.side]);
   const selectedSensitiveStatsHidden = !!selected?.hideSensitiveStats;
   const selectedRestrictedPortrait = useMemo(() => {
     if (!selected) return '';
@@ -2148,9 +2169,8 @@ export default function CombatPanel({
     return selectedEquippedItems;
   }, [selectedEquippedItems]);
   const selectedEquippedWeapons = useMemo(() => {
-    if (!selectedWeaponActionRows.length || !selectedEquippedItemKeys.size) return [];
     const seen = new Set();
-    return selectedWeaponActionRows
+    const fromWeaponRows = selectedWeaponActionRows
       .map((weapon) => cleanText(weapon.attack))
       .filter((name) => {
         const key = tokenKey(name);
@@ -2158,7 +2178,14 @@ export default function CombatPanel({
         seen.add(key);
         return true;
       });
-  }, [selectedWeaponActionRows, selectedEquippedItemKeys]);
+    const fromEquippedItems = selectedEquippedItems.filter((name) => {
+      const key = tokenKey(name);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return [...fromWeaponRows, ...fromEquippedItems];
+  }, [selectedEquippedItemKeys, selectedEquippedItems, selectedWeaponActionRows]);
   const selectedCurrentHp = useMemo(() => {
     if (!selected) return '—';
     return selected.hp === '' || selected.hp == null ? '—' : String(selected.hp);
@@ -2206,6 +2233,91 @@ export default function CombatPanel({
     })),
     [selectedSpellbookEntries]
   );
+  const filteredSelectedSpellActionGroups = useMemo(() => {
+    const query = cleanText(spellSearchQuery).toLowerCase();
+    if (!query) return selectedSpellActionGroups;
+    return selectedSpellActionGroups
+      .map((group) => {
+        const rows = group.rows.filter((spellRow) => {
+          const spell = spellRow.spell || {};
+          const haystack = [
+            spellRow.attack,
+            spellRow.range,
+            spellRow.hitDc,
+            spellRow.damage,
+            cleanText(spell.notes),
+            cleanText(spell.time),
+            cleanText(spell.duration),
+          ]
+            .join(' ')
+            .toLowerCase();
+          return haystack.includes(query);
+        });
+        return { ...group, rows };
+      })
+      .filter((group) => group.rows.length > 0);
+  }, [selectedSpellActionGroups, spellSearchQuery]);
+  const hasSpellSearchQuery = !!cleanText(spellSearchQuery);
+  const selectedEquippedInventoryWeaponRows = useMemo(() => {
+    const items = Array.isArray(selectedPersonalInventoryEntry?.items)
+      ? selectedPersonalInventoryEntry.items
+      : [];
+    const seen = new Set();
+    return items
+      .map((item, index) => {
+        if (!item || !item.equipped) return null;
+        const attack = cleanText(item.name);
+        const attackKey = tokenKey(attack);
+        if (!attack || !attackKey || seen.has(attackKey)) return null;
+        const categoryKey = cleanText(item.category).toLowerCase();
+        const attackType = cleanText(item.weaponAttackType || item.attackType);
+        const range = cleanText(item.weaponReach || item.reach);
+        const hitDc = cleanText(item.weaponProficiency || item.proficiency);
+        const damage = cleanText(item.weaponDamage || item.damage);
+        const damageType = cleanText(item.weaponDamageType || item.damageType);
+        const properties = cleanText(item.weaponProperties || item.properties);
+        const hasWeaponMetadata = !!(attackType || range || hitDc || damage || damageType || properties);
+        if (categoryKey !== 'weapon' && !hasWeaponMetadata) return null;
+        seen.add(attackKey);
+        return {
+          id: cleanText(item.id) || `inventory-equip-${index}-${attackKey}`,
+          attack,
+          range,
+          hitDc,
+          damage,
+          rarity: cleanText(item.rarity),
+          category: cleanText(item.category),
+          weaponProficiency: hitDc,
+          weaponAttackType: attackType,
+          weaponReach: range,
+          weaponDamage: damage,
+          weaponDamageType: damageType,
+          weaponProperties: properties,
+          weight: cleanText(item.weight),
+          value: cleanText(item.value),
+          notes: cleanText(item.notes),
+          tags: normalizeStringList(item.tags),
+          equipped: !!item.equipped,
+        };
+      })
+      .filter(Boolean);
+  }, [selectedPersonalInventoryEntry?.items]);
+  const isInventoryWeaponActionDetail = sheetActionDetail?.type === 'inventoryWeapon';
+  const inventoryWeaponActionPayload = isInventoryWeaponActionDetail && sheetActionDetail?.payload && typeof sheetActionDetail.payload === 'object'
+    ? sheetActionDetail.payload
+    : null;
+  const inventoryWeaponActionTags = isInventoryWeaponActionDetail
+    ? normalizeStringList(inventoryWeaponActionPayload?.tags)
+    : [];
+  const inventoryWeaponActionMeta = isInventoryWeaponActionDetail
+    ? [cleanText(inventoryWeaponActionPayload?.category), cleanText(inventoryWeaponActionPayload?.rarity)].filter(Boolean).join(' - ')
+    : '';
+  const inventoryWeaponActionWeight = isInventoryWeaponActionDetail
+    ? cleanText(inventoryWeaponActionPayload?.weight)
+    : '';
+  const inventoryWeaponActionCost = isInventoryWeaponActionDetail
+    ? cleanText(inventoryWeaponActionPayload?.value)
+    : '';
   const spellbookDraftGroups = useMemo(
     () => groupedSpellbookEntries(spellbookDraftEntries),
     [spellbookDraftEntries]
@@ -3100,21 +3212,6 @@ export default function CombatPanel({
       };
     });
   }, []);
-
-  const addSheetWeaponAction = useCallback(() => {
-    if (!selectedCanEdit) return;
-    setSheetActionDetail({
-      type: 'weapon',
-      payload: {
-        id: createId('weapon'),
-        attack: '',
-        range: '',
-        hitDc: '',
-        damage: '',
-        notes: '',
-      },
-    });
-  }, [selectedCanEdit]);
 
   const saveSheetActionDetail = useCallback(() => {
     if (!sheetActionDetail || !selectedCanEdit) return;
@@ -4327,16 +4424,6 @@ export default function CombatPanel({
                             <div className={styles.combatToolGroup}>
                               <div className={styles.combatToolGroupHead}>
                                 <div className={styles.label}>Weapons</div>
-                                {selectedCanEdit && (
-                                  <button
-                                    type="button"
-                                    className={btnClass('ghost', 'sm', styles.addWeaponBtn)}
-                                    onMouseEnter={playHover}
-                                    onClick={() => { playNav(); addSheetWeaponAction(); }}
-                                  >
-                                    + Add Weapon
-                                  </button>
-                                )}
                               </div>
                               <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
                                 <div className={styles.actionsHeadRow}>
@@ -4345,10 +4432,10 @@ export default function CombatPanel({
                                   <span>Hit / DC</span>
                                   <span>Damage</span>
                                 </div>
-                                {selectedWeaponActionRows.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>No weapons added.</div>
+                                {selectedEquippedInventoryWeaponRows.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>No equipped weapons in inventory.</div>
                                 ) : (
-                                  selectedWeaponActionRows.map((weapon) => (
+                                  selectedEquippedInventoryWeaponRows.map((weapon) => (
                                     <button
                                       type="button"
                                       key={weapon.id}
@@ -4357,13 +4444,8 @@ export default function CombatPanel({
                                       onClick={() => {
                                         playNav();
                                         setSheetActionDetail({
-                                          type: 'weapon',
-                                          payload: {
-                                            ...weapon,
-                                            range: normalizeWeaponField(weapon.range),
-                                            hitDc: normalizeWeaponField(weapon.hitDc),
-                                            damage: normalizeWeaponField(weapon.damage),
-                                          },
+                                          type: 'inventoryWeapon',
+                                          payload: { ...weapon },
                                         });
                                       }}
                                     >
@@ -4378,7 +4460,18 @@ export default function CombatPanel({
                             </div>
 
                             <div className={styles.combatToolGroup}>
-                              <div className={styles.label}>Spells</div>
+                              <div className={styles.combatToolGroupHead}>
+                                <div className={styles.label}>Spells</div>
+                                <div className={styles.spellSearchWrap}>
+                                  <input
+                                    className={`${styles.input} ${styles.spellSearchInput}`}
+                                    value={spellSearchQuery}
+                                    onChange={(e) => setSpellSearchQuery(e.target.value)}
+                                    placeholder="Search spells..."
+                                    aria-label="Search spells"
+                                  />
+                                </div>
+                              </div>
                               <div className={`${styles.actionsTable} koa-scrollbar-thin`}>
                                 <div className={styles.actionsHeadRow}>
                                   <span>Attack</span>
@@ -4386,10 +4479,12 @@ export default function CombatPanel({
                                   <span>Hit / DC</span>
                                   <span>Damage</span>
                                 </div>
-                                {selectedSpellActionGroups.length === 0 ? (
-                                  <div className={styles.sheetListFallback}>No spellbook entries found.</div>
+                                {filteredSelectedSpellActionGroups.length === 0 ? (
+                                  <div className={styles.sheetListFallback}>
+                                    {hasSpellSearchQuery ? 'No spells match your search.' : 'No spellbook entries found.'}
+                                  </div>
                                 ) : (
-                                  selectedSpellActionGroups.map((group) => (
+                                  filteredSelectedSpellActionGroups.map((group) => (
                                     <React.Fragment key={`spell-action-group-${group.key}`}>
                                       <div className={styles.actionsLevelDivider}>
                                         <span>{group.label}</span>
@@ -4669,66 +4764,68 @@ export default function CombatPanel({
                   </div>
                 </div>
 
-                <div className={styles.sectionTopGap}>
-                  <div className={styles.toolsHeaderRow}>
-                    <div className={styles.label}>Inventory</div>
-                    <div className={styles.toolsModeToggle}>
-                      <button
-                        type="button"
-                        className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipment' ? styles.toolsModeBtnActive : ''}`}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); setEquipmentEditMode('equipment'); }}
-                      >
-                        Equipment
-                      </button>
-                      <button
-                        type="button"
-                        className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipped' ? styles.toolsModeBtnActive : ''}`}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); setEquipmentEditMode('equipped'); }}
-                      >
-                        Mark Equipped
-                      </button>
+                {!selectedInventoryManagedInPartyHub && (
+                  <div className={styles.sectionTopGap}>
+                    <div className={styles.toolsHeaderRow}>
+                      <div className={styles.label}>Inventory</div>
+                      <div className={styles.toolsModeToggle}>
+                        <button
+                          type="button"
+                          className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipment' ? styles.toolsModeBtnActive : ''}`}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); setEquipmentEditMode('equipment'); }}
+                        >
+                          Equipment
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.toolsModeBtn} ${equipmentEditMode === 'equipped' ? styles.toolsModeBtnActive : ''}`}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); setEquipmentEditMode('equipped'); }}
+                        >
+                          Mark Equipped
+                        </button>
+                      </div>
                     </div>
+                    {equipmentEditMode === 'equipment' ? (
+                      <>
+                        <div className={styles.label}>Equipment (one per line)</div>
+                        <textarea
+                          className={`${styles.input} ${styles.textareaInput}`}
+                          value={normalizeStringList(selected.equipmentItems).join('\n')}
+                          onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
+                        />
+                      </>
+                    ) : (
+                      <div className={styles.equippedPickerWrap}>
+                        <div className={styles.equippedPickerHeading}>Mark Equipped Items</div>
+                        {selectedEquipableItems.length ? (
+                          <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
+                            {selectedEquipableItems.map((item) => {
+                              const itemKey = tokenKey(item);
+                              const checked = selectedEquippedItemKeys.has(itemKey);
+                              return (
+                                <label key={`edit-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      playNav();
+                                      toggleSelectedEquippedItem(item);
+                                    }}
+                                  />
+                                  <span>{item}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {equipmentEditMode === 'equipment' ? (
-                    <>
-                      <div className={styles.label}>Equipment (one per line)</div>
-                      <textarea
-                        className={`${styles.input} ${styles.textareaInput}`}
-                        value={normalizeStringList(selected.equipmentItems).join('\n')}
-                        onChange={(e) => setSelectedField({ equipmentItems: normalizeStringList(e.target.value) })}
-                      />
-                    </>
-                  ) : (
-                    <div className={styles.equippedPickerWrap}>
-                      <div className={styles.equippedPickerHeading}>Mark Equipped Items</div>
-                      {selectedEquipableItems.length ? (
-                        <div className={`${styles.equippedPicker} koa-scrollbar-thin`}>
-                          {selectedEquipableItems.map((item) => {
-                            const itemKey = tokenKey(item);
-                            const checked = selectedEquippedItemKeys.has(itemKey);
-                            return (
-                              <label key={`edit-equip-toggle-${itemKey}`} className={styles.equippedPickerRow}>
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => {
-                                    playNav();
-                                    toggleSelectedEquippedItem(item);
-                                  }}
-                                />
-                                <span>{item}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className={styles.equippedPickerEmpty}>No equipment lines to mark yet.</div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                )}
 
                 <div className={styles.divider}/>
 
@@ -4755,13 +4852,15 @@ export default function CombatPanel({
                     onChange={e => setSelectedField({ notableFeature:e.target.value })}/>
                 </div>
 
-                <div className={styles.sectionTopGap}><div className={styles.label}>Other Possessions (one per line)</div>
-                  <textarea
-                    className={`${styles.input} ${styles.textareaInput}`}
-                    value={normalizeStringList(selected.otherPossessions).join('\n')}
-                    onChange={(e) => setSelectedField({ otherPossessions: normalizeStringList(e.target.value) })}
-                  />
-                </div>
+                {!selectedInventoryManagedInPartyHub && (
+                  <div className={styles.sectionTopGap}><div className={styles.label}>Other Possessions (one per line)</div>
+                    <textarea
+                      className={`${styles.input} ${styles.textareaInput}`}
+                      value={normalizeStringList(selected.otherPossessions).join('\n')}
+                      onChange={(e) => setSelectedField({ otherPossessions: normalizeStringList(e.target.value) })}
+                    />
+                  </div>
+                )}
 
                 <div className={styles.divider}/>
                 <div className={styles.actionRow}>
@@ -4859,6 +4958,80 @@ export default function CombatPanel({
                             />
                           </div>
                         </div>
+                      ) : sheetActionDetail.type === 'inventoryWeapon' ? (
+                        <div className={styles.actionDetailGrid}>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Weapon</div>
+                            <div className={styles.actionDetailValue}>
+                              <strong>{cleanText(inventoryWeaponActionPayload?.attack) || 'Unnamed Weapon'}</strong>
+                              {inventoryWeaponActionMeta && <div>{inventoryWeaponActionMeta}</div>}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Proficient</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponProficiency || inventoryWeaponActionPayload?.hitDc) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Attack Type</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponAttackType) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Reach</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponReach || inventoryWeaponActionPayload?.range) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Damage</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponDamage || inventoryWeaponActionPayload?.damage) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Damage Type</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponDamageType) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Weight</div>
+                            <div className={styles.actionDetailValue}>
+                              {inventoryWeaponActionWeight
+                                ? (/[a-z]/i.test(inventoryWeaponActionWeight) ? inventoryWeaponActionWeight : `${inventoryWeaponActionWeight} lb.`)
+                                : '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Cost</div>
+                            <div className={styles.actionDetailValue}>
+                              {inventoryWeaponActionCost
+                                ? (/[a-z]/i.test(inventoryWeaponActionCost) ? inventoryWeaponActionCost : `${inventoryWeaponActionCost} gp`)
+                                : '--'}
+                            </div>
+                          </div>
+                          <div className={styles.actionDetailFieldWide}>
+                            <div className={styles.label}>Properties</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponProperties) || '--'}
+                            </div>
+                          </div>
+                          {cleanText(inventoryWeaponActionPayload?.notes) && (
+                            <div className={styles.actionDetailFieldWide}>
+                              <div className={styles.label}>Notes</div>
+                              <div className={styles.actionDetailValue}>{cleanText(inventoryWeaponActionPayload?.notes)}</div>
+                            </div>
+                          )}
+                          {inventoryWeaponActionTags.length > 0 && (
+                            <div className={styles.actionDetailFieldWide}>
+                              <div className={styles.label}>Tags</div>
+                              <div className={styles.actionDetailValue}>{inventoryWeaponActionTags.join(', ')}</div>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <div className={styles.actionDetailGrid}>
                           <div className={styles.actionDetailFieldWide}>
@@ -4910,23 +5083,35 @@ export default function CombatPanel({
                         </div>
                       )}
                     </div>
-                    <div className={styles.managerActions}>
-                      <button
-                        className={btnClass('ghost', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); setSheetActionDetail(null); }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className={btnClass('gold', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); saveSheetActionDetail(); }}
-                        disabled={!selectedCanEdit}
-                      >
-                        Save
-                      </button>
-                    </div>
+                    {sheetActionDetail.type === 'inventoryWeapon' ? (
+                      <div className={styles.managerActions}>
+                        <button
+                          className={btnClass('gold', 'sm')}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); setSheetActionDetail(null); }}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ) : (
+                      <div className={styles.managerActions}>
+                        <button
+                          className={btnClass('ghost', 'sm')}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); setSheetActionDetail(null); }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          className={btnClass('gold', 'sm')}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); saveSheetActionDetail(); }}
+                          disabled={!selectedCanEdit}
+                        >
+                          Save
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

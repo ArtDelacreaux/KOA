@@ -1012,6 +1012,7 @@ export default function CampaignHub(props) {
 
   const normalizeItemRarity = (value) => {
     const normalized = normalizeText(value);
+    if (normalized.toLowerCase() === 'epic') return 'Very Rare';
     return ITEM_RARITIES.includes(normalized) ? normalized : 'Common';
   };
 
@@ -1056,7 +1057,13 @@ export default function CampaignHub(props) {
 
   const rarityBadge = (rarity) => {
     const r = (rarity || 'Common').toLowerCase();
-    const map = { common: 'rgba(255,255,255,0.16)', uncommon: 'rgba(110,231,183,0.18)', rare: 'rgba(96,165,250,0.18)', epic: 'rgba(216,180,254,0.18)', legendary: 'rgba(251,191,36,0.20)' };
+    const map = {
+      common: 'rgba(255,255,255,0.16)',
+      uncommon: 'rgba(110,231,183,0.18)',
+      rare: 'rgba(96,165,250,0.18)',
+      'very rare': 'rgba(186,136,245,0.2)',
+      legendary: 'rgba(251,191,36,0.20)',
+    };
     return map[r] || map.common;
   };
 
@@ -1075,6 +1082,7 @@ export default function CampaignHub(props) {
   const [invCat, setInvCat] = useState('All');
   const [invRar, setInvRar] = useState('All');
   const [invSort, setInvSort] = useState('name');
+  const [invSelectedItemId, setInvSelectedItemId] = useState('');
   const [inventoryBoardView, setInventoryBoardView] = useState('party');
   const [currencyDelta, setCurrencyDelta] = useState({ pp: '', gp: '', sp: '', cp: '' });
 
@@ -1169,7 +1177,13 @@ export default function CampaignHub(props) {
 
   const personalInventoryItems = useMemo(() => {
     const items = Array.isArray(activePersonalInventory?.items) ? [...activePersonalInventory.items] : [];
-    items.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    items.sort((a, b) => {
+      const equippedDelta = Number(!!b?.equipped) - Number(!!a?.equipped);
+      if (equippedDelta !== 0) return equippedDelta;
+      const updatedDelta = new Date(b?.updatedAt || 0) - new Date(a?.updatedAt || 0);
+      if (updatedDelta !== 0) return updatedDelta;
+      return (a?.name || '').localeCompare(b?.name || '');
+    });
     return items;
   }, [activePersonalInventory?.items]);
 
@@ -1259,7 +1273,24 @@ export default function CampaignHub(props) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [invModalOpen, tradeCenterOpen, tradeRequestModalOpen]);
 
-  const invEmptyDraft = { name: '', qty: 1, category: 'Gear', rarity: 'Common', value: '', weight: '', notes: '', tags: '', assignedTo: '', equipped: false };
+  const invEmptyDraft = {
+    name: '',
+    qty: 1,
+    category: 'Gear',
+    rarity: 'Common',
+    value: '',
+    weight: '',
+    notes: '',
+    tags: '',
+    assignedTo: '',
+    weaponProficiency: '',
+    weaponAttackType: '',
+    weaponReach: '',
+    weaponDamage: '',
+    weaponDamageType: '',
+    weaponProperties: '',
+    equipped: false,
+  };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
 
   const draftFromItem = (item) => ({
@@ -1272,6 +1303,12 @@ export default function CampaignHub(props) {
     notes: item.notes || '',
     tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
     assignedTo: item.assignedTo || '',
+    weaponProficiency: item.weaponProficiency || item.proficiency || '',
+    weaponAttackType: item.weaponAttackType || item.attackType || '',
+    weaponReach: item.weaponReach || item.reach || '',
+    weaponDamage: item.weaponDamage || item.damage || '',
+    weaponDamageType: item.weaponDamageType || item.damageType || '',
+    weaponProperties: item.weaponProperties || item.properties || '',
     equipped: !!item.equipped,
   });
 
@@ -1295,6 +1332,14 @@ export default function CampaignHub(props) {
     setInvEditingId(item.id);
     setInvDraft(draftFromItem(item));
     setInvModalOpen(true);
+  };
+
+  const handleInventoryCardSelect = (item) => {
+    if (!item) return;
+    setInvSelectedItemId((prev) => (prev === item.id ? '' : item.id));
+    if (canEditInventory) {
+      invOpenEdit(item);
+    }
   };
 
   const invOpenPersonalAdd = () => {
@@ -1343,6 +1388,25 @@ export default function CampaignHub(props) {
     const value = normalizeOptionalNumber(invDraft.value);
     const weight = normalizeOptionalNumber(invDraft.weight);
     const tags = normalizeItemTags(invDraft.tags);
+    const assignedTo = editingPersonal ? '' : normalizeText(invDraft.assignedTo);
+    const category = normalizeItemCategory(invDraft.category);
+    const weaponFields = category === 'Weapon'
+      ? {
+          weaponProficiency: normalizeText(invDraft.weaponProficiency),
+          weaponAttackType: normalizeText(invDraft.weaponAttackType),
+          weaponReach: normalizeText(invDraft.weaponReach),
+          weaponDamage: normalizeText(invDraft.weaponDamage),
+          weaponDamageType: normalizeText(invDraft.weaponDamageType),
+          weaponProperties: normalizeText(invDraft.weaponProperties),
+        }
+      : {
+          weaponProficiency: '',
+          weaponAttackType: '',
+          weaponReach: '',
+          weaponDamage: '',
+          weaponDamageType: '',
+          weaponProperties: '',
+        };
     const now = new Date().toISOString();
 
     const upsertItems = (inputItems) => {
@@ -1351,13 +1415,14 @@ export default function CampaignHub(props) {
         id: normalizeText(existing?.id) || bagNewId(),
         name,
         qty,
-        category: normalizeItemCategory(invDraft.category || existing?.category),
+        category,
         rarity: normalizeItemRarity(invDraft.rarity || existing?.rarity),
         value: Number.isFinite(value) ? value : (existing ? normalizeOptionalNumber(existing.value) : null),
         weight: Number.isFinite(weight) ? weight : (existing ? normalizeOptionalNumber(existing.weight) : null),
         notes: normalizeText(invDraft.notes),
         tags,
-        assignedTo: normalizeText(invDraft.assignedTo),
+        assignedTo,
+        ...weaponFields,
         equipped: !!invDraft.equipped,
         createdAt: normalizeIso(existing?.createdAt) || now,
         updatedAt: now,
@@ -1755,7 +1820,24 @@ export default function CampaignHub(props) {
   const invFilteredItems = useMemo(() => {
     let items = [...(bag.items || [])];
     const q = (invQuery || '').toLowerCase().trim();
-    if (q)           items = items.filter((it) => (it.name || '').toLowerCase().includes(q) || (it.notes || '').toLowerCase().includes(q) || (it.assignedTo || '').toLowerCase().includes(q));
+    if (q) {
+      items = items.filter((it) => {
+        const haystack = [
+          it.name,
+          it.notes,
+          it.assignedTo,
+          it.weaponProficiency,
+          it.weaponAttackType,
+          it.weaponReach,
+          it.weaponDamage,
+          it.weaponDamageType,
+          it.weaponProperties,
+        ]
+          .map((value) => String(value || '').toLowerCase())
+          .join(' ');
+        return haystack.includes(q);
+      });
+    }
     if (invCat !== 'All') items = items.filter((it) => (it.category || '') === invCat);
     if (invRar !== 'All') items = items.filter((it) => (it.rarity   || '') === invRar);
     if (invSort === 'qty')     items.sort((a, b) => (b.qty || 0) - (a.qty || 0));
@@ -1764,6 +1846,13 @@ export default function CampaignHub(props) {
     else items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     return items;
   }, [bag.items, invQuery, invCat, invRar, invSort]);
+
+  useEffect(() => {
+    if (!invSelectedItemId) return;
+    if (invFilteredItems.some((item) => item.id === invSelectedItemId)) return;
+    setInvSelectedItemId('');
+  }, [invFilteredItems, invSelectedItemId]);
+  const isInvDraftWeapon = normalizeItemCategory(invDraft.category) === 'Weapon';
   const selectedQuestAssigneeValue = normalizeText(questDraft.assignedUserId);
   const selectedQuestAssigneeMissing =
     !!selectedQuestAssigneeValue &&
@@ -2549,17 +2638,38 @@ export default function CampaignHub(props) {
                     ) : (
                       <div className={styles.personalInventoryList}>
                         {personalInventoryItems.map((item) => (
-                          <div key={item.id} className={styles.personalInventoryRow}>
+                          <div
+                            key={item.id}
+                            className={`${styles.personalInventoryRow} ${canEditPersonalInventory ? styles.personalInventoryRowClickable : ''}`}
+                            onMouseEnter={() => {
+                              if (!canEditPersonalInventory) return;
+                              playHover();
+                            }}
+                            onClick={() => {
+                              if (!canEditPersonalInventory) return;
+                              invOpenPersonalEdit(item);
+                            }}
+                            onKeyDown={(e) => {
+                              if (!canEditPersonalInventory) return;
+                              if (e.key !== 'Enter' && e.key !== ' ') return;
+                              e.preventDefault();
+                              invOpenPersonalEdit(item);
+                            }}
+                            role={canEditPersonalInventory ? 'button' : undefined}
+                            tabIndex={canEditPersonalInventory ? 0 : -1}
+                          >
                             <div className={styles.personalInventoryMeta}>
-                              <div className={styles.personalInventoryName}>{item.name}</div>
+                              <div className={styles.personalInventoryNameRow}>
+                                <div className={styles.personalInventoryName}>{item.name}</div>
+                                {item.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                              </div>
                               <div className={styles.personalInventorySub}>{item.rarity} - {item.category}</div>
                             </div>
-                            <div className={styles.actionsRow}>
+                            <div className={styles.actionsRow} onClick={(e) => e.stopPropagation()}>
                               <span className={styles.qtyBadge}>x{item.qty ?? 1}</span>
                               <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, -1)} disabled={!canEditPersonalInventory}>-</button>
                               <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, +1)} disabled={!canEditPersonalInventory}>+</button>
                               <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invTogglePersonalEquipped(item.id)} disabled={!canEditPersonalInventory}>Equip</button>
-                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenPersonalEdit(item)} disabled={!canEditPersonalInventory}>Edit</button>
                               <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeletePersonalItem(item.id)} disabled={!canEditPersonalInventory}>Delete</button>
                             </div>
                           </div>
@@ -2576,51 +2686,85 @@ export default function CampaignHub(props) {
                     </div>
                   ) : (
                     <div className={styles.listCol}>
-                      {invFilteredItems.map((it) => (
-                        <div
-                          key={it.id}
-                          className={`${styles.softCard} ${styles.inventoryItemCard} ${styles.boardNoteCard}`}
-                          style={{ '--ch-rarity-bg': rarityBadge(it.rarity) }}
-                          onMouseEnter={() => playHover()}
-                        >
-                          <div className={styles.questRow}>
-                            <div className={styles.itemBody}>
-                              <div className={styles.questTitleRow}>
-                                <div className={styles.itemTitle}>{it.name}</div>
-                                {it.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
-                                <span className={styles.itemMetaInline}>{it.rarity} - {it.category}</span>
+                      {invFilteredItems.map((it) => {
+                        const detailsVisible = invSelectedItemId === it.id;
+                        const isWeaponItem = normalizeItemCategory(it.category) === 'Weapon';
+                        const weaponDetailRows = [
+                          { label: 'Proficient', value: normalizeText(it.weaponProficiency) },
+                          { label: 'Attack Type', value: normalizeText(it.weaponAttackType) },
+                          { label: 'Reach', value: normalizeText(it.weaponReach) },
+                          { label: 'Damage', value: normalizeText(it.weaponDamage) },
+                          { label: 'Damage Type', value: normalizeText(it.weaponDamageType) },
+                          { label: 'Weight', value: it.weight != null ? `${it.weight} lb` : '' },
+                          { label: 'Cost', value: it.value != null ? `${it.value} gp` : '' },
+                          { label: 'Properties', value: normalizeText(it.weaponProperties) },
+                        ].filter((entry) => !!entry.value);
+                        return (
+                          <div
+                            key={it.id}
+                            className={`${styles.softCard} ${styles.inventoryItemCard} ${styles.boardNoteCard} ${styles.inventoryItemCardClickable} ${detailsVisible ? styles.inventoryItemCardSelected : ''}`}
+                            style={{ '--ch-rarity-bg': rarityBadge(it.rarity) }}
+                            onMouseEnter={() => playHover()}
+                            onClick={() => handleInventoryCardSelect(it)}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter' && e.key !== ' ') return;
+                              e.preventDefault();
+                              handleInventoryCardSelect(it);
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={detailsVisible}
+                          >
+                            <div className={styles.questRow}>
+                              <div className={styles.itemBody}>
+                                <div className={styles.questTitleRow}>
+                                  <div className={styles.itemTitle}>{it.name}</div>
+                                  {it.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                                  <span className={styles.itemMetaInline}>{it.rarity} - {it.category}</span>
+                                </div>
+                                {detailsVisible && isWeaponItem && weaponDetailRows.length > 0 && (
+                                  <div className={styles.itemWeaponStats}>
+                                    {weaponDetailRows.map((entry) => (
+                                      <div key={`${it.id}-${entry.label}`} className={styles.itemWeaponStatRow}>
+                                        <span className={styles.itemWeaponStatLabel}>{entry.label}:</span>
+                                        <span>{entry.value}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {detailsVisible && it.notes && <div className={styles.itemNotes}>{it.notes}</div>}
+                                {detailsVisible && (
+                                  <div className={styles.itemStats}>
+                                    {it.assignedTo && <span>By: {it.assignedTo}</span>}
+                                    {!isWeaponItem && it.value != null && <span>Value: {it.value} gp</span>}
+                                    {!isWeaponItem && it.weight != null && <span>Wt: {it.weight} lb</span>}
+                                  </div>
+                                )}
                               </div>
-                              {it.notes && <div className={styles.itemNotes}>{it.notes}</div>}
-                              <div className={styles.itemStats}>
-                                {it.assignedTo && <span>By: {it.assignedTo}</span>}
-                                {it.value != null && <span>Value: {it.value} gp</span>}
-                                {it.weight != null && <span>Wt: {it.weight} lb</span>}
+                              <div className={styles.actionsRow} onClick={(e) => e.stopPropagation()}>
+                                <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
+                                {canEditInventory ? (
+                                  <>
+                                    <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={(e) => { e.stopPropagation(); invBumpQty(it.id, -1); }} title="-1">-</button>
+                                    <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={(e) => { e.stopPropagation(); invBumpQty(it.id, +1); }} title="+1">+</button>
+                                    <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={(e) => { e.stopPropagation(); invToggleEquipped(it.id); }}>Equip</button>
+                                    <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={(e) => { e.stopPropagation(); invDeleteItem(it.id); }}>Delete</button>
+                                  </>
+                                ) : (
+                                  <button
+                                    className={smallBtnClass('gold')}
+                                    onMouseEnter={smallBtnHover}
+                                    onClick={(e) => { e.stopPropagation(); openTradeRequestForItem(it); }}
+                                    disabled={!canSubmitTradeRequests}
+                                  >
+                                    Request
+                                  </button>
+                                )}
                               </div>
-                            </div>
-                            <div className={styles.actionsRow}>
-                              <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
-                              {canEditInventory ? (
-                                <>
-                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
-                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
-                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
-                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
-                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)}>Delete</button>
-                                </>
-                              ) : (
-                                <button
-                                  className={smallBtnClass('gold')}
-                                  onMouseEnter={smallBtnHover}
-                                  onClick={() => openTradeRequestForItem(it)}
-                                  disabled={!canSubmitTradeRequests}
-                                >
-                                  Request
-                                </button>
-                              )}
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -2761,17 +2905,77 @@ export default function CampaignHub(props) {
                   <input type="number" min={1} max={9999} value={invDraft.qty} onChange={(e) => setInvDraft((d) => ({ ...d, qty: e.target.value }))} className={styles.inputBase} />
                 </div>
                 <div>
-                  <div className={styles.inputLabel}>Value (gp)</div>
+                  <div className={styles.inputLabel}>{isInvDraftWeapon ? 'Cost (gp)' : 'Value (gp)'}</div>
                   <input type="number" min={0} value={invDraft.value} onChange={(e) => setInvDraft((d) => ({ ...d, value: e.target.value }))} placeholder="0" className={styles.inputBase} />
                 </div>
                 <div>
                   <div className={styles.inputLabel}>Weight (lb)</div>
                   <input type="number" min={0} value={invDraft.weight} onChange={(e) => setInvDraft((d) => ({ ...d, weight: e.target.value }))} placeholder="0" className={styles.inputBase} />
                 </div>
-                <div>
-                  <div className={styles.inputLabel}>Assigned To</div>
-                  <input value={invDraft.assignedTo} onChange={(e) => setInvDraft((d) => ({ ...d, assignedTo: e.target.value }))} placeholder="Player name" className={styles.inputBase} />
-                </div>
+                {isInvDraftWeapon && (
+                  <>
+                    <div>
+                      <div className={styles.inputLabel}>Proficient</div>
+                      <input
+                        value={invDraft.weaponProficiency}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponProficiency: e.target.value }))}
+                        placeholder="Yes"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div>
+                      <div className={styles.inputLabel}>Attack Type</div>
+                      <input
+                        value={invDraft.weaponAttackType}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponAttackType: e.target.value }))}
+                        placeholder="Melee"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div>
+                      <div className={styles.inputLabel}>Reach</div>
+                      <input
+                        value={invDraft.weaponReach}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponReach: e.target.value }))}
+                        placeholder="5 ft."
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div>
+                      <div className={styles.inputLabel}>Damage</div>
+                      <input
+                        value={invDraft.weaponDamage}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponDamage: e.target.value }))}
+                        placeholder="2d6+7"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div>
+                      <div className={styles.inputLabel}>Damage Type</div>
+                      <input
+                        value={invDraft.weaponDamageType}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponDamageType: e.target.value }))}
+                        placeholder="Slashing"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div className={styles.fullCol}>
+                      <div className={styles.inputLabel}>Properties</div>
+                      <input
+                        value={invDraft.weaponProperties}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponProperties: e.target.value }))}
+                        placeholder="Heavy, Two-Handed"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                  </>
+                )}
+                {invModalTarget !== 'personal' && (
+                  <div>
+                    <div className={styles.inputLabel}>Assigned To</div>
+                    <input value={invDraft.assignedTo} onChange={(e) => setInvDraft((d) => ({ ...d, assignedTo: e.target.value }))} placeholder="Player name" className={styles.inputBase} />
+                  </div>
+                )}
                 <div className={styles.fullCol}>
                   <div className={styles.inputLabel}>Notes</div>
                   <textarea value={invDraft.notes} onChange={(e) => setInvDraft((d) => ({ ...d, notes: e.target.value }))} placeholder="Description, effects, flavor text..." rows={3} className={`${styles.inputBase} ${styles.textarea} ${styles.noResize}`} />
