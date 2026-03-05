@@ -868,6 +868,17 @@ function formatSigned(value, empty = '—') {
   return n >= 0 ? `+${n}` : `${n}`;
 }
 
+function formatWeaponHitDc(value, attackModifier) {
+  const text = cleanText(value);
+  if (!text) return '--';
+  const compact = text.replace(/\s+/g, '');
+  if (!/^[+-]\d+$/.test(compact)) return text;
+  const attackMod = toInt(attackModifier, null);
+  const weaponBonus = toInt(compact, null);
+  if (attackMod == null || weaponBonus == null) return text;
+  return formatSigned(attackMod + weaponBonus, text);
+}
+
 function abilityModifier(score) {
   if (score == null || score === '') return null;
   return Math.floor((toInt(score, 10) - 10) / 2);
@@ -4903,7 +4914,7 @@ export default function CombatPanel({
                                       >
                                         <span className={styles.actionsAttackCell}>{weapon.attack}</span>
                                         <span>{cleanText(weapon.range) || '--'}</span>
-                                        <span>{cleanText(weapon.hitDc) || '--'}</span>
+                                        <span>{formatWeaponHitDc(weapon.hitDc, selected?.attackModifier)}</span>
                                         <span>{cleanText(weapon.damage) || '--'}</span>
                                       </button>
                                     ))
@@ -5770,7 +5781,10 @@ export default function CombatPanel({
                           <div>
                             <div className={styles.label}>Hit / DC</div>
                             <div className={styles.actionDetailValue}>
-                              {cleanText(inventoryWeaponActionPayload?.weaponHitDc || inventoryWeaponActionPayload?.hitDc) || '--'}
+                              {formatWeaponHitDc(
+                                inventoryWeaponActionPayload?.weaponHitDc || inventoryWeaponActionPayload?.hitDc,
+                                selected?.attackModifier
+                              )}
                             </div>
                           </div>
                           <div>

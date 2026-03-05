@@ -251,9 +251,17 @@ export default function CampaignHub(props) {
   ========================= */
   const currentUserId = normalizeText(session?.user?.id);
   const currentUserEmail = normalizeEmail(session?.user?.email);
-  const currentUsername = normalizeText(profile?.username).toLowerCase();
+  const currentUsernameRaw = normalizeText(profile?.username);
+  const currentUsername = currentUsernameRaw.toLowerCase();
   const canManageQuests = authEnabled ? (canManageCampaign && canEditCampaignData) : canEditCampaignData;
-  const managerOnlyQuestMessage = 'Only owner/DM accounts can create and manage quests.';
+  const canCreateOwnPersonalQuests = !!(
+    canEditCampaignData
+    && authEnabled
+    && !canManageCampaign
+    && currentUserId
+  );
+  const managerOnlyQuestMessage = 'Only owner/DM accounts can manage party quests.';
+  const personalQuestCreatorMessage = 'Players can add personal quests from the Personal board only.';
   const [assignablePlayers, setAssignablePlayers] = useState([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [playersError, setPlayersError] = useState('');
@@ -463,6 +471,8 @@ export default function CampaignHub(props) {
     ? (
       canManageCampaign
         ? <>Hit <strong>+ Add Quest</strong> and assign it to a player.</>
+        : canCreateOwnPersonalQuests
+          ? <>Hit <strong>+ Add Quest</strong> to track your own personal objective.</>
         : (authEnabled && !currentUserId && !currentUserEmail)
           ? 'Sign in to view personal quests.'
           : 'Your assigned personal quests will appear here.'
@@ -478,6 +488,17 @@ export default function CampaignHub(props) {
     : 'Completed party quests appear here.';
 
   const newId = () => createId('quest');
+  const canOpenQuestModal = canManageQuests || canCreateOwnPersonalQuests;
+  const canAddQuestFromCurrentView = canManageQuests || (showingPersonalQuestBoard && canCreateOwnPersonalQuests);
+  const selfQuestAssignment = useMemo(() => {
+    const label = currentUsernameRaw || 'You';
+    return {
+      userId: currentUserId,
+      email: currentUserEmail,
+      username: currentUsernameRaw,
+      label,
+    };
+  }, [currentUserEmail, currentUserId, currentUsernameRaw]);
 
   const ensureQuestManagePermission = () => {
     if (canManageQuests) return true;
@@ -485,17 +506,29 @@ export default function CampaignHub(props) {
     return false;
   };
 
+  const ensurePersonalQuestCreatePermission = () => {
+    if (canManageQuests) return true;
+    if (showingPersonalQuestBoard && canCreateOwnPersonalQuests) return true;
+    if (!canEditCampaignData) {
+      alert(readOnlyStatusMessage);
+      return false;
+    }
+    alert(personalQuestCreatorMessage);
+    return false;
+  };
+
   const openAddQuest = () => {
-    if (!ensureQuestManagePermission()) return;
+    if (!ensurePersonalQuestCreatePermission()) return;
+    const canSelfCreate = !canManageQuests && canCreateOwnPersonalQuests;
     setEditingQuestId(null);
     setQuestDraft({
       title: '',
       type: 'Side',
-      board: showingPersonalQuestBoard ? 'personal' : 'party',
-      assignedUserId: '',
-      assignedEmail: '',
-      assignedUsername: '',
-      assignedLabel: '',
+      board: canSelfCreate ? 'personal' : (showingPersonalQuestBoard ? 'personal' : 'party'),
+      assignedUserId: canSelfCreate ? selfQuestAssignment.userId : '',
+      assignedEmail: canSelfCreate ? selfQuestAssignment.email : '',
+      assignedUsername: canSelfCreate ? selfQuestAssignment.username : '',
+      assignedLabel: canSelfCreate ? selfQuestAssignment.label : '',
       giver: '',
       location: '',
       description: '',
@@ -522,32 +555,47 @@ export default function CampaignHub(props) {
   };
 
   const saveQuest = () => {
-    if (!ensureQuestManagePermission()) return;
+    if (!canManageQuests && !canCreateOwnPersonalQuests) {
+      alert(canEditCampaignData ? managerOnlyQuestMessage : readOnlyStatusMessage);
+      return;
+    }
+    if (!canManageQuests && editingQuestId) {
+      alert(managerOnlyQuestMessage);
+      return;
+    }
 
     const title = (questDraft.title || '').trim();
     if (!title) { alert('Quest needs a title.'); return; }
 
-    const board = questBoardType(questDraft);
+    const board = canManageQuests ? questBoardType(questDraft) : 'personal';
     let assignedUserId = '';
+    let assignedEmail = '';
     let assignedUsername = '';
     let assignedLabel = '';
     if (board === 'personal') {
-      assignedUserId = normalizeText(questDraft.assignedUserId);
-      assignedUsername = normalizeText(questDraft.assignedUsername);
-      const selected = assignablePlayers.find((player) => {
-        const playerValue = player.userId;
-        return playerValue && playerValue === assignedUserId;
-      });
-      if (selected) {
-        assignedUserId = selected.userId;
-        assignedUsername = normalizeText(selected.username || selected.label);
-        assignedLabel = normalizeText(selected.username || selected.label);
+      if (!canManageQuests) {
+        assignedUserId = selfQuestAssignment.userId;
+        assignedEmail = selfQuestAssignment.email;
+        assignedUsername = selfQuestAssignment.username;
+        assignedLabel = selfQuestAssignment.label;
       } else {
+        assignedUserId = normalizeText(questDraft.assignedUserId);
         assignedUsername = normalizeText(questDraft.assignedUsername);
-        assignedLabel = normalizeText(questDraft.assignedLabel);
+        const selected = assignablePlayers.find((player) => {
+          const playerValue = player.userId;
+          return playerValue && playerValue === assignedUserId;
+        });
+        if (selected) {
+          assignedUserId = selected.userId;
+          assignedUsername = normalizeText(selected.username || selected.label);
+          assignedLabel = normalizeText(selected.username || selected.label);
+        } else {
+          assignedUsername = normalizeText(questDraft.assignedUsername);
+          assignedLabel = normalizeText(questDraft.assignedLabel);
+        }
       }
 
-      if (!assignedUserId) {
+      if (!assignedUserId && !assignedEmail) {
         alert('Personal quests must be assigned to a player.');
         return;
       }
@@ -559,7 +607,7 @@ export default function CampaignHub(props) {
       type: questDraft.type || 'Side',
       board,
       assignedUserId: board === 'personal' ? assignedUserId : '',
-      assignedEmail: '',
+      assignedEmail: board === 'personal' ? assignedEmail : '',
       assignedUsername: board === 'personal' ? assignedUsername : '',
       assignedLabel: board === 'personal' ? assignedLabel : '',
       giver: (questDraft.giver || '').trim(),
@@ -2633,7 +2681,7 @@ export default function CampaignHub(props) {
 
         <div className={styles.bodyContent}>
           <div className={styles.actionRow}>
-            {((campaignTab === 'quests' && canManageQuests) || (campaignTab === 'inventory' && canEditInventory)) && (
+            {((campaignTab === 'quests' && canAddQuestFromCurrentView) || (campaignTab === 'inventory' && canEditInventory)) && (
               <button
                 type="button"
                 onMouseEnter={smallBtnHover}
@@ -3642,7 +3690,7 @@ export default function CampaignHub(props) {
         )}
 
         {/* ========== QUEST MODAL ========== */}
-        {questModalOpen && canManageQuests && (
+        {questModalOpen && canOpenQuestModal && (
           <div className={styles.modalOverlay}>
             <div className={`${styles.modalCard} ${styles.questModal}`}>
               <div className={styles.modalHeader}>
@@ -3657,25 +3705,32 @@ export default function CampaignHub(props) {
                     <input type={type} value={questDraft[key] || ''} onChange={(e) => setQuestDraft((d) => ({ ...d, [key]: e.target.value }))} placeholder={ph} className={styles.inputBase} />
                   </div>
                 ))}
-                <div>
-                  <div className={styles.inputLabel}>Board</div>
-                  <select
-                    value={questBoardType(questDraft)}
-                    onChange={(e) => {
-                      const nextBoard = e.target.value === 'personal' ? 'personal' : 'party';
-                      setQuestDraft((d) => (
-                        nextBoard === 'personal'
-                          ? { ...d, board: 'personal' }
-                          : { ...d, board: 'party', assignedUserId: '', assignedEmail: '', assignedUsername: '', assignedLabel: '' }
-                      ));
-                    }}
-                    className={styles.inputBase}
-                  >
-                    <option value="party">Party Board</option>
-                    <option value="personal">Personal Board</option>
-                  </select>
-                </div>
-                {questBoardType(questDraft) === 'personal' && (
+                {canManageQuests ? (
+                  <div>
+                    <div className={styles.inputLabel}>Board</div>
+                    <select
+                      value={questBoardType(questDraft)}
+                      onChange={(e) => {
+                        const nextBoard = e.target.value === 'personal' ? 'personal' : 'party';
+                        setQuestDraft((d) => (
+                          nextBoard === 'personal'
+                            ? { ...d, board: 'personal' }
+                            : { ...d, board: 'party', assignedUserId: '', assignedEmail: '', assignedUsername: '', assignedLabel: '' }
+                        ));
+                      }}
+                      className={styles.inputBase}
+                    >
+                      <option value="party">Party Board</option>
+                      <option value="personal">Personal Board</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <div className={styles.inputLabel}>Board</div>
+                    <div className={styles.modalHint}>Personal Board</div>
+                  </div>
+                )}
+                {canManageQuests && questBoardType(questDraft) === 'personal' && (
                   <div>
                     <div className={styles.inputLabel}>Assign To Player *</div>
                     <select
@@ -3715,6 +3770,12 @@ export default function CampaignHub(props) {
                     {!playersLoading && !playersError && assignablePlayers.length === 0 && (
                       <div className={styles.modalHint}>No player accounts found yet.</div>
                     )}
+                  </div>
+                )}
+                {!canManageQuests && (
+                  <div>
+                    <div className={styles.inputLabel}>Assigned To</div>
+                    <div className={styles.modalHint}>{selfQuestAssignment.label}</div>
                   </div>
                 )}
                 <div>
