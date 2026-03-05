@@ -988,8 +988,133 @@ export default function CampaignHub(props) {
   ========================= */
   const clampInt = (n, min, max) => Math.max(min, Math.min(max, n));
   const bagNewId = () => createId('bag');
+  const tradeNewId = () => createId('trade');
+  const localInventoryUserId = '__local_player__';
   const CATEGORIES = ['All', 'Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
-  const RARITIES   = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+  const ITEM_CATEGORIES = CATEGORIES.filter((entry) => entry !== 'All');
+  const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
+  const ITEM_RARITIES = RARITIES.filter((entry) => entry !== 'All');
+  const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied']);
+
+  const normalizeItemCategory = (value) => {
+    const normalized = normalizeText(value);
+    return ITEM_CATEGORIES.includes(normalized) ? normalized : 'Gear';
+  };
+
+  const normalizeItemRarity = (value) => {
+    const normalized = normalizeText(value);
+    return ITEM_RARITIES.includes(normalized) ? normalized : 'Common';
+  };
+
+  const normalizeItemTags = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((tag) => normalizeText(tag)).filter(Boolean);
+    }
+    return normalizeText(value)
+      .split(',')
+      .map((tag) => normalizeText(tag))
+      .filter(Boolean);
+  };
+
+  const normalizeOptionalNumber = (value) => {
+    if (value === '' || value == null) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const normalizeIso = (value) => {
+    const raw = normalizeText(value);
+    if (!raw) return '';
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
+  };
+
+  const normalizeInventoryItem = (raw, now = new Date().toISOString()) => {
+    const source = raw && typeof raw === 'object' ? raw : {};
+    const id = normalizeText(source.id) || bagNewId();
+    const qty = clampInt(Number.parseInt(source.qty, 10) || 1, 1, 9999);
+    return {
+      id,
+      name: normalizeText(source.name) || 'Unnamed Item',
+      qty,
+      category: normalizeItemCategory(source.category),
+      rarity: normalizeItemRarity(source.rarity),
+      value: normalizeOptionalNumber(source.value),
+      weight: normalizeOptionalNumber(source.weight),
+      notes: normalizeText(source.notes),
+      tags: normalizeItemTags(source.tags),
+      assignedTo: normalizeText(source.assignedTo),
+      equipped: !!source.equipped,
+      createdAt: normalizeIso(source.createdAt) || now,
+      updatedAt: normalizeIso(source.updatedAt) || now,
+    };
+  };
+
+  const normalizeInventoryItems = (rawItems, now = new Date().toISOString()) => {
+    const list = Array.isArray(rawItems) ? rawItems : [];
+    const seenIds = new Set();
+    return list
+      .map((entry) => normalizeInventoryItem(entry, now))
+      .map((entry) => {
+        let nextId = entry.id;
+        while (!nextId || seenIds.has(nextId)) nextId = bagNewId();
+        seenIds.add(nextId);
+        if (nextId === entry.id) return entry;
+        return { ...entry, id: nextId };
+      });
+  };
+
+  const normalizePlayerInventories = (rawValue, now = new Date().toISOString()) => {
+    const source = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
+    const out = {};
+    Object.entries(source).forEach(([key, rawEntry]) => {
+      const entry = rawEntry && typeof rawEntry === 'object' && !Array.isArray(rawEntry) ? rawEntry : {};
+      const userId = normalizeText(key || entry.userId);
+      if (!userId) return;
+      out[userId] = {
+        userId,
+        username: normalizeText(entry.username || entry.label),
+        updatedAt: normalizeIso(entry.updatedAt) || '',
+        items: normalizeInventoryItems(entry.items, now),
+      };
+    });
+    return out;
+  };
+
+  const normalizeTradeRequests = (rawValue, now = new Date().toISOString()) => {
+    const list = Array.isArray(rawValue) ? rawValue : [];
+    return list
+      .map((rawRequest) => {
+        const request = rawRequest && typeof rawRequest === 'object' ? rawRequest : {};
+        const statusRaw = normalizeText(request.status).toLowerCase();
+        const status = TRADE_STATUS_SET.has(statusRaw) ? statusRaw : 'pending';
+        return {
+          id: normalizeText(request.id) || tradeNewId(),
+          status,
+          requestedAt: normalizeIso(request.requestedAt) || now,
+          requesterUserId: normalizeText(request.requesterUserId),
+          requesterUsername: normalizeText(request.requesterUsername || request.requesterLabel),
+          requesterEmail: normalizeEmail(request.requesterEmail),
+          targetOwnerUserId: normalizeText(request.targetOwnerUserId),
+          targetOwnerUsername: normalizeText(request.targetOwnerUsername),
+          partyItemId: normalizeText(request.partyItemId),
+          partyItemName: normalizeText(request.partyItemName),
+          partyItemCategory: normalizeItemCategory(request.partyItemCategory || request.category),
+          partyItemRarity: normalizeItemRarity(request.partyItemRarity || request.rarity),
+          requestedQty: clampInt(Number.parseInt(request.requestedQty, 10) || 1, 1, 9999),
+          offerItemId: normalizeText(request.offerItemId),
+          offerItemName: normalizeText(request.offerItemName),
+          offerQty: Math.max(0, Number.parseInt(request.offerQty, 10) || 0),
+          note: normalizeText(request.note),
+          decidedAt: normalizeIso(request.decidedAt) || '',
+          decidedByUserId: normalizeText(request.decidedByUserId),
+          decidedByUsername: normalizeText(request.decidedByUsername),
+          decisionNote: normalizeText(request.decisionNote),
+        };
+      })
+      .filter((request) => !!request.partyItemId)
+      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+  };
 
   const rarityBadge = (rarity) => {
     const r = (rarity || 'Common').toLowerCase();
@@ -1001,6 +1126,8 @@ export default function CampaignHub(props) {
   const defaultBagState = {
     currency: { pp: 0, gp: 0, sp: 0, cp: 0 },
     items: [],
+    playerInventories: {},
+    tradeRequests: [],
     ownerUserId: '',
     ownerEmail: '',
     ownerUsername: '',
@@ -1012,35 +1139,50 @@ export default function CampaignHub(props) {
   const [bag, setBag] = useLocalStorageState(STORAGE_KEYS.bag, defaultBagState);
 
   useEffect(() => {
-    setBag((prev) => ({
-      currency: {
-        pp: prev?.currency?.pp ?? 0,
-        gp: prev?.currency?.gp ?? 0,
-        sp: prev?.currency?.sp ?? 0,
-        cp: prev?.currency?.cp ?? 0,
-      },
-      items: Array.isArray(prev?.items) ? prev.items : [],
-      ownerUserId: normalizeText(prev?.ownerUserId),
-      ownerEmail: normalizeEmail(prev?.ownerEmail),
-      ownerUsername: normalizeText(prev?.ownerUsername),
-      ownerUpdatedAt: normalizeText(prev?.ownerUpdatedAt),
-      ownerUpdatedByUserId: normalizeText(prev?.ownerUpdatedByUserId),
-      ownerUpdatedByUsername: normalizeText(prev?.ownerUpdatedByUsername),
-    }));
+    setBag((prev) => {
+      const now = new Date().toISOString();
+      return {
+        currency: {
+          pp: prev?.currency?.pp ?? 0,
+          gp: prev?.currency?.gp ?? 0,
+          sp: prev?.currency?.sp ?? 0,
+          cp: prev?.currency?.cp ?? 0,
+        },
+        items: normalizeInventoryItems(prev?.items, now),
+        playerInventories: normalizePlayerInventories(prev?.playerInventories, now),
+        tradeRequests: normalizeTradeRequests(prev?.tradeRequests, now),
+        ownerUserId: normalizeText(prev?.ownerUserId),
+        ownerEmail: normalizeEmail(prev?.ownerEmail),
+        ownerUsername: normalizeText(prev?.ownerUsername),
+        ownerUpdatedAt: normalizeText(prev?.ownerUpdatedAt),
+        ownerUpdatedByUserId: normalizeText(prev?.ownerUpdatedByUserId),
+        ownerUpdatedByUsername: normalizeText(prev?.ownerUpdatedByUsername),
+      };
+    });
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [invQuery, setInvQuery] = useState('');
-  const [invCat,   setInvCat]   = useState('All');
-  const [invRar,   setInvRar]   = useState('All');
-  const [invSort,  setInvSort]  = useState('name');
+  const [invCat, setInvCat] = useState('All');
+  const [invRar, setInvRar] = useState('All');
+  const [invSort, setInvSort] = useState('name');
   const [currencyDelta, setCurrencyDelta] = useState({ pp: '', gp: '', sp: '', cp: '' });
 
   const [invModalOpen, setInvModalOpen] = useState(false);
+  const [invModalTarget, setInvModalTarget] = useState('party');
   const [invEditingId, setInvEditingId] = useState(null);
-  const [dangerOpen,   setDangerOpen]   = useState(false);
+  const [dangerOpen, setDangerOpen] = useState(false);
   const [bagTransferTargetUserId, setBagTransferTargetUserId] = useState('');
+  const [tradeRequestModalOpen, setTradeRequestModalOpen] = useState(false);
+  const [tradeRequestTargetItemId, setTradeRequestTargetItemId] = useState('');
+  const [tradeCenterOpen, setTradeCenterOpen] = useState(false);
+  const [tradeDraft, setTradeDraft] = useState({
+    requestedQty: 1,
+    offerItemId: '',
+    offerQty: 1,
+    note: '',
+  });
 
   const bagOwnerUserId = normalizeText(bag?.ownerUserId);
   const bagOwnerEmail = normalizeEmail(bag?.ownerEmail);
@@ -1057,6 +1199,13 @@ export default function CampaignHub(props) {
   const inventoryReadOnlyMessage = !canEditCampaignData
     ? readOnlyStatusMessage
     : 'Only the DM or current Bag of Holding owner can edit inventory.';
+  const activeInventoryUserId = authEnabled ? currentUserId : localInventoryUserId;
+  const canUsePersonalInventory = !authEnabled || !!activeInventoryUserId;
+  const canEditPersonalInventory = canEditCampaignData && canUsePersonalInventory;
+  const personalInventoryReadOnlyMessage = !canEditCampaignData
+    ? readOnlyStatusMessage
+    : 'Sign in with a campaign account to manage your personal inventory.';
+  const canSubmitTradeRequests = !canEditInventory && canEditPersonalInventory;
 
   const inventoryOwnerChoices = useMemo(() => (
     (playerDirectory || [])
@@ -1082,9 +1231,80 @@ export default function CampaignHub(props) {
     return 'Unassigned';
   }, [bagOwnerUserId, bagOwnerUsername, inventoryOwnerChoices]);
 
+  const activeInventoryLabel = useMemo(() => {
+    if (!authEnabled) return 'Local Player';
+    const byUserId = inventoryOwnerChoices.find((player) => player.userId === activeInventoryUserId);
+    if (byUserId?.label) return byUserId.label;
+    return normalizeText(profile?.username || 'Player');
+  }, [activeInventoryUserId, authEnabled, inventoryOwnerChoices, profile?.username]);
+
+  const playerInventories = useMemo(() => (
+    bag?.playerInventories && typeof bag.playerInventories === 'object' && !Array.isArray(bag.playerInventories)
+      ? bag.playerInventories
+      : {}
+  ), [bag?.playerInventories]);
+
+  const activePersonalInventory = useMemo(() => {
+    if (!canUsePersonalInventory || !activeInventoryUserId) {
+      return { userId: '', username: '', items: [] };
+    }
+    const existing = playerInventories[activeInventoryUserId];
+    if (existing && Array.isArray(existing.items)) return existing;
+    return {
+      userId: activeInventoryUserId,
+      username: activeInventoryLabel,
+      items: [],
+    };
+  }, [activeInventoryLabel, activeInventoryUserId, canUsePersonalInventory, playerInventories]);
+
+  const personalInventoryItems = useMemo(() => {
+    const items = Array.isArray(activePersonalInventory?.items) ? [...activePersonalInventory.items] : [];
+    items.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    return items;
+  }, [activePersonalInventory?.items]);
+
+  const tradeRequests = useMemo(
+    () => (Array.isArray(bag?.tradeRequests) ? bag.tradeRequests : []),
+    [bag?.tradeRequests]
+  );
+  const pendingTradeRequests = useMemo(
+    () => tradeRequests.filter((entry) => entry.status === 'pending'),
+    [tradeRequests]
+  );
+  const myTradeRequests = useMemo(() => {
+    if (!activeInventoryUserId) return [];
+    return tradeRequests.filter((entry) => normalizeText(entry.requesterUserId) === activeInventoryUserId);
+  }, [activeInventoryUserId, tradeRequests]);
+  const myPendingTradeCount = useMemo(
+    () => myTradeRequests.filter((entry) => entry.status === 'pending').length,
+    [myTradeRequests]
+  );
+  const visibleTradeRequests = useMemo(
+    () => (canEditInventory ? tradeRequests : myTradeRequests).slice(0, 40),
+    [canEditInventory, myTradeRequests, tradeRequests]
+  );
+  const tradeRequestTargetItem = useMemo(
+    () => (bag.items || []).find((entry) => entry.id === tradeRequestTargetItemId) || null,
+    [bag.items, tradeRequestTargetItemId]
+  );
+  const tradeOfferItemOptions = useMemo(
+    () => personalInventoryItems.filter((entry) => (entry.qty || 0) > 0),
+    [personalInventoryItems]
+  );
+  const selectedTradeOfferItem = useMemo(
+    () => tradeOfferItemOptions.find((entry) => entry.id === normalizeText(tradeDraft.offerItemId)) || null,
+    [tradeDraft.offerItemId, tradeOfferItemOptions]
+  );
+
   const ensureInventoryEditPermission = () => {
     if (canEditInventory) return true;
     alert(inventoryReadOnlyMessage);
+    return false;
+  };
+
+  const ensurePersonalInventoryEditPermission = () => {
+    if (canEditPersonalInventory) return true;
+    alert(personalInventoryReadOnlyMessage);
     return false;
   };
 
@@ -1114,63 +1334,499 @@ export default function CampaignHub(props) {
   };
 
   useEffect(() => {
-    if (!invModalOpen) return;
-    const onKeyDown = (e) => { if (e.key === 'Escape') setInvModalOpen(false); };
+    if (!invModalOpen && !tradeRequestModalOpen && !tradeCenterOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (tradeRequestModalOpen) setTradeRequestModalOpen(false);
+      if (tradeCenterOpen) setTradeCenterOpen(false);
+      if (invModalOpen) {
+        setInvModalOpen(false);
+        setInvEditingId(null);
+        setInvModalTarget('party');
+      }
+    };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [invModalOpen, setInvModalOpen]);
+  }, [invModalOpen, tradeCenterOpen, tradeRequestModalOpen]);
 
   const invEmptyDraft = { name: '', qty: 1, category: 'Gear', rarity: 'Common', value: '', weight: '', notes: '', tags: '', assignedTo: '', equipped: false };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
 
-  const invOpenAdd  = () => {
+  const draftFromItem = (item) => ({
+    name: item.name || '',
+    qty: typeof item.qty === 'number' ? item.qty : 1,
+    category: item.category || 'Gear',
+    rarity: item.rarity || 'Common',
+    value: item.value ?? '',
+    weight: item.weight ?? '',
+    notes: item.notes || '',
+    tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
+    assignedTo: item.assignedTo || '',
+    equipped: !!item.equipped,
+  });
+
+  const closeInventoryModal = () => {
+    setInvModalOpen(false);
+    setInvEditingId(null);
+    setInvModalTarget('party');
+  };
+
+  const invOpenAdd = () => {
     if (!ensureInventoryEditPermission()) return;
+    setInvModalTarget('party');
     setInvEditingId(null);
     setInvDraft(invEmptyDraft);
     setInvModalOpen(true);
   };
+
   const invOpenEdit = (item) => {
     if (!ensureInventoryEditPermission()) return;
+    setInvModalTarget('party');
     setInvEditingId(item.id);
-    setInvDraft({ name: item.name || '', qty: typeof item.qty === 'number' ? item.qty : 1, category: item.category || 'Gear', rarity: item.rarity || 'Common', value: item.value ?? '', weight: item.weight ?? '', notes: item.notes || '', tags: Array.isArray(item.tags) ? item.tags.join(', ') : '', assignedTo: item.assignedTo || '', equipped: !!item.equipped });
+    setInvDraft(draftFromItem(item));
+    setInvModalOpen(true);
+  };
+
+  const invOpenPersonalAdd = () => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) {
+      alert('Sign in to manage personal inventory.');
+      return;
+    }
+    setInvModalTarget('personal');
+    setInvEditingId(null);
+    setInvDraft(invEmptyDraft);
+    setInvModalOpen(true);
+  };
+
+  const invOpenPersonalEdit = (item) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) {
+      alert('Sign in to manage personal inventory.');
+      return;
+    }
+    setInvModalTarget('personal');
+    setInvEditingId(item.id);
+    setInvDraft(draftFromItem(item));
     setInvModalOpen(true);
   };
 
   const invSaveDraft = () => {
-    if (!ensureInventoryEditPermission()) return;
-    const name = (invDraft.name || '').trim();
-    if (!name) { alert('Item needs a name.'); return; }
-    const qty    = clampInt(parseInt(invDraft.qty, 10) || 1, 1, 9999);
-    const value  = invDraft.value  === '' ? null : Number(invDraft.value);
-    const weight = invDraft.weight === '' ? null : Number(invDraft.weight);
-    const tags   = (invDraft.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
-    const now    = new Date().toISOString();
-
-    setBag((prev) => {
-      const items = prev.items || [];
-      if (!invEditingId) {
-        const item = { id: bagNewId(), name, qty, category: invDraft.category || 'Gear', rarity: invDraft.rarity || 'Common', value: Number.isFinite(value) ? value : null, weight: Number.isFinite(weight) ? weight : null, notes: (invDraft.notes || '').trim(), tags, assignedTo: (invDraft.assignedTo || '').trim(), equipped: !!invDraft.equipped, createdAt: now, updatedAt: now };
-        return { ...prev, items: [item, ...items] };
-      } else {
-        return { ...prev, items: items.map((it) => it.id === invEditingId ? { ...it, name, qty, category: invDraft.category || it.category, rarity: invDraft.rarity || it.rarity, value: Number.isFinite(value) ? value : it.value, weight: Number.isFinite(weight) ? weight : it.weight, notes: (invDraft.notes || '').trim(), tags, assignedTo: (invDraft.assignedTo || '').trim(), equipped: !!invDraft.equipped, updatedAt: now } : it) };
+    const editingPersonal = invModalTarget === 'personal';
+    if (editingPersonal) {
+      if (!ensurePersonalInventoryEditPermission()) return;
+      if (!activeInventoryUserId) {
+        alert('Sign in to manage personal inventory.');
+        return;
       }
-    });
-    setInvModalOpen(false);
-    setInvEditingId(null);
+    } else if (!ensureInventoryEditPermission()) {
+      return;
+    }
+
+    const name = normalizeText(invDraft.name);
+    if (!name) {
+      alert('Item needs a name.');
+      return;
+    }
+
+    const qty = clampInt(parseInt(invDraft.qty, 10) || 1, 1, 9999);
+    const value = normalizeOptionalNumber(invDraft.value);
+    const weight = normalizeOptionalNumber(invDraft.weight);
+    const tags = normalizeItemTags(invDraft.tags);
+    const now = new Date().toISOString();
+
+    const upsertItems = (inputItems) => {
+      const items = normalizeInventoryItems(inputItems, now);
+      const buildItem = (existing = null) => ({
+        id: normalizeText(existing?.id) || bagNewId(),
+        name,
+        qty,
+        category: normalizeItemCategory(invDraft.category || existing?.category),
+        rarity: normalizeItemRarity(invDraft.rarity || existing?.rarity),
+        value: Number.isFinite(value) ? value : (existing ? normalizeOptionalNumber(existing.value) : null),
+        weight: Number.isFinite(weight) ? weight : (existing ? normalizeOptionalNumber(existing.weight) : null),
+        notes: normalizeText(invDraft.notes),
+        tags,
+        assignedTo: normalizeText(invDraft.assignedTo),
+        equipped: !!invDraft.equipped,
+        createdAt: normalizeIso(existing?.createdAt) || now,
+        updatedAt: now,
+      });
+
+      if (!invEditingId) return [buildItem(null), ...items];
+      return items.map((entry) => (entry.id === invEditingId ? buildItem(entry) : entry));
+    };
+
+    if (editingPersonal) {
+      setBag((prev) => {
+        const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+        const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
+          userId: activeInventoryUserId,
+          username: activeInventoryLabel,
+          items: [],
+        };
+        nextPlayerInventories[activeInventoryUserId] = {
+          ...existingInventory,
+          userId: activeInventoryUserId,
+          username: normalizeText(existingInventory.username || activeInventoryLabel),
+          updatedAt: now,
+          items: upsertItems(existingInventory.items),
+        };
+        return {
+          ...prev,
+          playerInventories: nextPlayerInventories,
+        };
+      });
+      closeInventoryModal();
+      return;
+    }
+
+    setBag((prev) => ({
+      ...prev,
+      items: upsertItems(prev?.items),
+    }));
+    closeInventoryModal();
   };
 
-  const invDeleteItem     = (id) => {
+  const invDeleteItem = (id) => {
     if (!ensureInventoryEditPermission()) return;
     if (!confirm('Delete this item?')) return;
-    setBag((prev) => ({ ...prev, items: (prev.items || []).filter((it) => it.id !== id) }));
+    setBag((prev) => ({
+      ...prev,
+      items: normalizeInventoryItems(prev?.items).filter((entry) => entry.id !== id),
+    }));
   };
-  const invBumpQty        = (id, delta) => {
+
+  const invBumpQty = (id, delta) => {
     if (!ensureInventoryEditPermission()) return;
-    setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, qty: clampInt((it.qty || 1) + delta, 1, 9999) } : it) }));
+    const now = new Date().toISOString();
+    setBag((prev) => ({
+      ...prev,
+      items: normalizeInventoryItems(prev?.items, now).map((entry) => (
+        entry.id === id
+          ? { ...entry, qty: clampInt((entry.qty || 1) + delta, 1, 9999), updatedAt: now }
+          : entry
+      )),
+    }));
   };
+
   const invToggleEquipped = (id) => {
     if (!ensureInventoryEditPermission()) return;
-    setBag((prev) => ({ ...prev, items: (prev.items || []).map((it) => it.id === id ? { ...it, equipped: !it.equipped } : it) }));
+    const now = new Date().toISOString();
+    setBag((prev) => ({
+      ...prev,
+      items: normalizeInventoryItems(prev?.items, now).map((entry) => (
+        entry.id === id
+          ? { ...entry, equipped: !entry.equipped, updatedAt: now }
+          : entry
+      )),
+    }));
+  };
+
+  const invDeletePersonalItem = (id) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) return;
+    if (!confirm('Delete this personal item?')) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      const existingInventory = nextPlayerInventories[activeInventoryUserId];
+      if (!existingInventory) return prev;
+      nextPlayerInventories[activeInventoryUserId] = {
+        ...existingInventory,
+        updatedAt: now,
+        items: normalizeInventoryItems(existingInventory.items, now).filter((entry) => entry.id !== id),
+      };
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+      };
+    });
+  };
+
+  const invBumpPersonalQty = (id, delta) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
+        userId: activeInventoryUserId,
+        username: activeInventoryLabel,
+        items: [],
+      };
+      nextPlayerInventories[activeInventoryUserId] = {
+        ...existingInventory,
+        userId: activeInventoryUserId,
+        username: normalizeText(existingInventory.username || activeInventoryLabel),
+        updatedAt: now,
+        items: normalizeInventoryItems(existingInventory.items, now).map((entry) => (
+          entry.id === id
+            ? { ...entry, qty: clampInt((entry.qty || 1) + delta, 1, 9999), updatedAt: now }
+            : entry
+        )),
+      };
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+      };
+    });
+  };
+
+  const invTogglePersonalEquipped = (id) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
+        userId: activeInventoryUserId,
+        username: activeInventoryLabel,
+        items: [],
+      };
+      nextPlayerInventories[activeInventoryUserId] = {
+        ...existingInventory,
+        userId: activeInventoryUserId,
+        username: normalizeText(existingInventory.username || activeInventoryLabel),
+        updatedAt: now,
+        items: normalizeInventoryItems(existingInventory.items, now).map((entry) => (
+          entry.id === id
+            ? { ...entry, equipped: !entry.equipped, updatedAt: now }
+            : entry
+        )),
+      };
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+      };
+    });
+  };
+
+  const openTradeRequestForItem = (item) => {
+    if (!canSubmitTradeRequests) {
+      alert(canEditCampaignData ? 'Only non-owner players can request trades from the bag.' : readOnlyStatusMessage);
+      return;
+    }
+    setTradeRequestTargetItemId(item.id);
+    setTradeDraft({
+      requestedQty: 1,
+      offerItemId: '',
+      offerQty: 1,
+      note: '',
+    });
+    setTradeRequestModalOpen(true);
+  };
+
+  const submitTradeRequest = () => {
+    if (!canSubmitTradeRequests) {
+      alert(canEditCampaignData ? 'Only non-owner players can request trades from the bag.' : readOnlyStatusMessage);
+      return;
+    }
+    if (!tradeRequestTargetItem) {
+      alert('This item is no longer available.');
+      return;
+    }
+    if (!activeInventoryUserId) {
+      alert('Sign in to submit trade requests.');
+      return;
+    }
+
+    const requestedQty = clampInt(
+      Number.parseInt(tradeDraft.requestedQty, 10) || 1,
+      1,
+      Math.max(1, tradeRequestTargetItem.qty || 1)
+    );
+    if (requestedQty > (tradeRequestTargetItem.qty || 1)) {
+      alert('Requested quantity exceeds available amount.');
+      return;
+    }
+
+    const offerItemId = normalizeText(tradeDraft.offerItemId);
+    const offerQty = clampInt(Number.parseInt(tradeDraft.offerQty, 10) || 1, 1, 9999);
+    if (offerItemId) {
+      if (!selectedTradeOfferItem) {
+        alert('Selected offer item is no longer in your inventory.');
+        return;
+      }
+      if ((selectedTradeOfferItem.qty || 1) < offerQty) {
+        alert('Offered quantity exceeds what you own.');
+        return;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const newRequest = {
+      id: tradeNewId(),
+      status: 'pending',
+      requestedAt: now,
+      requesterUserId: activeInventoryUserId,
+      requesterUsername: activeInventoryLabel,
+      requesterEmail: currentUserEmail,
+      targetOwnerUserId: bagOwnerUserId,
+      targetOwnerUsername: bagOwnerLabel,
+      partyItemId: tradeRequestTargetItem.id,
+      partyItemName: tradeRequestTargetItem.name,
+      partyItemCategory: tradeRequestTargetItem.category,
+      partyItemRarity: tradeRequestTargetItem.rarity,
+      requestedQty,
+      offerItemId,
+      offerItemName: offerItemId ? selectedTradeOfferItem?.name || '' : '',
+      offerQty: offerItemId ? offerQty : 0,
+      note: normalizeText(tradeDraft.note),
+      decidedAt: '',
+      decidedByUserId: '',
+      decidedByUsername: '',
+      decisionNote: '',
+    };
+
+    setBag((prev) => ({
+      ...prev,
+      tradeRequests: [newRequest, ...normalizeTradeRequests(prev?.tradeRequests, now)],
+    }));
+    setTradeRequestModalOpen(false);
+  };
+
+  const resolveTradeRequest = (requestId, decision) => {
+    if (!canEditInventory) {
+      alert(inventoryReadOnlyMessage);
+      return;
+    }
+
+    const normalizedDecision = decision === 'accepted' ? 'accepted' : 'denied';
+    const denyNote = normalizedDecision === 'denied'
+      ? normalizeText(window.prompt('Optional denial reason:', '') || '')
+      : '';
+    const now = new Date().toISOString();
+
+    setBag((prev) => {
+      const requests = normalizeTradeRequests(prev?.tradeRequests, now);
+      const request = requests.find((entry) => entry.id === requestId);
+      if (!request || request.status !== 'pending') return prev;
+
+      let finalStatus = normalizedDecision;
+      let finalNote = denyNote;
+      let nextBagItems = normalizeInventoryItems(prev?.items, now);
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+
+      if (normalizedDecision === 'accepted') {
+        const requesterUserId = normalizeText(request.requesterUserId);
+        if (!requesterUserId) {
+          finalStatus = 'denied';
+          finalNote = 'Requester account is unavailable.';
+        } else {
+          const partyItemIndex = nextBagItems.findIndex((entry) => entry.id === request.partyItemId);
+          if (partyItemIndex < 0) {
+            finalStatus = 'denied';
+            finalNote = 'Requested item is no longer in the bag.';
+          } else {
+            const partyItem = nextBagItems[partyItemIndex];
+            const requestedQty = clampInt(Number.parseInt(request.requestedQty, 10) || 1, 1, 9999);
+            if ((partyItem.qty || 1) < requestedQty) {
+              finalStatus = 'denied';
+              finalNote = 'Requested quantity is no longer available.';
+            } else {
+              const requesterInventory = nextPlayerInventories[requesterUserId] || {
+                userId: requesterUserId,
+                username: normalizeText(request.requesterUsername),
+                items: [],
+                updatedAt: now,
+              };
+              let requesterItems = normalizeInventoryItems(requesterInventory.items, now);
+
+              const offerItemId = normalizeText(request.offerItemId);
+              let offerItem = null;
+              let offerQty = 0;
+              if (offerItemId) {
+                offerQty = clampInt(Number.parseInt(request.offerQty, 10) || 1, 1, 9999);
+                offerItem = requesterItems.find((entry) => entry.id === offerItemId);
+                if (!offerItem || (offerItem.qty || 1) < offerQty) {
+                  finalStatus = 'denied';
+                  finalNote = 'Offered item is no longer available in requester inventory.';
+                }
+              }
+
+              if (finalStatus === 'accepted') {
+                const remainingBagQty = (partyItem.qty || 1) - requestedQty;
+                if (remainingBagQty <= 0) {
+                  nextBagItems = nextBagItems.filter((entry) => entry.id !== partyItem.id);
+                } else {
+                  nextBagItems = nextBagItems.map((entry) => (
+                    entry.id === partyItem.id
+                      ? { ...entry, qty: remainingBagQty, updatedAt: now }
+                      : entry
+                  ));
+                }
+
+                requesterItems = [
+                  {
+                    ...normalizeInventoryItem(partyItem, now),
+                    id: bagNewId(),
+                    qty: requestedQty,
+                    assignedTo: normalizeText(request.requesterUsername || requesterInventory.username),
+                    equipped: false,
+                    createdAt: now,
+                    updatedAt: now,
+                  },
+                  ...requesterItems,
+                ];
+
+                if (offerItem) {
+                  const remainingOfferQty = (offerItem.qty || 1) - offerQty;
+                  if (remainingOfferQty <= 0) {
+                    requesterItems = requesterItems.filter((entry) => entry.id !== offerItem.id);
+                  } else {
+                    requesterItems = requesterItems.map((entry) => (
+                      entry.id === offerItem.id
+                        ? { ...entry, qty: remainingOfferQty, updatedAt: now }
+                        : entry
+                    ));
+                  }
+
+                  nextBagItems = [
+                    {
+                      ...normalizeInventoryItem(offerItem, now),
+                      id: bagNewId(),
+                      qty: offerQty,
+                      assignedTo: normalizeText(request.requesterUsername || offerItem.assignedTo),
+                      equipped: false,
+                      createdAt: now,
+                      updatedAt: now,
+                    },
+                    ...nextBagItems,
+                  ];
+                }
+
+                nextPlayerInventories[requesterUserId] = {
+                  ...requesterInventory,
+                  userId: requesterUserId,
+                  username: normalizeText(requesterInventory.username || request.requesterUsername),
+                  updatedAt: now,
+                  items: normalizeInventoryItems(requesterItems, now),
+                };
+              }
+            }
+          }
+        }
+      }
+
+      return {
+        ...prev,
+        items: nextBagItems,
+        playerInventories: nextPlayerInventories,
+        tradeRequests: requests.map((entry) => (
+          entry.id === requestId
+            ? {
+                ...entry,
+                status: finalStatus,
+                decidedAt: now,
+                decidedByUserId: currentUserId,
+                decidedByUsername: normalizeText(profile?.username || bagOwnerLabel || 'Owner'),
+                decisionNote: normalizeText(finalNote),
+              }
+            : entry
+        )),
+      };
+    });
   };
   const applyCurrencyDelta = (key, direction) => {
     if (!ensureInventoryEditPermission()) return;
@@ -1235,11 +1891,23 @@ export default function CampaignHub(props) {
               <button
                 type="button"
                 onMouseEnter={smallBtnHover}
-                onClick={campaignTab === 'quests' ? openAddQuest : invOpenAdd}
+                onClick={() => {
+                  if (campaignTab === 'quests') {
+                    openAddQuest();
+                    return;
+                  }
+                  if (canEditInventory) {
+                    invOpenAdd();
+                    return;
+                  }
+                  invOpenPersonalAdd();
+                }}
                 className={smallBtnClass('gold', styles.actionAddBtn)}
-                disabled={campaignTab === 'inventory' && !canEditInventory}
+                disabled={campaignTab === 'inventory' && !canEditInventory && !canEditPersonalInventory}
               >
-                {campaignTab === 'quests' ? '+ Add Quest' : '+ Add Item'}
+                {campaignTab === 'quests'
+                  ? '+ Add Quest'
+                  : (canEditInventory ? '+ Add Item' : '+ Add My Item')}
               </button>
             )}
           </div>
@@ -1709,6 +2377,9 @@ export default function CampaignHub(props) {
                           <div className={styles.cardTitle}>Bag of Holding</div>
                           <div className={styles.cardSub}>Shared party inventory - loot, gold totals, quest items, and artifacts.</div>
                           <div className={styles.modalHint}>Current Owner: <strong>{bagOwnerLabel}</strong></div>
+                          <div className={styles.modalHint}>
+                            Pending trade requests: <strong>{pendingTradeRequests.length}</strong>
+                          </div>
                           {!canEditInventory && (
                             <div className={styles.modalHint}>{inventoryReadOnlyMessage}</div>
                           )}
@@ -1769,13 +2440,24 @@ export default function CampaignHub(props) {
                             </button>
                           </div>
                         )}
+                        {(canEditInventory || canSubmitTradeRequests) && (
+                          <button
+                            className={smallBtnClass('ghost')}
+                            onMouseEnter={smallBtnHover}
+                            onClick={() => setTradeCenterOpen(true)}
+                          >
+                            {canEditInventory
+                              ? `Trade Requests (${pendingTradeRequests.length})`
+                              : `My Requests (${myPendingTradeCount})`}
+                          </button>
+                        )}
                         <button
                           className={smallBtnClass('gold', styles.addItemBtn)}
                           onMouseEnter={smallBtnHover}
-                          onClick={invOpenAdd}
-                          disabled={!canEditInventory}
+                          onClick={canEditInventory ? invOpenAdd : invOpenPersonalAdd}
+                          disabled={!canEditInventory && !canEditPersonalInventory}
                         >
-                          + Add Item
+                          {canEditInventory ? '+ Add Item' : '+ Add My Item'}
                         </button>
                       </div>
                     </div>
@@ -1884,6 +2566,47 @@ export default function CampaignHub(props) {
                     </div>
                   </div>
 
+                  <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.personalInventoryCard}`}>
+                    <div className={styles.cardHeaderRow}>
+                      <div>
+                        <div className={styles.cardTitle}>My Inventory</div>
+                        <div className={styles.cardSub}>Personal equipment and items used when offering trades.</div>
+                        <div className={styles.modalHint}>Inventory owner: <strong>{activeInventoryLabel || 'Player'}</strong></div>
+                      </div>
+                      <button
+                        className={smallBtnClass('ghost')}
+                        onMouseEnter={smallBtnHover}
+                        onClick={invOpenPersonalAdd}
+                        disabled={!canEditPersonalInventory}
+                      >
+                        + Add Personal Item
+                      </button>
+                    </div>
+                    <div className={styles.sectionDivider} />
+                    {personalInventoryItems.length === 0 ? (
+                      <div className={styles.modalHint}>No personal items yet. Add a few to trade with the bag owner.</div>
+                    ) : (
+                      <div className={styles.personalInventoryList}>
+                        {personalInventoryItems.slice(0, 12).map((item) => (
+                          <div key={item.id} className={styles.personalInventoryRow}>
+                            <div className={styles.personalInventoryMeta}>
+                              <div className={styles.personalInventoryName}>{item.name}</div>
+                              <div className={styles.personalInventorySub}>{item.rarity} - {item.category}</div>
+                            </div>
+                            <div className={styles.actionsRow}>
+                              <span className={styles.qtyBadge}>x{item.qty ?? 1}</span>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, -1)} disabled={!canEditPersonalInventory}>-</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, +1)} disabled={!canEditPersonalInventory}>+</button>
+                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invTogglePersonalEquipped(item.id)} disabled={!canEditPersonalInventory}>Equip</button>
+                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenPersonalEdit(item)} disabled={!canEditPersonalInventory}>Edit</button>
+                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeletePersonalItem(item.id)} disabled={!canEditPersonalInventory}>Delete</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {invFilteredItems.length === 0 ? (
                     <div className={`${styles.softCard} ${styles.inventoryEmpty} ${styles.boardNoteCard} ${styles.questEmptyCard}`}>
                       <div className={styles.inventoryEmptyTitle}>Bag is empty.</div>
@@ -1914,11 +2637,24 @@ export default function CampaignHub(props) {
                             </div>
                             <div className={styles.actionsRow}>
                               <span className={styles.qtyBadge}>x{it.qty ?? 1}</span>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1" disabled={!canEditInventory}>-</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1" disabled={!canEditInventory}>+</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)} disabled={!canEditInventory}>Equip</button>
-                              <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)} disabled={!canEditInventory}>Edit</button>
-                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)} disabled={!canEditInventory}>Delete</button>
+                              {canEditInventory ? (
+                                <>
+                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, -1)} title="-1">-</button>
+                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpQty(it.id, +1)} title="+1">+</button>
+                                  <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invToggleEquipped(it.id)}>Equip</button>
+                                  <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => invOpenEdit(it)}>Edit</button>
+                                  <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeleteItem(it.id)}>Delete</button>
+                                </>
+                              ) : (
+                                <button
+                                  className={smallBtnClass('gold')}
+                                  onMouseEnter={smallBtnHover}
+                                  onClick={() => openTradeRequestForItem(it)}
+                                  disabled={!canSubmitTradeRequests}
+                                >
+                                  Request
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2033,8 +2769,12 @@ export default function CampaignHub(props) {
           <div className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}>
             <div className={`${styles.modalCard} ${styles.inventoryModal}`}>
               <div className={styles.modalHeader}>
-                <div className={styles.modalTitle}>{invEditingId ? 'Edit Item' : 'Add Item'}</div>
-                <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => setInvModalOpen(false)}>Close</button>
+                <div className={styles.modalTitle}>
+                  {invEditingId
+                    ? (invModalTarget === 'personal' ? 'Edit Personal Item' : 'Edit Bag Item')
+                    : (invModalTarget === 'personal' ? 'Add Personal Item' : 'Add Bag Item')}
+                </div>
+                <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={closeInventoryModal}>Close</button>
               </div>
               <div className={styles.sectionDivider} />
               <div className={styles.inventoryModalBody}>
@@ -2087,8 +2827,166 @@ export default function CampaignHub(props) {
               </div>
               <div className={styles.sectionDivider} />
               <div className={styles.modalFooter}>
-                <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => setInvModalOpen(false)}>Cancel</button>
-                <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={invSaveDraft} disabled={!canEditInventory}>{invEditingId ? 'Save Changes' : 'Add Item'}</button>
+                <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={closeInventoryModal}>Cancel</button>
+                <button
+                  className={smallBtnClass('gold')}
+                  onMouseEnter={smallBtnHover}
+                  onClick={invSaveDraft}
+                  disabled={invModalTarget === 'personal' ? !canEditPersonalInventory : !canEditInventory}
+                >
+                  {invEditingId ? 'Save Changes' : (invModalTarget === 'personal' ? 'Add Personal Item' : 'Add Item')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========== TRADE REQUEST MODAL ========== */}
+        {tradeRequestModalOpen && !canEditInventory && (
+          <div className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}>
+            <div className={`${styles.modalCard} ${styles.tradeModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Request Trade</div>
+                <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => setTradeRequestModalOpen(false)}>Close</button>
+              </div>
+              <div className={styles.sectionDivider} />
+              <div className={styles.modalBody}>
+                {tradeRequestTargetItem ? (
+                  <>
+                    <div className={styles.tradeSummaryBlock}>
+                      <div className={styles.inputLabel}>Requesting From Bag</div>
+                      <div className={styles.tradeSummaryRow}>
+                        <strong>{tradeRequestTargetItem.name}</strong>
+                        <span>({tradeRequestTargetItem.rarity} - {tradeRequestTargetItem.category})</span>
+                      </div>
+                      <div className={styles.tradeSummaryRow}>Available Qty: {tradeRequestTargetItem.qty ?? 1}</div>
+                    </div>
+
+                    <div>
+                      <div className={styles.inputLabel}>Requested Qty</div>
+                      <input
+                        type="number"
+                        min={1}
+                        max={Math.max(1, tradeRequestTargetItem.qty || 1)}
+                        value={tradeDraft.requestedQty}
+                        onChange={(e) => setTradeDraft((prev) => ({ ...prev, requestedQty: e.target.value }))}
+                        className={styles.inputBase}
+                      />
+                    </div>
+
+                    <div>
+                      <div className={styles.inputLabel}>Offer Item (optional)</div>
+                      <select
+                        value={tradeDraft.offerItemId}
+                        onChange={(e) => setTradeDraft((prev) => ({ ...prev, offerItemId: e.target.value }))}
+                        className={styles.inputBase}
+                      >
+                        <option value="">No offer item</option>
+                        {tradeOfferItemOptions.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} (x{item.qty ?? 1})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {tradeDraft.offerItemId && (
+                      <div>
+                        <div className={styles.inputLabel}>Offer Qty</div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={Math.max(1, selectedTradeOfferItem?.qty || 1)}
+                          value={tradeDraft.offerQty}
+                          onChange={(e) => setTradeDraft((prev) => ({ ...prev, offerQty: e.target.value }))}
+                          className={styles.inputBase}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <div className={styles.inputLabel}>Message (optional)</div>
+                      <textarea
+                        value={tradeDraft.note}
+                        onChange={(e) => setTradeDraft((prev) => ({ ...prev, note: e.target.value }))}
+                        rows={3}
+                        className={`${styles.inputBase} ${styles.textarea} ${styles.noResize}`}
+                        placeholder="Any context for the owner..."
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.modalHint}>Selected item is no longer available.</div>
+                )}
+              </div>
+              <div className={styles.sectionDivider} />
+              <div className={styles.modalFooter}>
+                <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => setTradeRequestModalOpen(false)}>Cancel</button>
+                <button
+                  className={smallBtnClass('gold')}
+                  onMouseEnter={smallBtnHover}
+                  onClick={submitTradeRequest}
+                  disabled={!tradeRequestTargetItem}
+                >
+                  Submit Trade Request
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========== TRADE CENTER MODAL ========== */}
+        {tradeCenterOpen && (
+          <div className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}>
+            <div className={`${styles.modalCard} ${styles.tradeModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>{canEditInventory ? 'Incoming Trade Requests' : 'My Trade Requests'}</div>
+                <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => setTradeCenterOpen(false)}>Close</button>
+              </div>
+              <div className={styles.sectionDivider} />
+              <div className={styles.modalBody}>
+                {visibleTradeRequests.length === 0 ? (
+                  <div className={styles.modalHint}>No trade requests yet.</div>
+                ) : (
+                  <div className={styles.tradeRequestList}>
+                    {visibleTradeRequests.map((request) => (
+                      <div key={request.id} className={styles.tradeRequestCard}>
+                        <div className={styles.tradeSummaryRow}>
+                          <strong>{request.requesterUsername || 'Player'}</strong>
+                          <span className={styles.tradeStatus}>{request.status}</span>
+                        </div>
+                        <div className={styles.tradeSummaryRow}>
+                          Requests <strong>{request.partyItemName}</strong> x{request.requestedQty}
+                        </div>
+                        {request.offerItemName && (
+                          <div className={styles.tradeSummaryRow}>
+                            Offers <strong>{request.offerItemName}</strong> x{request.offerQty}
+                          </div>
+                        )}
+                        {!!request.note && (
+                          <div className={styles.tradeSummaryRow}>{request.note}</div>
+                        )}
+                        <div className={styles.tradeMeta}>
+                          Sent: {new Date(request.requestedAt).toLocaleString()}
+                        </div>
+                        {request.status !== 'pending' && (
+                          <div className={styles.tradeMeta}>
+                            {request.status === 'accepted' ? 'Accepted' : 'Denied'} by {request.decidedByUsername || 'Owner'} on {request.decidedAt ? new Date(request.decidedAt).toLocaleString() : 'Unknown'}
+                          </div>
+                        )}
+                        {!!request.decisionNote && (
+                          <div className={styles.tradeMeta}>Note: {request.decisionNote}</div>
+                        )}
+                        {canEditInventory && request.status === 'pending' && (
+                          <div className={styles.actionsRow}>
+                            <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => resolveTradeRequest(request.id, 'accepted')}>Accept</button>
+                            <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => resolveTradeRequest(request.id, 'denied')}>Deny</button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
