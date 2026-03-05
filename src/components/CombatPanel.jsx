@@ -1942,6 +1942,7 @@ export default function CombatPanel({
   const [equipmentEditMode, setEquipmentEditMode] = useState('equipment');
   const [spellSearchQuery, setSpellSearchQuery] = useState('');
   const [sheetInventoryModalOpen, setSheetInventoryModalOpen] = useState(false);
+  const [sheetInventoryEditorOpen, setSheetInventoryEditorOpen] = useState(false);
   const [sheetInventoryEditingId, setSheetInventoryEditingId] = useState('');
   const [sheetInventoryDraft, setSheetInventoryDraft] = useState(() => createSheetInventoryDraft());
   const [sheetActionDetail, setSheetActionDetail] = useState(null);
@@ -2022,6 +2023,7 @@ export default function CombatPanel({
       }
       if (sheetInventoryModalOpen) {
         setSheetInventoryModalOpen(false);
+        setSheetInventoryEditorOpen(false);
         setSheetInventoryEditingId('');
         setSheetInventoryDraft(createSheetInventoryDraft());
         return;
@@ -2500,12 +2502,13 @@ export default function CombatPanel({
 
   useEffect(() => {
     if (!sheetInventoryModalOpen) return;
-    if (!editorOpen || !selected || editorMode !== 'sheet') {
+    if (!editorOpen || !selected || !selectedInventoryManagedInPartyHub) {
       setSheetInventoryModalOpen(false);
+      setSheetInventoryEditorOpen(false);
       setSheetInventoryEditingId('');
       setSheetInventoryDraft(createSheetInventoryDraft());
     }
-  }, [sheetInventoryModalOpen, editorOpen, selected, editorMode]);
+  }, [sheetInventoryModalOpen, editorOpen, selected, selectedInventoryManagedInPartyHub]);
 
   useEffect(() => {
     return () => {
@@ -3250,11 +3253,16 @@ export default function CombatPanel({
     });
   };
 
-  const closeSheetInventoryModal = useCallback(() => {
-    setSheetInventoryModalOpen(false);
+  const closeSheetInventoryEditor = useCallback(() => {
+    setSheetInventoryEditorOpen(false);
     setSheetInventoryEditingId('');
     setSheetInventoryDraft(createSheetInventoryDraft());
   }, []);
+
+  const closeSheetInventoryModal = useCallback(() => {
+    setSheetInventoryModalOpen(false);
+    closeSheetInventoryEditor();
+  }, [closeSheetInventoryEditor]);
 
   const updateSelectedPersonalInventoryItems = useCallback((updater) => {
     if (!selectedInventoryOwnerUserId) return;
@@ -3279,6 +3287,7 @@ export default function CombatPanel({
     if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
     setSheetInventoryEditingId('');
     setSheetInventoryDraft(createSheetInventoryDraft());
+    setSheetInventoryEditorOpen(true);
     setSheetInventoryModalOpen(true);
   }, [selectedCanEdit, selectedInventoryOwnerUserId]);
 
@@ -3286,6 +3295,7 @@ export default function CombatPanel({
     if (!selectedCanEdit || !selectedInventoryOwnerUserId || !item) return;
     setSheetInventoryEditingId(cleanText(item.id));
     setSheetInventoryDraft(createSheetInventoryDraft(item));
+    setSheetInventoryEditorOpen(true);
     setSheetInventoryModalOpen(true);
   }, [selectedCanEdit, selectedInventoryOwnerUserId]);
 
@@ -3345,8 +3355,8 @@ export default function CombatPanel({
           : entry
       ));
     });
-    closeSheetInventoryModal();
-  }, [closeSheetInventoryModal, selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryDraft, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
+    closeSheetInventoryEditor();
+  }, [closeSheetInventoryEditor, selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryDraft, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
 
   const bumpSheetInventoryQty = useCallback((id, delta) => {
     if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
@@ -3395,10 +3405,9 @@ export default function CombatPanel({
       currentItems.filter((entry) => cleanText(entry.id) !== targetId)
     ));
     if (sheetInventoryEditingId && sheetInventoryEditingId === targetId) {
-      setSheetInventoryEditingId('');
-      setSheetInventoryDraft(createSheetInventoryDraft());
+      closeSheetInventoryEditor();
     }
-  }, [selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
+  }, [closeSheetInventoryEditor, selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
 
   const longRestSelected = () => {
     setStatusDraft('');
@@ -5067,6 +5076,7 @@ export default function CombatPanel({
                         onMouseEnter={playHover}
                         onClick={() => {
                           playNav();
+                          setSheetInventoryEditorOpen(false);
                           setSheetInventoryEditingId('');
                           setSheetInventoryDraft(createSheetInventoryDraft());
                           setSheetInventoryModalOpen(true);
@@ -5123,7 +5133,7 @@ export default function CombatPanel({
               </fieldset>
               )}
 
-              {editorMode === 'sheet' && sheetInventoryModalOpen && (
+              {sheetInventoryModalOpen && (
                 <div className={styles.spellDetailOverlay}>
                   <div className={`${styles.modalCard} ${styles.sheetInventoryModalCard}`}>
                     <div className={styles.modalHeader}>
@@ -5137,7 +5147,8 @@ export default function CombatPanel({
                       </button>
                     </div>
                     <div className={styles.sheetInventoryModalBody}>
-                      <div className={styles.sheetInventoryListPane}>
+                      {!sheetInventoryEditorOpen ? (
+                        <div className={styles.sheetInventoryListPane}>
                         <div className={styles.sheetInventoryPaneHead}>
                           <div className={styles.label}>Items</div>
                           <button
@@ -5199,11 +5210,19 @@ export default function CombatPanel({
                             })
                           )}
                         </div>
-                      </div>
-
-                      <div className={styles.sheetInventoryEditorPane}>
+                        </div>
+                      ) : (
+                        <div className={styles.sheetInventoryEditorPane}>
                         <div className={styles.sheetInventoryPaneHead}>
                           <div className={styles.label}>{sheetInventoryEditingId ? 'Edit Item' : 'New Item'}</div>
+                          <button
+                            type="button"
+                            className={btnClass('ghost', 'sm')}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); closeSheetInventoryEditor(); }}
+                          >
+                            Back to Items
+                          </button>
                         </div>
                         <div className={`${styles.sheetInventoryEditorGrid} koa-scrollbar-thin`}>
                           <div className={styles.sheetInventoryFieldWide}>
@@ -5345,24 +5364,37 @@ export default function CombatPanel({
                             </label>
                           </div>
                         </div>
-                      </div>
+                        </div>
+                      )}
                     </div>
                     <div className={styles.managerActions}>
-                      <button
-                        className={btnClass('ghost', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); closeSheetInventoryModal(); }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className={btnClass('gold', 'sm')}
-                        onMouseEnter={playHover}
-                        onClick={() => { playNav(); saveSheetInventoryDraft(); }}
-                        disabled={!selectedCanEdit || !selectedInventoryOwnerUserId || !cleanText(sheetInventoryDraft.name)}
-                      >
-                        {sheetInventoryEditingId ? 'Save Changes' : 'Add Item'}
-                      </button>
+                      {!sheetInventoryEditorOpen ? (
+                        <button
+                          className={btnClass('ghost', 'sm')}
+                          onMouseEnter={playHover}
+                          onClick={() => { playNav(); closeSheetInventoryModal(); }}
+                        >
+                          Close
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className={btnClass('ghost', 'sm')}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); closeSheetInventoryEditor(); }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            className={btnClass('gold', 'sm')}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); saveSheetInventoryDraft(); }}
+                            disabled={!selectedCanEdit || !selectedInventoryOwnerUserId || !cleanText(sheetInventoryDraft.name)}
+                          >
+                            {sheetInventoryEditingId ? 'Save Changes' : 'Add Item'}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

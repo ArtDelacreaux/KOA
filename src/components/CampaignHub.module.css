@@ -1660,7 +1660,7 @@
 }
 
 .tradeModal {
-  width: min(760px, 95vw);
+  width: min(980px, 95vw);
   max-height: min(640px, 88vh);
 }
 
@@ -1845,9 +1845,18 @@
 
 .tradeOfferControls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 84px auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+
+.tradeOfferControls > select {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.tradeOfferControls > input {
+  max-width: 120px;
 }
 
 .presenceModal {
