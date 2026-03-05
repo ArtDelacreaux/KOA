@@ -1541,6 +1541,11 @@
   outline-offset: 2px;
 }
 
+.personalInventoryRowSelected {
+  border-color: rgba(255, 220, 160, 0.34);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.38);
+}
+
 .personalInventoryMeta {
   min-width: 180px;
   flex: 1;
@@ -1765,6 +1770,86 @@
   border-radius: 12px;
   border: 1px solid rgba(255, 220, 160, 0.16);
   background: linear-gradient(160deg, rgba(66, 46, 26, 0.68), rgba(31, 21, 12, 0.8));
+}
+
+.personalInventoryLightboxOverlay {
+  z-index: 40;
+}
+
+.personalInventoryLightboxCard {
+  width: min(700px, 96vw);
+  max-height: min(640px, 88vh);
+}
+
+.personalInventoryLightboxBody {
+  gap: 14px;
+}
+
+.personalInventoryLightboxSub {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.84;
+}
+
+.personalInventoryLightboxSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.personalInventoryLightboxGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.personalInventoryLightboxField {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(170deg, rgba(57, 40, 24, 0.72), rgba(28, 20, 12, 0.86));
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.personalInventoryLightboxLabel {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 220, 160, 0.82);
+}
+
+.personalInventoryLightboxSection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.personalInventoryTagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.personalInventoryTag {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: rgba(255, 220, 160, 0.1);
+}
+
+.personalInventoryLightboxNotes {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: rgba(255, 245, 220, 0.05);
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .tradeSummaryRow {

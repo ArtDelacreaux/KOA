@@ -2,6 +2,7 @@ import { createId } from '../domain/ids';
 
 export const INVENTORY_CATEGORIES = ['Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
 export const INVENTORY_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary'];
+export const DEFAULT_ATTUNEMENT_LIMIT = 3;
 const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied', 'open', 'completed', 'cancelled']);
 
 function newBagItemId() {
@@ -54,6 +55,12 @@ function normalizeItemTags(value) {
     .filter(Boolean);
 }
 
+function normalizeAttunementLimit(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_ATTUNEMENT_LIMIT;
+  return clampInt(parsed, 1, 99);
+}
+
 function normalizeTradeOfferLines(value) {
   const list = Array.isArray(value) ? value : [];
   return list
@@ -101,6 +108,7 @@ export function normalizeInventoryItem(rawItem, options = {}) {
     weaponDamageType: normalizeText(source.weaponDamageType ?? source.damageType),
     weaponProperties: normalizeText(source.weaponProperties ?? source.properties),
     equipped: !!source.equipped,
+    attuned: !!source.attuned,
     hidden: !!source.hidden,
     createdAt: normalizeIso(source.createdAt) || now,
     updatedAt: normalizeIso(source.updatedAt) || now,
@@ -136,6 +144,7 @@ export function normalizePlayerInventories(rawValue, options = {}) {
       userId,
       username: normalizeText(entry.username || entry.label),
       updatedAt: normalizeIso(entry.updatedAt) || '',
+      attunementLimit: normalizeAttunementLimit(entry.attunementLimit),
       items: normalizeInventoryItems(entry.items, { now, idFactory }),
     };
   });
@@ -240,13 +249,14 @@ export function normalizeBagInventoryState(rawBag, options = {}) {
 export function getPersonalInventoryEntry(bagState, userId) {
   const normalizedBag = normalizeBagInventoryState(bagState);
   const normalizedUserId = normalizeText(userId);
-  if (!normalizedUserId) return { userId: '', username: '', updatedAt: '', items: [] };
+  if (!normalizedUserId) return { userId: '', username: '', updatedAt: '', attunementLimit: DEFAULT_ATTUNEMENT_LIMIT, items: [] };
   const entry = normalizedBag.playerInventories[normalizedUserId];
   if (entry && Array.isArray(entry.items)) return entry;
   return {
     userId: normalizedUserId,
     username: '',
     updatedAt: '',
+    attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
     items: [],
   };
 }
@@ -261,7 +271,13 @@ export function upsertPersonalInventoryEntry(bagState, userId, username, items, 
     username: '',
     items: [],
     updatedAt: '',
+    attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
   };
+  const attunementLimit = normalizeAttunementLimit(
+    Object.prototype.hasOwnProperty.call(options, 'attunementLimit')
+      ? options.attunementLimit
+      : existing.attunementLimit
+  );
   normalizedBag.playerInventories = {
     ...normalizedBag.playerInventories,
     [normalizedUserId]: {
@@ -269,6 +285,7 @@ export function upsertPersonalInventoryEntry(bagState, userId, username, items, 
       userId: normalizedUserId,
       username: normalizeText(username || existing.username),
       updatedAt: now,
+      attunementLimit,
       items: normalizeInventoryItems(items, { now }),
     },
   };

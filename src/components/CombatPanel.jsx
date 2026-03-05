@@ -10,6 +10,7 @@ import { parseCharacterSheetFile } from '../lib/sheetParser';
 import { getCharacterAccessEntry } from '../lib/characterAccess';
 import useLocalStorageState from '../lib/useLocalStorageState';
 import {
+  DEFAULT_ATTUNEMENT_LIMIT,
   INVENTORY_CATEGORIES,
   INVENTORY_RARITIES,
   defaultBagInventoryState,
@@ -808,6 +809,15 @@ function normalizeOptionalNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeAttunementLimit(value) {
+  const parsed = toInt(value, DEFAULT_ATTUNEMENT_LIMIT);
+  return clamp(parsed, 1, 99);
+}
+
+function countAttunedItems(items) {
+  return (Array.isArray(items) ? items : []).reduce((sum, entry) => sum + (entry?.attuned ? 1 : 0), 0);
+}
+
 function createSheetInventoryDraft(item = null) {
   const source = item && typeof item === 'object' ? item : {};
   return {
@@ -827,6 +837,7 @@ function createSheetInventoryDraft(item = null) {
     weaponDamageType: cleanText(source.weaponDamageType || source.damageType),
     weaponProperties: cleanText(source.weaponProperties || source.properties),
     equipped: !!source.equipped,
+    attuned: !!source.attuned,
     hidden: !!source.hidden,
   };
 }
@@ -1777,6 +1788,7 @@ export default function CombatPanel({
   canControlCharacter = () => true,
   playNav = () => {},
   playHover = () => {},
+  sheetPopoutRequestToken = 0,
 }) {
 
   // ✅ Adventurers are now derived from the shared Character Book roster (single source of truth)
@@ -1839,6 +1851,20 @@ export default function CombatPanel({
       return null;
     },
     [characterById, characterByName]
+  );
+
+  const assignmentMatchesViewer = useCallback(
+    (assignment) => {
+      if (!assignment || typeof assignment !== 'object') return false;
+      const assignmentUserId = cleanText(assignment.ownerUserId);
+      const assignmentEmail = cleanText(assignment.ownerEmail).toLowerCase();
+      const assignmentUsername = cleanText(assignment.ownerUsername).toLowerCase();
+      if (assignmentUserId && viewerUserId && assignmentUserId === viewerUserId) return true;
+      if (assignmentEmail && viewerEmail && assignmentEmail === viewerEmail) return true;
+      if (assignmentUsername && viewerUsernameKey && assignmentUsername === viewerUsernameKey) return true;
+      return false;
+    },
+    [viewerEmail, viewerUserId, viewerUsernameKey]
   );
 
   const canControlUnlinkedCombatant = useCallback(
@@ -1986,6 +2012,8 @@ export default function CombatPanel({
   const sheetPopoutWindowRef = useRef(null);
   const sheetPopoutRootRef = useRef(null);
   const suppressNextPopoutSessionEndRef = useRef(false);
+  const handledSheetPopoutRequestTokenRef = useRef(0);
+  const pendingRequestedSheetPopoutTargetRef = useRef('');
 
   useEffect(() => {
     const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode || !!sheetInventoryModalOpen || !!sheetActionDetail;
@@ -2177,6 +2205,22 @@ export default function CombatPanel({
     () => getPersonalInventoryEntry(normalizedBagInventory, selectedInventoryOwnerUserId),
     [normalizedBagInventory, selectedInventoryOwnerUserId]
   );
+  const selectedAttunementLimit = useMemo(
+    () => normalizeAttunementLimit(selectedPersonalInventoryEntry?.attunementLimit),
+    [selectedPersonalInventoryEntry?.attunementLimit]
+  );
+  const selectedAttunedInventoryItems = useMemo(() => {
+    const items = Array.isArray(selectedPersonalInventoryEntry?.items)
+      ? [...selectedPersonalInventoryEntry.items]
+      : [];
+    return items
+      .filter((item) => !!item?.attuned)
+      .sort((a, b) => cleanText(a?.name).localeCompare(cleanText(b?.name)));
+  }, [selectedPersonalInventoryEntry?.items]);
+  const selectedAttunementSlots = useMemo(() => (
+    Array.from({ length: selectedAttunementLimit }, (_, idx) => cleanText(selectedAttunedInventoryItems[idx]?.name))
+  ), [selectedAttunedInventoryItems, selectedAttunementLimit]);
+  const selectedAttunedOverflowCount = Math.max(0, selectedAttunedInventoryItems.length - selectedAttunementLimit);
   const selectedPersonalInventoryEquipmentLines = useMemo(
     () => inventoryItemsToEquipmentLines(selectedPersonalInventoryEntry.items),
     [selectedPersonalInventoryEntry.items]
@@ -2611,6 +2655,15 @@ export default function CombatPanel({
       window.alert('Unable to open the sheet pop-out window. Please try again.');
     }
   };
+
+  useEffect(() => {
+    const pendingTargetId = pendingRequestedSheetPopoutTargetRef.current;
+    if (!pendingTargetId) return;
+    if (!editorOpen || editorMode !== 'sheet') return;
+    if (!selected || cleanText(selected.id) !== pendingTargetId) return;
+    pendingRequestedSheetPopoutTargetRef.current = '';
+    openSheetPopout();
+  }, [editorMode, editorOpen, openSheetPopout, selected]);
 
   useEffect(() => {
     if (!sheetPopoutOpen) return;
@@ -3272,6 +3325,28 @@ export default function CombatPanel({
     setSheetInventoryModalOpen(true);
   }, [selectedCanEdit, selectedInventoryOwnerUserId]);
 
+  const setSelectedPersonalInventoryAttunementLimit = useCallback((nextValue) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const now = new Date().toISOString();
+    const nextLimit = normalizeAttunementLimit(nextValue);
+    setBagInventoryState((prevBag) => {
+      const normalizedBag = normalizeBagInventoryState(prevBag, { now });
+      const existingEntry = getPersonalInventoryEntry(normalizedBag, selectedInventoryOwnerUserId);
+      const currentItems = Array.isArray(existingEntry?.items) ? existingEntry.items : [];
+      if (countAttunedItems(currentItems) > nextLimit) {
+        window.alert(`Cannot set attunement slots below current attuned items (${countAttunedItems(currentItems)}).`);
+        return prevBag;
+      }
+      return upsertPersonalInventoryEntry(
+        normalizedBag,
+        selectedInventoryOwnerUserId,
+        cleanText(selectedInventoryOwnerLabel || existingEntry?.username || selected?.name || 'Player'),
+        currentItems,
+        { now, attunementLimit: nextLimit }
+      );
+    });
+  }, [selected?.name, selectedCanEdit, selectedInventoryOwnerLabel, selectedInventoryOwnerUserId, setBagInventoryState]);
+
   const updateSelectedPersonalInventoryItems = useCallback((updater) => {
     if (!selectedInventoryOwnerUserId) return;
     const now = new Date().toISOString();
@@ -3335,6 +3410,27 @@ export default function CombatPanel({
           weaponDamageType: '',
           weaponProperties: '',
         };
+    const sourceItems = Array.isArray(selectedPersonalInventoryEntry?.items)
+      ? selectedPersonalInventoryEntry.items
+      : [];
+    const currentAttunedCount = countAttunedItems(sourceItems);
+    const draftAttuned = !!sheetInventoryDraft.attuned;
+    if (!sheetInventoryEditingId) {
+      if (draftAttuned && currentAttunedCount >= selectedAttunementLimit) {
+        window.alert(`Attunement limit reached (${selectedAttunementLimit}). Increase slots or unattune another item.`);
+        return;
+      }
+    } else {
+      const targetItem = sourceItems.find((entry) => cleanText(entry.id) === sheetInventoryEditingId);
+      const targetWasAttuned = !!targetItem?.attuned;
+      const projectedAttunedCount = currentAttunedCount
+        + (draftAttuned && !targetWasAttuned ? 1 : 0)
+        - (!draftAttuned && targetWasAttuned ? 1 : 0);
+      if (projectedAttunedCount > selectedAttunementLimit) {
+        window.alert(`Attunement limit reached (${selectedAttunementLimit}). Increase slots or unattune another item.`);
+        return;
+      }
+    }
 
     updateSelectedPersonalInventoryItems((currentItems, now) => {
       const items = Array.isArray(currentItems) ? currentItems : [];
@@ -3352,19 +3448,31 @@ export default function CombatPanel({
         assignedTo: '',
         ...weaponFields,
         equipped: !!sheetInventoryDraft.equipped,
+        attuned: !!sheetInventoryDraft.attuned,
         hidden: !!sheetInventoryDraft.hidden,
         createdAt: cleanText(existing?.createdAt) || now,
         updatedAt: now,
       });
-      if (!sheetInventoryEditingId) return [buildItem(null), ...items];
-      return items.map((entry) => (
+      const nextItems = !sheetInventoryEditingId
+        ? [buildItem(null), ...items]
+        : items.map((entry) => (
         cleanText(entry.id) === sheetInventoryEditingId
           ? buildItem(entry)
           : entry
-      ));
+        ));
+      return nextItems;
     });
     closeSheetInventoryEditor();
-  }, [closeSheetInventoryEditor, selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryDraft, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
+  }, [
+    closeSheetInventoryEditor,
+    selectedAttunementLimit,
+    selectedCanEdit,
+    selectedPersonalInventoryEntry?.items,
+    selectedInventoryOwnerUserId,
+    sheetInventoryDraft,
+    sheetInventoryEditingId,
+    updateSelectedPersonalInventoryItems,
+  ]);
 
   const bumpSheetInventoryQty = useCallback((id, delta) => {
     if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
@@ -3391,6 +3499,26 @@ export default function CombatPanel({
       ))
     ));
   }, [selectedCanEdit, selectedInventoryOwnerUserId, updateSelectedPersonalInventoryItems]);
+
+  const toggleSheetInventoryAttuned = useCallback((id) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const targetId = cleanText(id);
+    if (!targetId) return;
+    updateSelectedPersonalInventoryItems((currentItems, now) => {
+      const items = Array.isArray(currentItems) ? currentItems : [];
+      const target = items.find((entry) => cleanText(entry.id) === targetId);
+      if (!target) return items;
+      if (!target.attuned && countAttunedItems(items) >= selectedAttunementLimit) {
+        window.alert(`Attunement limit reached (${selectedAttunementLimit}). Increase slots or unattune another item.`);
+        return items;
+      }
+      return items.map((entry) => (
+        cleanText(entry.id) === targetId
+          ? { ...entry, attuned: !entry.attuned, updatedAt: now }
+          : entry
+      ));
+    });
+  }, [selectedAttunementLimit, selectedCanEdit, selectedInventoryOwnerUserId, updateSelectedPersonalInventoryItems]);
 
   const toggleSheetInventoryHidden = useCallback((id) => {
     if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
@@ -3570,6 +3698,60 @@ export default function CombatPanel({
     setEditorMode(forceMode || (target?.sourceSheet ? 'sheet' : 'edit'));
     setEditorOpen(true);
   };
+
+  useEffect(() => {
+    const requestToken = Math.max(0, toInt(sheetPopoutRequestToken, 0));
+    if (requestToken <= 0) return;
+    if (requestToken === handledSheetPopoutRequestTokenRef.current) return;
+    handledSheetPopoutRequestTokenRef.current = requestToken;
+    pendingRequestedSheetPopoutTargetRef.current = '';
+
+    const assignedPlayerCombatants = combatants.filter((entry) => (
+      entry
+      && (entry.side || 'Enemy') !== 'Enemy'
+      && assignmentMatchesViewer(
+        getCharacterAccessEntry(characterControllers, resolveCharacterForCombatant(entry) || entry)
+      )
+    ));
+
+    if (assignedPlayerCombatants.length === 0) {
+      window.alert('No character sheet assigned to your account is available in Combat Tracker.');
+      return;
+    }
+
+    const controllableAssignedCombatants = assignedPlayerCombatants.filter((entry) => canControlCombatant(entry));
+    if (controllableAssignedCombatants.length === 0) {
+      window.alert('Your assigned character sheet is currently read-only.');
+      return;
+    }
+
+    const selectedIfAssigned = (
+      selected
+      && controllableAssignedCombatants.some((entry) => entry.id === selected.id)
+    )
+      ? selected
+      : null;
+
+    const target = selectedIfAssigned || controllableAssignedCombatants[0];
+
+    const targetId = cleanText(target?.id);
+    if (!targetId) {
+      window.alert('Unable to locate your assigned character sheet.');
+      return;
+    }
+
+    pendingRequestedSheetPopoutTargetRef.current = targetId;
+    openEditorFor(targetId, 'sheet');
+  }, [
+    assignmentMatchesViewer,
+    canControlCombatant,
+    characterControllers,
+    combatants,
+    openEditorFor,
+    resolveCharacterForCombatant,
+    selected,
+    sheetPopoutRequestToken,
+  ]);
 
   const triggerSheetImport = (targetId, replacing = false) => {
     const target = combatants.find((c) => c.id === targetId);
@@ -4869,6 +5051,28 @@ export default function CombatPanel({
                           </div>
                         </div>
                         <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
+                          <div className={styles.sheetSubTitle}>Attunement</div>
+                          <div className={styles.sheetAttunementKicker}>
+                            Attuned Items ({selectedAttunedInventoryItems.length}/{selectedAttunementLimit})
+                          </div>
+                          <div className={styles.sheetAttunementSlots}>
+                            {selectedAttunementSlots.map((itemName, idx) => (
+                              <div
+                                key={`sheet-attunement-slot-${idx + 1}`}
+                                className={`${styles.sheetAttunementSlot}${itemName ? ` ${styles.sheetAttunementSlotFilled}` : ''}`}
+                              >
+                                <span className={styles.sheetAttunementSlotRing} aria-hidden="true" />
+                                <span className={styles.sheetAttunementSlotText}>{itemName || 'Empty attunement slot'}</span>
+                              </div>
+                            ))}
+                          </div>
+                          {selectedAttunedOverflowCount > 0 && (
+                            <div className={styles.sheetListFallback}>
+                              {selectedAttunedOverflowCount} attuned item(s) exceed the current slot limit.
+                            </div>
+                          )}
+                        </div>
+                        <div className={`${styles.sheetSaveSenseBlock} ${styles.sheetSaveSenseTextBlock}`}>
                           <div className={styles.sheetSubTitle}>Other Possessions</div>
                           <div className={styles.sheetListBlock}>
                             {normalizeStringList(selected.otherPossessions).length ? normalizeStringList(selected.otherPossessions).join(', ') : <span className={styles.sheetListFallback}>No other possessions parsed.</span>}
@@ -5182,6 +5386,39 @@ export default function CombatPanel({
                             + Add Item
                           </button>
                         </div>
+                        <div className={styles.sheetInventoryAttuneMeta}>
+                          <div className={styles.sheetInventoryAttuneMetaLabel}>Attunement Slots</div>
+                          <div className={styles.sheetInventoryAttuneMetaControls}>
+                            <button
+                              type="button"
+                              className={btnClass('ghost', 'sm')}
+                              onMouseEnter={playHover}
+                              onClick={() => setSelectedPersonalInventoryAttunementLimit(selectedAttunementLimit - 1)}
+                              disabled={!selectedCanEdit || !selectedInventoryOwnerUserId || selectedAttunementLimit <= 1}
+                            >
+                              -
+                            </button>
+                            <input
+                              className={`${styles.input} ${styles.sheetInventoryAttuneLimitInput}`}
+                              inputMode="numeric"
+                              value={selectedAttunementLimit}
+                              onChange={(e) => setSelectedPersonalInventoryAttunementLimit(e.target.value)}
+                              disabled={!selectedCanEdit || !selectedInventoryOwnerUserId}
+                            />
+                            <button
+                              type="button"
+                              className={btnClass('ghost', 'sm')}
+                              onMouseEnter={playHover}
+                              onClick={() => setSelectedPersonalInventoryAttunementLimit(selectedAttunementLimit + 1)}
+                              disabled={!selectedCanEdit || !selectedInventoryOwnerUserId || selectedAttunementLimit >= 99}
+                            >
+                              +
+                            </button>
+                            <span className={styles.sheetInventoryAttuneUsage}>
+                              {selectedAttunedInventoryItems.length}/{selectedAttunementLimit} attuned
+                            </span>
+                          </div>
+                        </div>
                         <div className={`${styles.sheetInventoryList} koa-scrollbar-thin`}>
                           {sheetInventoryItems.length === 0 ? (
                             <div className={styles.sheetListFallback}>No personal items tracked.</div>
@@ -5214,6 +5451,7 @@ export default function CombatPanel({
                                     <div className={styles.sheetInventoryNameRow}>
                                       <span className={styles.sheetInventoryName}>{cleanText(item.name) || 'Unnamed Item'}</span>
                                       {item.equipped && <span className={styles.sheetInventoryPill}>Equipped</span>}
+                                      {item.attuned && <span className={styles.sheetInventoryPill}>Attuned</span>}
                                       {item.hidden && <span className={styles.sheetInventoryPill}>Hidden</span>}
                                     </div>
                                     <div className={styles.sheetInventorySub}>{cleanText(item.rarity) || 'Common'} - {cleanText(item.category) || 'Gear'}</div>
@@ -5223,6 +5461,7 @@ export default function CombatPanel({
                                     <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => bumpSheetInventoryQty(item.id, -1)} disabled={!selectedCanEdit}>-</button>
                                     <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => bumpSheetInventoryQty(item.id, 1)} disabled={!selectedCanEdit}>+</button>
                                     <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => toggleSheetInventoryEquipped(item.id)} disabled={!selectedCanEdit}>Equip</button>
+                                    <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => toggleSheetInventoryAttuned(item.id)} disabled={!selectedCanEdit}>Attune</button>
                                     <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => toggleSheetInventoryHidden(item.id)} disabled={!selectedCanEdit}>Hide</button>
                                     <button type="button" className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => deleteSheetInventoryItem(item.id)} disabled={!selectedCanEdit}>Delete</button>
                                   </div>
@@ -5373,6 +5612,15 @@ export default function CombatPanel({
                                 disabled={!selectedCanEdit}
                               />
                               <span>Equipped</span>
+                            </label>
+                            <label className={styles.equippedPickerRow}>
+                              <input
+                                type="checkbox"
+                                checked={!!sheetInventoryDraft.attuned}
+                                onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, attuned: e.target.checked }))}
+                                disabled={!selectedCanEdit}
+                              />
+                              <span>Attuned</span>
                             </label>
                             <label className={styles.equippedPickerRow}>
                               <input

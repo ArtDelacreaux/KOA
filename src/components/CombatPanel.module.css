@@ -1837,6 +1837,43 @@
   gap: 8px;
 }
 
+.sheetInventoryAttuneMeta {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 220, 160, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sheetInventoryAttuneMetaLabel {
+  color: rgba(255, 220, 160, 0.74);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.sheetInventoryAttuneMetaControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sheetInventoryAttuneLimitInput {
+  width: 56px;
+  min-height: 30px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.sheetInventoryAttuneUsage {
+  color: rgba(255, 245, 220, 0.78);
+  font-size: 11px;
+  font-weight: 900;
+}
+
 .sheetInventoryList {
   padding: 8px;
   overflow-y: auto;
@@ -2684,6 +2721,57 @@
 .sheetSaveSenseGrid .sheetSubTitle {
   margin-top: 0;
   margin-bottom: 2px;
+}
+
+.sheetAttunementKicker {
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.sheetAttunementSlots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheetAttunementSlot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: linear-gradient(170deg, rgba(54, 39, 22, 0.68), rgba(26, 18, 10, 0.82));
+}
+
+.sheetAttunementSlotFilled {
+  border-color: rgba(132, 184, 255, 0.42);
+  background: linear-gradient(170deg, rgba(38, 54, 78, 0.72), rgba(18, 26, 38, 0.82));
+}
+
+.sheetAttunementSlotRing {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 220, 160, 0.56);
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 160, 0.18);
+  flex-shrink: 0;
+}
+
+.sheetAttunementSlotFilled .sheetAttunementSlotRing {
+  border-color: rgba(164, 208, 255, 0.82);
+  box-shadow: 0 0 12px rgba(116, 180, 255, 0.36), inset 0 0 0 1px rgba(164, 208, 255, 0.3);
+}
+
+.sheetAttunementSlotText {
+  color: rgba(255, 245, 220, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .sheetSavingThrowGrid {

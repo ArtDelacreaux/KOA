@@ -113,6 +113,7 @@ export default function TavernMenu() {
   /* ================= STATE ================= */
   const [musicOn, setMusicOn] = useState(loadStoredMusicPreference);
   const [panelType, setPanelType] = useState('menu');
+  const [combatSheetPopoutRequestToken, setCombatSheetPopoutRequestToken] = useState(0);
   const [bgVideoReady, setBgVideoReady] = useState(false);
   const [bgVideoFailed, setBgVideoFailed] = useState(false);
   const [menuEntered, setMenuEntered] = useState(false);
@@ -493,6 +494,10 @@ export default function TavernMenu() {
     }, { flip: returningToMenu ? false : flip });
   };
 
+  const openCombatCharacterSheetPopout = () => {
+    setCombatSheetPopoutRequestToken((prev) => prev + 1);
+  };
+
   // play video selection is NAV click (Button.mp3), NOT page flip
   const playVideo = (which) => {
     cinematicDo(() => {
@@ -662,6 +667,7 @@ export default function TavernMenu() {
               playSilent: silentClick,
               playHover,
               canEditCampaignData,
+              openCombatCharacterSheetPopout,
             }}
           />
         </PanelErrorBoundary>
@@ -677,6 +683,7 @@ export default function TavernMenu() {
             canControlCharacter={canControlCharacter}
             playNav={playNavClick}
             playHover={playHover}
+            sheetPopoutRequestToken={combatSheetPopoutRequestToken}
           />
         </PanelErrorBoundary>
 

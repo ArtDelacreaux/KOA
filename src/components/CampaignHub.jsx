@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { createId } from '../domain/ids';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import {
+  DEFAULT_ATTUNEMENT_LIMIT,
   INVENTORY_CATEGORIES,
   INVENTORY_RARITIES,
   defaultBagInventoryState,
@@ -210,6 +211,7 @@ export default function CampaignHub(props) {
     questDraft,
     setQuestDraft,
     canEditCampaignData: canEditCampaignDataProp,
+    openCombatCharacterSheetPopout = null,
 
     playHover = () => {},
     playNav   = () => {},
@@ -1037,11 +1039,24 @@ export default function CampaignHub(props) {
     return Number.isFinite(num) ? num : null;
   };
 
+  const normalizeAttunementLimit = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return DEFAULT_ATTUNEMENT_LIMIT;
+    return clampInt(parsed, 1, 99);
+  };
+
   const normalizeIso = (value) => {
     const raw = normalizeText(value);
     if (!raw) return '';
     const ms = Date.parse(raw);
     return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
+  };
+
+  const toSortTimestamp = (value) => {
+    const raw = normalizeText(value);
+    if (!raw) return 0;
+    const ms = Date.parse(raw);
+    return Number.isFinite(ms) ? ms : 0;
   };
 
   const normalizeInventoryItem = (raw, now = new Date().toISOString()) => (
@@ -1111,6 +1126,36 @@ export default function CampaignHub(props) {
   const [playerTradeOwnItemId, setPlayerTradeOwnItemId] = useState('');
   const [playerTradeOwnQty, setPlayerTradeOwnQty] = useState('1');
   const [inventoryViewerUserId, setInventoryViewerUserId] = useState('');
+  const [personalInventoryDetailItemId, setPersonalInventoryDetailItemId] = useState('');
+  const personalInventoryHideSortLockRef = useRef({});
+
+  const rememberPersonalInventoryHideSortLock = (userId, itemId, updatedAt) => {
+    const normalizedUserId = normalizeText(userId);
+    const normalizedItemId = normalizeText(itemId);
+    if (!normalizedUserId || !normalizedItemId) return;
+    const currentLocks = personalInventoryHideSortLockRef.current;
+    const userLocks = currentLocks[normalizedUserId] || {};
+    if (Object.prototype.hasOwnProperty.call(userLocks, normalizedItemId)) return;
+    personalInventoryHideSortLockRef.current = {
+      ...currentLocks,
+      [normalizedUserId]: {
+        ...userLocks,
+        [normalizedItemId]: toSortTimestamp(updatedAt),
+      },
+    };
+  };
+
+  const personalInventorySortTimestamp = (userId, item) => {
+    const normalizedUserId = normalizeText(userId);
+    const normalizedItemId = normalizeText(item?.id);
+    if (normalizedUserId && normalizedItemId) {
+      const userLocks = personalInventoryHideSortLockRef.current[normalizedUserId];
+      if (userLocks && Object.prototype.hasOwnProperty.call(userLocks, normalizedItemId)) {
+        return userLocks[normalizedItemId];
+      }
+    }
+    return toSortTimestamp(item?.updatedAt);
+  };
 
   const bagOwnerUserId = normalizeText(bag?.ownerUserId);
   const bagOwnerEmail = normalizeEmail(bag?.ownerEmail);
@@ -1178,28 +1223,35 @@ export default function CampaignHub(props) {
 
   const activePersonalInventory = useMemo(() => {
     if (!canUsePersonalInventory || !activeInventoryUserId) {
-      return { userId: '', username: '', items: [] };
+      return { userId: '', username: '', attunementLimit: DEFAULT_ATTUNEMENT_LIMIT, items: [] };
     }
     const existing = playerInventories[activeInventoryUserId];
     if (existing && Array.isArray(existing.items)) return existing;
     return {
       userId: activeInventoryUserId,
       username: activeInventoryLabel,
+      attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
       items: [],
     };
   }, [activeInventoryLabel, activeInventoryUserId, canUsePersonalInventory, playerInventories]);
+  const activePersonalInventoryAttunementLimit = useMemo(
+    () => normalizeAttunementLimit(activePersonalInventory?.attunementLimit),
+    [activePersonalInventory?.attunementLimit]
+  );
 
   const personalInventoryItems = useMemo(() => {
     const items = Array.isArray(activePersonalInventory?.items) ? [...activePersonalInventory.items] : [];
     items.sort((a, b) => {
       const equippedDelta = Number(!!b?.equipped) - Number(!!a?.equipped);
       if (equippedDelta !== 0) return equippedDelta;
-      const updatedDelta = new Date(b?.updatedAt || 0) - new Date(a?.updatedAt || 0);
+      const updatedDelta =
+        personalInventorySortTimestamp(activeInventoryUserId, b)
+        - personalInventorySortTimestamp(activeInventoryUserId, a);
       if (updatedDelta !== 0) return updatedDelta;
       return (a?.name || '').localeCompare(b?.name || '');
     });
     return items;
-  }, [activePersonalInventory?.items]);
+  }, [activeInventoryUserId, activePersonalInventory?.items]);
 
   const tradeRequests = useMemo(
     () => (Array.isArray(bag?.tradeRequests) ? bag.tradeRequests : []),
@@ -1308,15 +1360,24 @@ export default function CampaignHub(props) {
     setPlayerTradeTargetUserId('');
   }, [otherTradingPlayers, playerTradeTargetUserId]);
 
+  useEffect(() => {
+    personalInventoryHideSortLockRef.current = {};
+  }, [activeInventoryUserId, campaignTab, inventoryViewerUserId, playerTradeCenterOpen]);
+
+  useEffect(() => {
+    setPersonalInventoryDetailItemId('');
+  }, [activeInventoryUserId, campaignTab, inventoryViewerUserId, playerTradeCenterOpen]);
+
   const viewerIsSelf = normalizeText(inventoryViewerUserId || activeInventoryUserId) === normalizeText(activeInventoryUserId);
   const viewedInventoryEntry = useMemo(() => {
     const viewerId = normalizeText(inventoryViewerUserId || activeInventoryUserId);
-    if (!viewerId) return { userId: '', username: '', items: [] };
+    if (!viewerId) return { userId: '', username: '', attunementLimit: DEFAULT_ATTUNEMENT_LIMIT, items: [] };
     const existing = playerInventoryEntriesByUserId[viewerId];
     if (existing) return existing;
     return {
       userId: viewerId,
       username: tradingPlayerLabelById[viewerId] || '',
+      attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
       items: [],
     };
   }, [activeInventoryUserId, inventoryViewerUserId, playerInventoryEntriesByUserId, tradingPlayerLabelById]);
@@ -1326,17 +1387,47 @@ export default function CampaignHub(props) {
     return tradingPlayerLabelById[viewerId] || viewedInventoryEntry.username || 'Player';
   }, [activeInventoryUserId, inventoryViewerUserId, tradingPlayerLabelById, viewedInventoryEntry.username]);
   const viewedInventoryItems = useMemo(() => {
+    const viewerId = normalizeText(inventoryViewerUserId || activeInventoryUserId);
     const list = Array.isArray(viewedInventoryEntry?.items) ? [...viewedInventoryEntry.items] : [];
     const visible = viewerIsSelf ? list : list.filter((item) => !item.hidden);
     visible.sort((a, b) => {
       const equippedDelta = Number(!!b?.equipped) - Number(!!a?.equipped);
       if (equippedDelta !== 0) return equippedDelta;
-      const updatedDelta = new Date(b?.updatedAt || 0) - new Date(a?.updatedAt || 0);
+      const updatedDelta =
+        personalInventorySortTimestamp(viewerId, b)
+        - personalInventorySortTimestamp(viewerId, a);
       if (updatedDelta !== 0) return updatedDelta;
       return (a?.name || '').localeCompare(b?.name || '');
     });
     return visible;
-  }, [viewerIsSelf, viewedInventoryEntry?.items]);
+  }, [activeInventoryUserId, inventoryViewerUserId, viewerIsSelf, viewedInventoryEntry?.items]);
+  const personalInventoryDetailItem = useMemo(
+    () => viewedInventoryItems.find((item) => item.id === personalInventoryDetailItemId) || null,
+    [personalInventoryDetailItemId, viewedInventoryItems]
+  );
+  const personalInventoryDetailWeaponRows = useMemo(() => {
+    if (!personalInventoryDetailItem) return [];
+    return [
+      { label: 'Proficient', value: normalizeText(personalInventoryDetailItem.weaponProficiency || personalInventoryDetailItem.proficiency) },
+      { label: 'Hit / DC', value: normalizeText(personalInventoryDetailItem.weaponHitDc || personalInventoryDetailItem.hitDc) },
+      { label: 'Attack Type', value: normalizeText(personalInventoryDetailItem.weaponAttackType || personalInventoryDetailItem.attackType) },
+      { label: 'Reach', value: normalizeText(personalInventoryDetailItem.weaponReach || personalInventoryDetailItem.reach) },
+      { label: 'Damage', value: normalizeText(personalInventoryDetailItem.weaponDamage || personalInventoryDetailItem.damage) },
+      { label: 'Damage Type', value: normalizeText(personalInventoryDetailItem.weaponDamageType || personalInventoryDetailItem.damageType) },
+      { label: 'Properties', value: normalizeText(personalInventoryDetailItem.weaponProperties || personalInventoryDetailItem.properties) },
+    ].filter((entry) => !!entry.value);
+  }, [personalInventoryDetailItem]);
+  const personalInventoryDetailTags = useMemo(() => {
+    if (!personalInventoryDetailItem) return [];
+    return normalizeItemTags(personalInventoryDetailItem.tags);
+  }, [personalInventoryDetailItem]);
+
+  useEffect(() => {
+    if (!personalInventoryDetailItemId) return;
+    if (personalInventoryDetailItem) return;
+    setPersonalInventoryDetailItemId('');
+  }, [personalInventoryDetailItem, personalInventoryDetailItemId]);
+
   const playerTradeSessions = useMemo(() => {
     if (!activeInventoryUserId) return [];
     return playerTradeRequests
@@ -1410,6 +1501,16 @@ export default function CampaignHub(props) {
     return false;
   };
 
+  const openPersonalInventoryDetail = (item) => {
+    const itemId = normalizeText(item?.id);
+    if (!itemId) return;
+    setPersonalInventoryDetailItemId(itemId);
+  };
+
+  const closePersonalInventoryDetail = () => {
+    setPersonalInventoryDetailItemId('');
+  };
+
   const transferBagOwnership = () => {
     if (!canTransferBagOwnership) {
       alert(inventoryReadOnlyMessage);
@@ -1436,9 +1537,10 @@ export default function CampaignHub(props) {
   };
 
   useEffect(() => {
-    if (!invModalOpen && !tradeRequestModalOpen && !tradeCenterOpen && !playerTradeCenterOpen) return;
+    if (!invModalOpen && !tradeRequestModalOpen && !tradeCenterOpen && !playerTradeCenterOpen && !personalInventoryDetailItemId) return;
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
+      if (personalInventoryDetailItemId) setPersonalInventoryDetailItemId('');
       if (tradeRequestModalOpen) setTradeRequestModalOpen(false);
       if (tradeCenterOpen) setTradeCenterOpen(false);
       if (playerTradeCenterOpen) {
@@ -1453,7 +1555,7 @@ export default function CampaignHub(props) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [invModalOpen, playerTradeCenterOpen, tradeCenterOpen, tradeRequestModalOpen]);
+  }, [invModalOpen, personalInventoryDetailItemId, playerTradeCenterOpen, tradeCenterOpen, tradeRequestModalOpen]);
 
   const invEmptyDraft = {
     name: '',
@@ -1473,6 +1575,7 @@ export default function CampaignHub(props) {
     weaponDamageType: '',
     weaponProperties: '',
     equipped: false,
+    attuned: false,
     hidden: false,
   };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
@@ -1495,6 +1598,7 @@ export default function CampaignHub(props) {
     weaponDamageType: item.weaponDamageType || item.damageType || '',
     weaponProperties: item.weaponProperties || item.properties || '',
     equipped: !!item.equipped,
+    attuned: !!item.attuned,
     hidden: !!item.hidden,
   });
 
@@ -1612,6 +1716,7 @@ export default function CampaignHub(props) {
         assignedTo,
         ...weaponFields,
         equipped: !!invDraft.equipped,
+        attuned: editingPersonal ? !!invDraft.attuned : false,
         hidden: editingPersonal ? !!invDraft.hidden : false,
         createdAt: normalizeIso(existing?.createdAt) || now,
         updatedAt: now,
@@ -1621,12 +1726,22 @@ export default function CampaignHub(props) {
       return items.map((entry) => (entry.id === invEditingId ? buildItem(entry) : entry));
     };
 
+    const countAttunedItems = (items) => (
+      (Array.isArray(items) ? items : []).reduce((sum, entry) => sum + (entry?.attuned ? 1 : 0), 0)
+    );
+
     if (editingPersonal) {
+      const previewItems = upsertItems(activePersonalInventory?.items || []);
+      if (countAttunedItems(previewItems) > activePersonalInventoryAttunementLimit) {
+        alert(`Attunement limit reached (${activePersonalInventoryAttunementLimit}). Increase the limit or unattune another item.`);
+        return;
+      }
       setBag((prev) => {
         const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
         const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
           userId: activeInventoryUserId,
           username: activeInventoryLabel,
+          attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
           items: [],
         };
         nextPlayerInventories[activeInventoryUserId] = {
@@ -1717,6 +1832,7 @@ export default function CampaignHub(props) {
       const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
         userId: activeInventoryUserId,
         username: activeInventoryLabel,
+        attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
         items: [],
       };
       nextPlayerInventories[activeInventoryUserId] = {
@@ -1746,6 +1862,7 @@ export default function CampaignHub(props) {
       const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
         userId: activeInventoryUserId,
         username: activeInventoryLabel,
+        attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
         items: [],
       };
       nextPlayerInventories[activeInventoryUserId] = {
@@ -1766,6 +1883,48 @@ export default function CampaignHub(props) {
     });
   };
 
+  const invTogglePersonalAttuned = (id) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
+        userId: activeInventoryUserId,
+        username: activeInventoryLabel,
+        attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
+        items: [],
+      };
+      const attunementLimit = normalizeAttunementLimit(existingInventory.attunementLimit);
+      const normalizedItems = normalizeInventoryItems(existingInventory.items, now);
+      const target = normalizedItems.find((entry) => entry.id === id);
+      if (!target) return prev;
+      if (!target.attuned) {
+        const currentAttunedCount = normalizedItems.reduce((sum, entry) => sum + (entry?.attuned ? 1 : 0), 0);
+        if (currentAttunedCount >= attunementLimit) {
+          alert(`Attunement limit reached (${attunementLimit}). Increase the limit or unattune another item.`);
+          return prev;
+        }
+      }
+      nextPlayerInventories[activeInventoryUserId] = {
+        ...existingInventory,
+        userId: activeInventoryUserId,
+        username: normalizeText(existingInventory.username || activeInventoryLabel),
+        attunementLimit,
+        updatedAt: now,
+        items: normalizedItems.map((entry) => (
+          entry.id === id
+            ? { ...entry, attuned: !entry.attuned, updatedAt: now }
+            : entry
+        )),
+      };
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+      };
+    });
+  };
+
   const invTogglePersonalHidden = (id) => {
     if (!ensurePersonalInventoryEditPermission()) return;
     if (!activeInventoryUserId) return;
@@ -1775,14 +1934,20 @@ export default function CampaignHub(props) {
       const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
         userId: activeInventoryUserId,
         username: activeInventoryLabel,
+        attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
         items: [],
       };
+      const normalizedItems = normalizeInventoryItems(existingInventory.items, now);
+      const existingItem = normalizedItems.find((entry) => entry.id === id);
+      if (existingItem) {
+        rememberPersonalInventoryHideSortLock(activeInventoryUserId, id, existingItem.updatedAt);
+      }
       nextPlayerInventories[activeInventoryUserId] = {
         ...existingInventory,
         userId: activeInventoryUserId,
         username: normalizeText(existingInventory.username || activeInventoryLabel),
         updatedAt: now,
-        items: normalizeInventoryItems(existingInventory.items, now).map((entry) => (
+        items: normalizedItems.map((entry) => (
           entry.id === id
             ? { ...entry, hidden: !entry.hidden, updatedAt: now }
             : entry
@@ -2013,6 +2178,7 @@ export default function CampaignHub(props) {
       id: bagNewId(),
       qty: clampInt(Number.parseInt(item.qty, 10) || 1, 1, 9999),
       equipped: false,
+      attuned: false,
       hidden: false,
       assignedTo: '',
       createdAt: now,
@@ -2277,6 +2443,7 @@ export default function CampaignHub(props) {
               const requesterInventory = nextPlayerInventories[requesterUserId] || {
                 userId: requesterUserId,
                 username: normalizeText(request.requesterUsername),
+                attunementLimit: DEFAULT_ATTUNEMENT_LIMIT,
                 items: [],
                 updatedAt: now,
               };
@@ -2313,6 +2480,7 @@ export default function CampaignHub(props) {
                     qty: requestedQty,
                     assignedTo: normalizeText(request.requesterUsername || requesterInventory.username),
                     equipped: false,
+                    attuned: false,
                     hidden: false,
                     createdAt: now,
                     updatedAt: now,
@@ -2339,6 +2507,7 @@ export default function CampaignHub(props) {
                       qty: offerQty,
                       assignedTo: normalizeText(request.requesterUsername || offerItem.assignedTo),
                       equipped: false,
+                      attuned: false,
                       hidden: false,
                       createdAt: now,
                       updatedAt: now,
@@ -2621,7 +2790,14 @@ export default function CampaignHub(props) {
                       <button
                         className={smallBtnClass('gold', styles.hubCharacterSheetBtn)}
                         onMouseEnter={smallBtnHover}
-                        onClick={() => { playNav(); cinematicNav('combat'); }}
+                        onClick={() => {
+                          playNav();
+                          if (typeof openCombatCharacterSheetPopout === 'function') {
+                            openCombatCharacterSheetPopout();
+                            return;
+                          }
+                          cinematicNav('combat');
+                        }}
                       >
                         {`${activeInventoryPossessiveLabel} Character Sheet`}
                       </button>
@@ -3307,28 +3483,49 @@ export default function CampaignHub(props) {
                         {viewedInventoryItems.map((item) => (
                           <div
                             key={item.id}
-                            className={styles.personalInventoryRow}
+                            className={`${styles.personalInventoryRow} ${styles.personalInventoryRowClickable} ${personalInventoryDetailItemId === item.id ? styles.personalInventoryRowSelected : ''}`}
+                            onClick={() => openPersonalInventoryDetail(item)}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Enter' && e.key !== ' ') return;
+                              e.preventDefault();
+                              openPersonalInventoryDetail(item);
+                            }}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`View details for ${item.name || 'item'}`}
                           >
                             <div className={styles.personalInventoryMeta}>
                               <div className={styles.personalInventoryNameRow}>
                                 <div className={styles.personalInventoryName}>{item.name}</div>
                                 {item.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                                {!!item.attuned && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Attuned</span>}
                                 {viewerIsSelf && !!item.hidden && <span className={`${styles.pill} ${styles.pillSide} ${styles.pillTiny}`}>Hidden</span>}
                               </div>
                               <div className={styles.personalInventorySub}>{item.rarity} - {item.category}</div>
                             </div>
-                            <div className={styles.actionsRow}>
+                            <div className={styles.actionsRow} onClick={(e) => e.stopPropagation()}>
                               <span className={styles.qtyBadge}>x{item.qty ?? 1}</span>
                               {viewerIsSelf ? (
-                                <label className={styles.checkboxRow}>
-                                  <input
-                                    type="checkbox"
-                                    checked={!!item.hidden}
-                                    onChange={() => invTogglePersonalHidden(item.id)}
-                                    disabled={!canEditPersonalInventory}
-                                  />
-                                  <span className={styles.checkboxLabel}>Hide</span>
-                                </label>
+                                <>
+                                  <label className={styles.checkboxRow}>
+                                    <input
+                                      type="checkbox"
+                                      checked={!!item.attuned}
+                                      onChange={() => invTogglePersonalAttuned(item.id)}
+                                      disabled={!canEditPersonalInventory}
+                                    />
+                                    <span className={styles.checkboxLabel}>Attune</span>
+                                  </label>
+                                  <label className={styles.checkboxRow}>
+                                    <input
+                                      type="checkbox"
+                                      checked={!!item.hidden}
+                                      onChange={() => invTogglePersonalHidden(item.id)}
+                                      disabled={!canEditPersonalInventory}
+                                    />
+                                    <span className={styles.checkboxLabel}>Hide</span>
+                                  </label>
+                                </>
                               ) : (
                                 <button
                                   className={smallBtnClass('gold')}
@@ -3351,6 +3548,98 @@ export default function CampaignHub(props) {
           )}
 
         </div>{/* end body content */}
+
+        {personalInventoryDetailItem && (
+          <div
+            className={`${styles.modalOverlay} ${styles.modalOverlayTop} ${styles.personalInventoryLightboxOverlay}`}
+            onClick={closePersonalInventoryDetail}
+          >
+            <div
+              className={`${styles.modalCard} ${styles.personalInventoryLightboxCard}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className={styles.modalHeader}>
+                <div>
+                  <div className={styles.modalTitle}>{personalInventoryDetailItem.name || 'Item Details'}</div>
+                  <div className={styles.personalInventoryLightboxSub}>
+                    {viewedInventoryLabel} • {personalInventoryDetailItem.rarity} - {personalInventoryDetailItem.category}
+                  </div>
+                </div>
+                <button
+                  className={smallBtnClass('danger')}
+                  onMouseEnter={smallBtnHover}
+                  onClick={closePersonalInventoryDetail}
+                >
+                  Close
+                </button>
+              </div>
+              <div className={styles.sectionDivider} />
+              <div className={`${styles.modalBody} ${styles.personalInventoryLightboxBody}`}>
+                <div className={styles.personalInventoryLightboxSummary}>
+                  <span className={styles.qtyBadge}>x{personalInventoryDetailItem.qty ?? 1}</span>
+                  {personalInventoryDetailItem.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                  {!!personalInventoryDetailItem.attuned && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Attuned</span>}
+                  {!!personalInventoryDetailItem.hidden && <span className={`${styles.pill} ${styles.pillSide} ${styles.pillTiny}`}>Hidden</span>}
+                </div>
+
+                <div className={styles.personalInventoryLightboxGrid}>
+                  {personalInventoryDetailItem.value != null && (
+                    <div className={styles.personalInventoryLightboxField}>
+                      <span className={styles.personalInventoryLightboxLabel}>Value</span>
+                      <span>{personalInventoryDetailItem.value} gp</span>
+                    </div>
+                  )}
+                  {personalInventoryDetailItem.weight != null && (
+                    <div className={styles.personalInventoryLightboxField}>
+                      <span className={styles.personalInventoryLightboxLabel}>Weight</span>
+                      <span>{personalInventoryDetailItem.weight} lb</span>
+                    </div>
+                  )}
+                  {!!normalizeText(personalInventoryDetailItem.assignedTo) && (
+                    <div className={styles.personalInventoryLightboxField}>
+                      <span className={styles.personalInventoryLightboxLabel}>Assigned To</span>
+                      <span>{personalInventoryDetailItem.assignedTo}</span>
+                    </div>
+                  )}
+                </div>
+
+                {personalInventoryDetailWeaponRows.length > 0 && (
+                  <div className={styles.personalInventoryLightboxSection}>
+                    <div className={styles.inputLabel}>Weapon Details</div>
+                    <div className={styles.itemWeaponStats}>
+                      {personalInventoryDetailWeaponRows.map((entry) => (
+                        <div key={`detail-${personalInventoryDetailItem.id}-${entry.label}`} className={styles.itemWeaponStatRow}>
+                          <span className={styles.itemWeaponStatLabel}>{entry.label}:</span>
+                          <span>{entry.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {personalInventoryDetailTags.length > 0 && (
+                  <div className={styles.personalInventoryLightboxSection}>
+                    <div className={styles.inputLabel}>Tags</div>
+                    <div className={styles.personalInventoryTagList}>
+                      {personalInventoryDetailTags.map((tag) => (
+                        <span key={`detail-tag-${personalInventoryDetailItem.id}-${tag}`} className={styles.personalInventoryTag}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!!normalizeText(personalInventoryDetailItem.notes) && (
+                  <div className={styles.personalInventoryLightboxSection}>
+                    <div className={styles.inputLabel}>Notes</div>
+                    <div className={styles.personalInventoryLightboxNotes}>{personalInventoryDetailItem.notes}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ========== QUEST MODAL ========== */}
         {questModalOpen && canManageQuests && (
@@ -3579,6 +3868,10 @@ export default function CampaignHub(props) {
                 </div>
                 {invModalTarget === 'personal' && (
                   <div className={styles.fullCol}>
+                    <div className={styles.checkboxRow}>
+                      <input type="checkbox" id="inv-attuned" checked={!!invDraft.attuned} onChange={(e) => setInvDraft((d) => ({ ...d, attuned: e.target.checked }))} />
+                      <label htmlFor="inv-attuned" className={styles.checkboxLabel}>Attuned</label>
+                    </div>
                     <div className={styles.checkboxRow}>
                       <input type="checkbox" id="inv-hidden" checked={!!invDraft.hidden} onChange={(e) => setInvDraft((d) => ({ ...d, hidden: e.target.checked }))} />
                       <label htmlFor="inv-hidden" className={styles.checkboxLabel}>Hide From Other Players</label>
