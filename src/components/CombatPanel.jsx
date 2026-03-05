@@ -7,6 +7,17 @@ import { createId } from '../domain/ids';
 import { repository } from '../repository';
 import { STORAGE_KEYS } from '../lib/storageKeys';
 import { parseCharacterSheetFile } from '../lib/sheetParser';
+import useLocalStorageState from '../lib/useLocalStorageState';
+import {
+  defaultBagInventoryState,
+  getPersonalInventoryEntry,
+  inventoryItemsToEquipmentLines,
+  inventoryItemsToEquippedLines,
+  lineListsMatchByToken,
+  normalizeBagInventoryState,
+  syncInventoryItemsFromEquipment,
+  upsertPersonalInventoryEntry,
+} from '../lib/inventorySync';
 
 // ── Battle Backgrounds ────────────────────────────────────────────────────────
 import battleback1  from '../assets/Backgrounds/battleback1.png';
@@ -1837,7 +1848,7 @@ export default function CombatPanel({
     (combatant) => {
       if (!combatant || typeof combatant !== 'object') return combatant;
       const sourceIdKey = tokenKey(combatant.sourceCharacterId);
-      if (sourceIdKey) return combatant;
+      if (sourceIdKey && canManageCombat) return combatant;
 
       const hasCreator = !!(
         cleanText(combatant.createdByUserId)
@@ -1853,7 +1864,7 @@ export default function CombatPanel({
         createdByUsername: viewerUsername,
       };
     },
-    [viewerEmail, viewerUserId, viewerUsername]
+    [canManageCombat, viewerEmail, viewerUserId, viewerUsername]
   );
 
   const active = panelType === 'combat';
@@ -1861,6 +1872,17 @@ export default function CombatPanel({
   const suppressNextPersistRef = useRef(false);
   const persistTimerRef = useRef(null);
   const pendingPersistEncounterRef = useRef(null);
+  const suppressCombatToBagSyncRef = useRef(false);
+  const suppressBagToCombatSyncRef = useRef(false);
+
+  const [bagInventoryState, setBagInventoryState] = useLocalStorageState(
+    STORAGE_KEYS.bag,
+    defaultBagInventoryState()
+  );
+  const normalizedBagInventory = useMemo(
+    () => normalizeBagInventoryState(bagInventoryState),
+    [bagInventoryState]
+  );
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
   const [selectedId, setSelectedId] = useState(null);
@@ -1891,6 +1913,12 @@ export default function CombatPanel({
   });
   const [initSlideDirection, setInitSlideDirection] = useState('next');
   const [initSlideTick, setInitSlideTick] = useState(0);
+
+  useEffect(() => {
+    setBagInventoryState((prev) => normalizeBagInventoryState(prev));
+    // Normalize persisted shape once for cross-panel inventory sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Battle Background state ─────────────────────────────────────────────
   const [battleBg, setBattleBg] = useState(null);
@@ -2063,6 +2091,30 @@ export default function CombatPanel({
     [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
+  const selectedInventoryOwnerUserId = useMemo(() => {
+    if (!selected) return '';
+    if ((selected.side || 'Enemy') === 'Enemy') return '';
+    if (!canManageCombat && viewerUserId && canControlCombatant(selected)) return viewerUserId;
+    const explicitOwnerId = cleanText(selected.createdByUserId);
+    if (explicitOwnerId) return explicitOwnerId;
+    return '';
+  }, [canControlCombatant, canManageCombat, selected, viewerUserId]);
+  const selectedInventoryOwnerLabel = useMemo(() => {
+    if (!selected) return '';
+    return cleanText(selected.createdByUsername) || viewerUsername || selected.name || 'Player';
+  }, [selected, viewerUsername]);
+  const selectedPersonalInventoryEntry = useMemo(
+    () => getPersonalInventoryEntry(normalizedBagInventory, selectedInventoryOwnerUserId),
+    [normalizedBagInventory, selectedInventoryOwnerUserId]
+  );
+  const selectedPersonalInventoryEquipmentLines = useMemo(
+    () => inventoryItemsToEquipmentLines(selectedPersonalInventoryEntry.items),
+    [selectedPersonalInventoryEntry.items]
+  );
+  const selectedPersonalInventoryEquippedLines = useMemo(
+    () => inventoryItemsToEquippedLines(selectedPersonalInventoryEntry.items),
+    [selectedPersonalInventoryEntry.items]
+  );
   const selectedSensitiveStatsHidden = !!selected?.hideSensitiveStats;
   const selectedRestrictedPortrait = useMemo(() => {
     if (!selected) return '';
@@ -2759,6 +2811,110 @@ export default function CombatPanel({
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!selected || !selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    if ((selected.side || 'Enemy') === 'Enemy') return;
+    if (suppressBagToCombatSyncRef.current) return;
+
+    const currentEquipmentLines = normalizeStringList(selected.equipmentItems);
+    const currentEquippedLines = normalizeStringList(selected.equippedItems);
+    const weaponEquippedKeySet = new Set(
+      normalizeWeaponActions(selected.weaponActions, selected.equipmentItems)
+        .map((entry) => tokenKey(entry.attack))
+        .filter(Boolean)
+    );
+    const preservedWeaponEquippedLines = currentEquippedLines.filter((line) => (
+      weaponEquippedKeySet.has(tokenKey(line))
+    ));
+    const nextEquippedLines = normalizeStringList([
+      ...preservedWeaponEquippedLines,
+      ...selectedPersonalInventoryEquippedLines,
+    ]);
+    const hasPersonalInventoryItems = selectedPersonalInventoryEquipmentLines.length > 0;
+    const hasCombatEquipmentItems = currentEquipmentLines.length > 0;
+    if (!hasPersonalInventoryItems && hasCombatEquipmentItems) {
+      // Non-destructive bootstrap: keep existing combat equipment and let the reverse
+      // sync effect seed personal inventory when it's currently empty.
+      return;
+    }
+    if (
+      lineListsMatchByToken(currentEquipmentLines, selectedPersonalInventoryEquipmentLines)
+      && lineListsMatchByToken(currentEquippedLines, nextEquippedLines)
+    ) {
+      return;
+    }
+
+    suppressCombatToBagSyncRef.current = true;
+    setSelectedField({
+      equipmentItems: selectedPersonalInventoryEquipmentLines,
+      equippedItems: nextEquippedLines,
+    });
+    const releaseSyncTimer = setTimeout(() => {
+      suppressCombatToBagSyncRef.current = false;
+    }, 0);
+    return () => clearTimeout(releaseSyncTimer);
+  }, [
+    selected?.equipmentItems,
+    selected?.equippedItems,
+    selected?.id,
+    selected?.side,
+    selected?.weaponActions,
+    selectedCanEdit,
+    selectedInventoryOwnerUserId,
+    selectedPersonalInventoryEquipmentLines,
+    selectedPersonalInventoryEquippedLines,
+  ]);
+
+  useEffect(() => {
+    if (!selected || !selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    if ((selected.side || 'Enemy') === 'Enemy') return;
+    if (suppressCombatToBagSyncRef.current) return;
+
+    const equipmentLines = normalizeStringList(selected.equipmentItems);
+    const possessionLines = normalizeStringList(selected.otherPossessions);
+    const equippedLines = normalizeStringList(selected.equippedItems);
+    const currentItems = selectedPersonalInventoryEntry.items;
+    const bootstrapFromOtherPossessions = currentItems.length === 0 && possessionLines.length > 0;
+    const inventorySourceLines = bootstrapFromOtherPossessions
+      ? normalizeStringList([...equipmentLines, ...possessionLines])
+      : equipmentLines;
+    const nextItems = syncInventoryItemsFromEquipment(
+      inventorySourceLines,
+      equippedLines,
+      currentItems
+    );
+
+    if (
+      lineListsMatchByToken(inventoryItemsToEquipmentLines(currentItems), inventoryItemsToEquipmentLines(nextItems))
+      && lineListsMatchByToken(inventoryItemsToEquippedLines(currentItems), inventoryItemsToEquippedLines(nextItems))
+    ) {
+      return;
+    }
+
+    suppressBagToCombatSyncRef.current = true;
+    setBagInventoryState((prevBag) => upsertPersonalInventoryEntry(
+      prevBag,
+      selectedInventoryOwnerUserId,
+      selectedInventoryOwnerLabel,
+      nextItems
+    ));
+    const releaseSyncTimer = setTimeout(() => {
+      suppressBagToCombatSyncRef.current = false;
+    }, 0);
+    return () => clearTimeout(releaseSyncTimer);
+  }, [
+    selected?.equipmentItems,
+    selected?.equippedItems,
+    selected?.otherPossessions,
+    selected?.id,
+    selected?.side,
+    selectedCanEdit,
+    selectedInventoryOwnerLabel,
+    selectedInventoryOwnerUserId,
+    selectedPersonalInventoryEntry.items,
+    setBagInventoryState,
+  ]);
 
   const toggleSelectedSensitiveStats = () => {
     setSelectedField((combatant) => ({ hideSensitiveStats: !combatant.hideSensitiveStats }));

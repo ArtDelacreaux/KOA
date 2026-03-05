@@ -6,6 +6,16 @@ import watchPartyLogo from '../assets/logo/watch.webp';
 import { useAuth } from '../auth/AuthContext';
 import { createId } from '../domain/ids';
 import { STORAGE_KEYS } from '../lib/storageKeys';
+import {
+  INVENTORY_CATEGORIES,
+  INVENTORY_RARITIES,
+  defaultBagInventoryState,
+  normalizeBagInventoryState,
+  normalizeInventoryItem as normalizeSharedInventoryItem,
+  normalizeInventoryItems as normalizeSharedInventoryItems,
+  normalizePlayerInventories as normalizeSharedPlayerInventories,
+  normalizeTradeRequests as normalizeSharedTradeRequests,
+} from '../lib/inventorySync';
 import useLocalStorageState from '../lib/useLocalStorageState';
 import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import { repository } from '../repository';
@@ -990,11 +1000,10 @@ export default function CampaignHub(props) {
   const bagNewId = () => createId('bag');
   const tradeNewId = () => createId('trade');
   const localInventoryUserId = '__local_player__';
-  const CATEGORIES = ['All', 'Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
-  const ITEM_CATEGORIES = CATEGORIES.filter((entry) => entry !== 'All');
-  const RARITIES = ['All', 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'];
-  const ITEM_RARITIES = RARITIES.filter((entry) => entry !== 'All');
-  const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied']);
+  const CATEGORIES = ['All', ...INVENTORY_CATEGORIES];
+  const ITEM_CATEGORIES = INVENTORY_CATEGORIES;
+  const RARITIES = ['All', ...INVENTORY_RARITIES];
+  const ITEM_RARITIES = INVENTORY_RARITIES;
 
   const normalizeItemCategory = (value) => {
     const normalized = normalizeText(value);
@@ -1029,92 +1038,21 @@ export default function CampaignHub(props) {
     return Number.isFinite(ms) ? new Date(ms).toISOString() : '';
   };
 
-  const normalizeInventoryItem = (raw, now = new Date().toISOString()) => {
-    const source = raw && typeof raw === 'object' ? raw : {};
-    const id = normalizeText(source.id) || bagNewId();
-    const qty = clampInt(Number.parseInt(source.qty, 10) || 1, 1, 9999);
-    return {
-      id,
-      name: normalizeText(source.name) || 'Unnamed Item',
-      qty,
-      category: normalizeItemCategory(source.category),
-      rarity: normalizeItemRarity(source.rarity),
-      value: normalizeOptionalNumber(source.value),
-      weight: normalizeOptionalNumber(source.weight),
-      notes: normalizeText(source.notes),
-      tags: normalizeItemTags(source.tags),
-      assignedTo: normalizeText(source.assignedTo),
-      equipped: !!source.equipped,
-      createdAt: normalizeIso(source.createdAt) || now,
-      updatedAt: normalizeIso(source.updatedAt) || now,
-    };
-  };
+  const normalizeInventoryItem = (raw, now = new Date().toISOString()) => (
+    normalizeSharedInventoryItem(raw, { now, idFactory: bagNewId })
+  );
 
-  const normalizeInventoryItems = (rawItems, now = new Date().toISOString()) => {
-    const list = Array.isArray(rawItems) ? rawItems : [];
-    const seenIds = new Set();
-    return list
-      .map((entry) => normalizeInventoryItem(entry, now))
-      .map((entry) => {
-        let nextId = entry.id;
-        while (!nextId || seenIds.has(nextId)) nextId = bagNewId();
-        seenIds.add(nextId);
-        if (nextId === entry.id) return entry;
-        return { ...entry, id: nextId };
-      });
-  };
+  const normalizeInventoryItems = (rawItems, now = new Date().toISOString()) => (
+    normalizeSharedInventoryItems(rawItems, { now, idFactory: bagNewId })
+  );
 
-  const normalizePlayerInventories = (rawValue, now = new Date().toISOString()) => {
-    const source = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue : {};
-    const out = {};
-    Object.entries(source).forEach(([key, rawEntry]) => {
-      const entry = rawEntry && typeof rawEntry === 'object' && !Array.isArray(rawEntry) ? rawEntry : {};
-      const userId = normalizeText(key || entry.userId);
-      if (!userId) return;
-      out[userId] = {
-        userId,
-        username: normalizeText(entry.username || entry.label),
-        updatedAt: normalizeIso(entry.updatedAt) || '',
-        items: normalizeInventoryItems(entry.items, now),
-      };
-    });
-    return out;
-  };
+  const normalizePlayerInventories = (rawValue, now = new Date().toISOString()) => (
+    normalizeSharedPlayerInventories(rawValue, { now, idFactory: bagNewId })
+  );
 
-  const normalizeTradeRequests = (rawValue, now = new Date().toISOString()) => {
-    const list = Array.isArray(rawValue) ? rawValue : [];
-    return list
-      .map((rawRequest) => {
-        const request = rawRequest && typeof rawRequest === 'object' ? rawRequest : {};
-        const statusRaw = normalizeText(request.status).toLowerCase();
-        const status = TRADE_STATUS_SET.has(statusRaw) ? statusRaw : 'pending';
-        return {
-          id: normalizeText(request.id) || tradeNewId(),
-          status,
-          requestedAt: normalizeIso(request.requestedAt) || now,
-          requesterUserId: normalizeText(request.requesterUserId),
-          requesterUsername: normalizeText(request.requesterUsername || request.requesterLabel),
-          requesterEmail: normalizeEmail(request.requesterEmail),
-          targetOwnerUserId: normalizeText(request.targetOwnerUserId),
-          targetOwnerUsername: normalizeText(request.targetOwnerUsername),
-          partyItemId: normalizeText(request.partyItemId),
-          partyItemName: normalizeText(request.partyItemName),
-          partyItemCategory: normalizeItemCategory(request.partyItemCategory || request.category),
-          partyItemRarity: normalizeItemRarity(request.partyItemRarity || request.rarity),
-          requestedQty: clampInt(Number.parseInt(request.requestedQty, 10) || 1, 1, 9999),
-          offerItemId: normalizeText(request.offerItemId),
-          offerItemName: normalizeText(request.offerItemName),
-          offerQty: Math.max(0, Number.parseInt(request.offerQty, 10) || 0),
-          note: normalizeText(request.note),
-          decidedAt: normalizeIso(request.decidedAt) || '',
-          decidedByUserId: normalizeText(request.decidedByUserId),
-          decidedByUsername: normalizeText(request.decidedByUsername),
-          decisionNote: normalizeText(request.decisionNote),
-        };
-      })
-      .filter((request) => !!request.partyItemId)
-      .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
-  };
+  const normalizeTradeRequests = (rawValue, now = new Date().toISOString()) => (
+    normalizeSharedTradeRequests(rawValue, { now })
+  );
 
   const rarityBadge = (rarity) => {
     const r = (rarity || 'Common').toLowerCase();
@@ -1123,42 +1061,12 @@ export default function CampaignHub(props) {
   };
 
 
-  const defaultBagState = {
-    currency: { pp: 0, gp: 0, sp: 0, cp: 0 },
-    items: [],
-    playerInventories: {},
-    tradeRequests: [],
-    ownerUserId: '',
-    ownerEmail: '',
-    ownerUsername: '',
-    ownerUpdatedAt: '',
-    ownerUpdatedByUserId: '',
-    ownerUpdatedByUsername: '',
-  };
+  const defaultBagState = defaultBagInventoryState();
 
   const [bag, setBag] = useLocalStorageState(STORAGE_KEYS.bag, defaultBagState);
 
   useEffect(() => {
-    setBag((prev) => {
-      const now = new Date().toISOString();
-      return {
-        currency: {
-          pp: prev?.currency?.pp ?? 0,
-          gp: prev?.currency?.gp ?? 0,
-          sp: prev?.currency?.sp ?? 0,
-          cp: prev?.currency?.cp ?? 0,
-        },
-        items: normalizeInventoryItems(prev?.items, now),
-        playerInventories: normalizePlayerInventories(prev?.playerInventories, now),
-        tradeRequests: normalizeTradeRequests(prev?.tradeRequests, now),
-        ownerUserId: normalizeText(prev?.ownerUserId),
-        ownerEmail: normalizeEmail(prev?.ownerEmail),
-        ownerUsername: normalizeText(prev?.ownerUsername),
-        ownerUpdatedAt: normalizeText(prev?.ownerUpdatedAt),
-        ownerUpdatedByUserId: normalizeText(prev?.ownerUpdatedByUserId),
-        ownerUpdatedByUsername: normalizeText(prev?.ownerUpdatedByUsername),
-      };
-    });
+    setBag((prev) => normalizeBagInventoryState(prev, { idFactory: bagNewId }));
     // Normalize once on mount in case older saved shapes exist.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1167,6 +1075,7 @@ export default function CampaignHub(props) {
   const [invCat, setInvCat] = useState('All');
   const [invRar, setInvRar] = useState('All');
   const [invSort, setInvSort] = useState('name');
+  const [inventoryBoardView, setInventoryBoardView] = useState('party');
   const [currencyDelta, setCurrencyDelta] = useState({ pp: '', gp: '', sp: '', cp: '' });
 
   const [invModalOpen, setInvModalOpen] = useState(false);
@@ -1206,6 +1115,7 @@ export default function CampaignHub(props) {
     ? readOnlyStatusMessage
     : 'Sign in with a campaign account to manage your personal inventory.';
   const canSubmitTradeRequests = !canEditInventory && canEditPersonalInventory;
+  const showingPersonalInventoryBoard = inventoryBoardView === 'personal';
 
   const inventoryOwnerChoices = useMemo(() => (
     (playerDirectory || [])
@@ -1896,6 +1806,10 @@ export default function CampaignHub(props) {
                     openAddQuest();
                     return;
                   }
+                  if (showingPersonalInventoryBoard) {
+                    invOpenPersonalAdd();
+                    return;
+                  }
                   if (canEditInventory) {
                     invOpenAdd();
                     return;
@@ -1907,7 +1821,7 @@ export default function CampaignHub(props) {
               >
                 {campaignTab === 'quests'
                   ? '+ Add Quest'
-                  : (canEditInventory ? '+ Add Item' : '+ Add My Item')}
+                  : (showingPersonalInventoryBoard ? '+ Add My Item' : (canEditInventory ? '+ Add Item' : '+ Add My Item'))}
               </button>
             )}
           </div>
@@ -2366,10 +2280,42 @@ export default function CampaignHub(props) {
                     <div className={styles.questBoardTitle}>Party Inventory Board</div>
                     <div className={styles.questBoardSub}>Track shared loot, valuables, and artifacts across the campaign.</div>
                   </div>
-                  <span className={styles.boardStatusPill}>{canEditInventory ? 'DM / Owner Edit' : 'Read Only'}</span>
+                  <div className={styles.questBoardToggleWrap}>
+                    <div className={styles.questBoardToggleLabel}>Inventory View</div>
+                    <div className={styles.questBoardToggle} role="group" aria-label="Inventory board view">
+                      <span
+                        aria-hidden="true"
+                        className={`${styles.questBoardToggleThumb}${showingPersonalInventoryBoard ? ` ${styles.questBoardToggleThumbPersonal}` : ''}`}
+                      />
+                      <button
+                        type="button"
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => setInventoryBoardView('party')}
+                        className={`${styles.questBoardToggleBtn}${!showingPersonalInventoryBoard ? ` ${styles.questBoardToggleBtnActive}` : ''}`}
+                        aria-pressed={!showingPersonalInventoryBoard}
+                      >
+                        Party
+                      </button>
+                      <button
+                        type="button"
+                        onMouseEnter={smallBtnHover}
+                        onClick={() => setInventoryBoardView('personal')}
+                        className={`${styles.questBoardToggleBtn}${showingPersonalInventoryBoard ? ` ${styles.questBoardToggleBtnActive}` : ''}`}
+                        aria-pressed={showingPersonalInventoryBoard}
+                      >
+                        My Inventory
+                      </button>
+                    </div>
+                  </div>
+                  <span className={styles.boardStatusPill}>
+                    {showingPersonalInventoryBoard
+                      ? (canEditPersonalInventory ? 'Personal Edit' : 'Read Only')
+                      : (canEditInventory ? 'DM / Owner Edit' : 'Read Only')}
+                  </span>
                 </div>
 
                 <div className={styles.inventoryGrid}>
+                  {!showingPersonalInventoryBoard && (
                   <div className={styles.inventoryControls}>
                     <div className={`${styles.softCard} ${styles.boardNoteCard}`}>
                       <div className={styles.cardHeaderRow}>
@@ -2565,7 +2511,9 @@ export default function CampaignHub(props) {
                       </div>
                     </div>
                   </div>
+                  )}
 
+                  {showingPersonalInventoryBoard && (
                   <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.personalInventoryCard}`}>
                     <div className={styles.cardHeaderRow}>
                       <div>
@@ -2573,21 +2521,34 @@ export default function CampaignHub(props) {
                         <div className={styles.cardSub}>Personal equipment and items used when offering trades.</div>
                         <div className={styles.modalHint}>Inventory owner: <strong>{activeInventoryLabel || 'Player'}</strong></div>
                       </div>
-                      <button
-                        className={smallBtnClass('ghost')}
-                        onMouseEnter={smallBtnHover}
-                        onClick={invOpenPersonalAdd}
-                        disabled={!canEditPersonalInventory}
-                      >
-                        + Add Personal Item
-                      </button>
+                      <div className={styles.actionsRow}>
+                        {(canEditInventory || canSubmitTradeRequests) && (
+                          <button
+                            className={smallBtnClass('ghost')}
+                            onMouseEnter={smallBtnHover}
+                            onClick={() => setTradeCenterOpen(true)}
+                          >
+                            {canEditInventory
+                              ? `Trade Requests (${pendingTradeRequests.length})`
+                              : `My Requests (${myPendingTradeCount})`}
+                          </button>
+                        )}
+                        <button
+                          className={smallBtnClass('ghost')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={invOpenPersonalAdd}
+                          disabled={!canEditPersonalInventory}
+                        >
+                          + Add Personal Item
+                        </button>
+                      </div>
                     </div>
                     <div className={styles.sectionDivider} />
                     {personalInventoryItems.length === 0 ? (
                       <div className={styles.modalHint}>No personal items yet. Add a few to trade with the bag owner.</div>
                     ) : (
                       <div className={styles.personalInventoryList}>
-                        {personalInventoryItems.slice(0, 12).map((item) => (
+                        {personalInventoryItems.map((item) => (
                           <div key={item.id} className={styles.personalInventoryRow}>
                             <div className={styles.personalInventoryMeta}>
                               <div className={styles.personalInventoryName}>{item.name}</div>
@@ -2606,8 +2567,9 @@ export default function CampaignHub(props) {
                       </div>
                     )}
                   </div>
+                  )}
 
-                  {invFilteredItems.length === 0 ? (
+                  {!showingPersonalInventoryBoard && (invFilteredItems.length === 0 ? (
                     <div className={`${styles.softCard} ${styles.inventoryEmpty} ${styles.boardNoteCard} ${styles.questEmptyCard}`}>
                       <div className={styles.inventoryEmptyTitle}>Bag is empty.</div>
                       <div className={styles.bodyCopy}>Hit <strong>+ Add Item</strong> to start tracking loot.</div>
@@ -2660,7 +2622,7 @@ export default function CampaignHub(props) {
                         </div>
                       ))}
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
             </div>
