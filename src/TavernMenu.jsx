@@ -55,6 +55,51 @@ function loadStoredMusicPreference() {
   return !!readJson(STORAGE_KEYS.musicOn, true);
 }
 
+class PanelErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, message: '' };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, message: String(error?.message || 'Unexpected panel error.') };
+  }
+
+  componentDidCatch(error) {
+    // Keep runtime breadcrumbs in console for debugging while showing in-app recovery UI.
+    // eslint-disable-next-line no-console
+    console.error('[PanelErrorBoundary]', error);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, message: '' });
+    }
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className={styles.panelErrorCard}>
+        <div className={styles.panelErrorTitle}>Panel failed to render</div>
+        <div className={styles.panelErrorBody}>{this.state.message || 'Unexpected panel error.'}</div>
+        <div className={styles.panelErrorActions}>
+          <button
+            type="button"
+            className={styles.panelErrorBtn}
+            onClick={() => {
+              this.setState({ hasError: false, message: '' });
+              if (typeof this.props.onReset === 'function') this.props.onReset();
+            }}
+          >
+            Return to Menu
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 /* ---------- component ---------- */
 export default function TavernMenu() {
   const {
@@ -481,6 +526,10 @@ export default function TavernMenu() {
     setVideoChoice(null);
   };
 
+  const recoverFromPanelError = () => {
+    setPanelType('menu');
+  };
+
   /* ================= RENDER ================= */
   return (
     <div className={styles.root}>
@@ -592,40 +641,44 @@ export default function TavernMenu() {
           onMenuStarted={autoPlayAudio}
         />
 
-        <CampaignHub
-          {...{
-            panelType,
-            cinematicNav,
-            campaignTab,
-            setCampaignTab,
-            quests,
-            setQuests,
-            questModalOpen,
-            setQuestModalOpen,
-            editingQuestId,
-            setEditingQuestId,
-            questDraft,
-            setQuestDraft,
-            // navigation-only click sound:
-            playNav: playNavClick,
-            // everything else silent:
-            playSilent: silentClick,
-            playHover,
-            canEditCampaignData,
-          }}
-        />
-		<CombatPanel
-          panelType={panelType}
-          cinematicNav={cinematicNav}
-          characters={characters}
-          characterControllers={characterAccess}
-          canManageCombat={canManageCharacterAccess}
-          canWriteCombat={canEditCampaignData}
-          viewerIdentity={viewerIdentity}
-          canControlCharacter={canControlCharacter}
-          playNav={playNavClick}
-          playHover={playHover}
-        />
+        <PanelErrorBoundary resetKey={`campaign-${panelType}-${campaignTab}`} onReset={recoverFromPanelError}>
+          <CampaignHub
+            {...{
+              panelType,
+              cinematicNav,
+              campaignTab,
+              setCampaignTab,
+              quests,
+              setQuests,
+              questModalOpen,
+              setQuestModalOpen,
+              editingQuestId,
+              setEditingQuestId,
+              questDraft,
+              setQuestDraft,
+              // navigation-only click sound:
+              playNav: playNavClick,
+              // everything else silent:
+              playSilent: silentClick,
+              playHover,
+              canEditCampaignData,
+            }}
+          />
+        </PanelErrorBoundary>
+        <PanelErrorBoundary resetKey={`combat-${panelType}`} onReset={recoverFromPanelError}>
+          <CombatPanel
+            panelType={panelType}
+            cinematicNav={cinematicNav}
+            characters={characters}
+            characterControllers={characterAccess}
+            canManageCombat={canManageCharacterAccess}
+            canWriteCombat={canEditCampaignData}
+            viewerIdentity={viewerIdentity}
+            canControlCharacter={canControlCharacter}
+            playNav={playNavClick}
+            playHover={playHover}
+          />
+        </PanelErrorBoundary>
 
         <CharacterBook
           {...{

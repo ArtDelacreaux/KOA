@@ -10,6 +10,8 @@ import { parseCharacterSheetFile } from '../lib/sheetParser';
 import { getCharacterAccessEntry } from '../lib/characterAccess';
 import useLocalStorageState from '../lib/useLocalStorageState';
 import {
+  INVENTORY_CATEGORIES,
+  INVENTORY_RARITIES,
   defaultBagInventoryState,
   getPersonalInventoryEntry,
   inventoryItemsToEquipmentLines,
@@ -787,6 +789,46 @@ function normalizeEquippedItems(raw, equipableItems) {
 
 function cleanText(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeInventoryCategory(value) {
+  const normalized = cleanText(value);
+  return INVENTORY_CATEGORIES.includes(normalized) ? normalized : 'Gear';
+}
+
+function normalizeInventoryRarity(value) {
+  const normalized = cleanText(value);
+  if (normalized.toLowerCase() === 'epic') return 'Very Rare';
+  return INVENTORY_RARITIES.includes(normalized) ? normalized : 'Common';
+}
+
+function normalizeOptionalNumber(value) {
+  if (value === '' || value == null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function createSheetInventoryDraft(item = null) {
+  const source = item && typeof item === 'object' ? item : {};
+  return {
+    name: cleanText(source.name),
+    qty: source.qty == null || source.qty === '' ? '1' : String(source.qty),
+    category: normalizeInventoryCategory(source.category),
+    rarity: normalizeInventoryRarity(source.rarity),
+    value: source.value == null ? '' : String(source.value),
+    weight: source.weight == null ? '' : String(source.weight),
+    notes: cleanText(source.notes),
+    tags: normalizeStringList(source.tags).join(', '),
+    weaponProficiency: cleanText(source.weaponProficiency || source.proficiency),
+    weaponHitDc: cleanText(source.weaponHitDc || source.hitDc),
+    weaponAttackType: cleanText(source.weaponAttackType || source.attackType),
+    weaponReach: cleanText(source.weaponReach || source.reach),
+    weaponDamage: cleanText(source.weaponDamage || source.damage),
+    weaponDamageType: cleanText(source.weaponDamageType || source.damageType),
+    weaponProperties: cleanText(source.weaponProperties || source.properties),
+    equipped: !!source.equipped,
+    hidden: !!source.hidden,
+  };
 }
 
 function defaultAbilities() {
@@ -1899,6 +1941,9 @@ export default function CombatPanel({
   const [sheetToolsMode, setSheetToolsMode] = useState('resources');
   const [equipmentEditMode, setEquipmentEditMode] = useState('equipment');
   const [spellSearchQuery, setSpellSearchQuery] = useState('');
+  const [sheetInventoryModalOpen, setSheetInventoryModalOpen] = useState(false);
+  const [sheetInventoryEditingId, setSheetInventoryEditingId] = useState('');
+  const [sheetInventoryDraft, setSheetInventoryDraft] = useState(() => createSheetInventoryDraft());
   const [sheetActionDetail, setSheetActionDetail] = useState(null);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [restrictedModalOpen, setRestrictedModalOpen] = useState(false);
@@ -1942,7 +1987,7 @@ export default function CombatPanel({
   const suppressNextPopoutSessionEndRef = useRef(false);
 
   useEffect(() => {
-    const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode || !!sheetActionDetail;
+    const anyModalOpen = cropOpen || addModalOpen || restrictedModalOpen || editorOpen || !!listEditorMode || !!sheetInventoryModalOpen || !!sheetActionDetail;
     if (!anyModalOpen) return;
 
     const onKeyDown = (e) => {
@@ -1975,6 +2020,12 @@ export default function CombatPanel({
         setSheetActionDetail(null);
         return;
       }
+      if (sheetInventoryModalOpen) {
+        setSheetInventoryModalOpen(false);
+        setSheetInventoryEditingId('');
+        setSheetInventoryDraft(createSheetInventoryDraft());
+        return;
+      }
       if (editorOpen) {
         setEditorOpen(false);
       }
@@ -1982,7 +2033,7 @@ export default function CombatPanel({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [cropOpen, addModalOpen, restrictedModalOpen, sheetActionDetail, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
+  }, [cropOpen, addModalOpen, restrictedModalOpen, sheetActionDetail, sheetInventoryModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
 
   // Header measurement (prevents overlap with content below)
   const headerRef = useRef(null);
@@ -2270,13 +2321,14 @@ export default function CombatPanel({
         const attackKey = tokenKey(attack);
         if (!attack || !attackKey || seen.has(attackKey)) return null;
         const categoryKey = cleanText(item.category).toLowerCase();
+        const proficiency = cleanText(item.weaponProficiency || item.proficiency);
         const attackType = cleanText(item.weaponAttackType || item.attackType);
         const range = cleanText(item.weaponReach || item.reach);
-        const hitDc = cleanText(item.weaponProficiency || item.proficiency);
+        const hitDc = cleanText(item.weaponHitDc || item.hitDc);
         const damage = cleanText(item.weaponDamage || item.damage);
         const damageType = cleanText(item.weaponDamageType || item.damageType);
         const properties = cleanText(item.weaponProperties || item.properties);
-        const hasWeaponMetadata = !!(attackType || range || hitDc || damage || damageType || properties);
+        const hasWeaponMetadata = !!(proficiency || attackType || range || hitDc || damage || damageType || properties);
         if (categoryKey !== 'weapon' && !hasWeaponMetadata) return null;
         seen.add(attackKey);
         return {
@@ -2287,7 +2339,8 @@ export default function CombatPanel({
           damage,
           rarity: cleanText(item.rarity),
           category: cleanText(item.category),
-          weaponProficiency: hitDc,
+          weaponProficiency: proficiency,
+          weaponHitDc: hitDc,
           weaponAttackType: attackType,
           weaponReach: range,
           weaponDamage: damage,
@@ -2318,6 +2371,20 @@ export default function CombatPanel({
   const inventoryWeaponActionCost = isInventoryWeaponActionDetail
     ? cleanText(inventoryWeaponActionPayload?.value)
     : '';
+  const sheetInventoryItems = useMemo(() => {
+    const items = Array.isArray(selectedPersonalInventoryEntry?.items)
+      ? [...selectedPersonalInventoryEntry.items]
+      : [];
+    items.sort((a, b) => {
+      const equippedDelta = Number(!!b?.equipped) - Number(!!a?.equipped);
+      if (equippedDelta !== 0) return equippedDelta;
+      const updatedDelta = new Date(b?.updatedAt || 0) - new Date(a?.updatedAt || 0);
+      if (updatedDelta !== 0) return updatedDelta;
+      return cleanText(a?.name).localeCompare(cleanText(b?.name));
+    });
+    return items;
+  }, [selectedPersonalInventoryEntry?.items]);
+  const isSheetInventoryDraftWeapon = normalizeInventoryCategory(sheetInventoryDraft.category) === 'Weapon';
   const spellbookDraftGroups = useMemo(
     () => groupedSpellbookEntries(spellbookDraftEntries),
     [spellbookDraftEntries]
@@ -2430,6 +2497,15 @@ export default function CombatPanel({
       setSheetActionDetail(null);
     }
   }, [sheetActionDetail, editorOpen, selected, editorMode]);
+
+  useEffect(() => {
+    if (!sheetInventoryModalOpen) return;
+    if (!editorOpen || !selected || editorMode !== 'sheet') {
+      setSheetInventoryModalOpen(false);
+      setSheetInventoryEditingId('');
+      setSheetInventoryDraft(createSheetInventoryDraft());
+    }
+  }, [sheetInventoryModalOpen, editorOpen, selected, editorMode]);
 
   useEffect(() => {
     return () => {
@@ -3173,6 +3249,156 @@ export default function CombatPanel({
       return { featureCharges: next };
     });
   };
+
+  const closeSheetInventoryModal = useCallback(() => {
+    setSheetInventoryModalOpen(false);
+    setSheetInventoryEditingId('');
+    setSheetInventoryDraft(createSheetInventoryDraft());
+  }, []);
+
+  const updateSelectedPersonalInventoryItems = useCallback((updater) => {
+    if (!selectedInventoryOwnerUserId) return;
+    const now = new Date().toISOString();
+    setBagInventoryState((prevBag) => {
+      const normalizedBag = normalizeBagInventoryState(prevBag, { now });
+      const existingEntry = getPersonalInventoryEntry(normalizedBag, selectedInventoryOwnerUserId);
+      const currentItems = Array.isArray(existingEntry?.items) ? existingEntry.items : [];
+      const nextItems = typeof updater === 'function' ? updater(currentItems, now) : currentItems;
+      if (!Array.isArray(nextItems)) return prevBag;
+      return upsertPersonalInventoryEntry(
+        normalizedBag,
+        selectedInventoryOwnerUserId,
+        cleanText(selectedInventoryOwnerLabel || existingEntry?.username || selected?.name || 'Player'),
+        nextItems,
+        { now }
+      );
+    });
+  }, [selected?.name, selectedInventoryOwnerLabel, selectedInventoryOwnerUserId, setBagInventoryState]);
+
+  const openSheetInventoryAdd = useCallback(() => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    setSheetInventoryEditingId('');
+    setSheetInventoryDraft(createSheetInventoryDraft());
+    setSheetInventoryModalOpen(true);
+  }, [selectedCanEdit, selectedInventoryOwnerUserId]);
+
+  const openSheetInventoryEdit = useCallback((item) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId || !item) return;
+    setSheetInventoryEditingId(cleanText(item.id));
+    setSheetInventoryDraft(createSheetInventoryDraft(item));
+    setSheetInventoryModalOpen(true);
+  }, [selectedCanEdit, selectedInventoryOwnerUserId]);
+
+  const saveSheetInventoryDraft = useCallback(() => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const name = cleanText(sheetInventoryDraft.name);
+    if (!name) return;
+    const qty = clamp(toInt(sheetInventoryDraft.qty, 1), 1, 9999);
+    const value = normalizeOptionalNumber(sheetInventoryDraft.value);
+    const weight = normalizeOptionalNumber(sheetInventoryDraft.weight);
+    const tags = normalizeStringList(sheetInventoryDraft.tags);
+    const category = normalizeInventoryCategory(sheetInventoryDraft.category);
+    const weaponFields = category === 'Weapon'
+      ? {
+          weaponProficiency: cleanText(sheetInventoryDraft.weaponProficiency),
+          weaponHitDc: cleanText(sheetInventoryDraft.weaponHitDc),
+          weaponAttackType: cleanText(sheetInventoryDraft.weaponAttackType),
+          weaponReach: cleanText(sheetInventoryDraft.weaponReach),
+          weaponDamage: cleanText(sheetInventoryDraft.weaponDamage),
+          weaponDamageType: cleanText(sheetInventoryDraft.weaponDamageType),
+          weaponProperties: cleanText(sheetInventoryDraft.weaponProperties),
+        }
+      : {
+          weaponProficiency: '',
+          weaponHitDc: '',
+          weaponAttackType: '',
+          weaponReach: '',
+          weaponDamage: '',
+          weaponDamageType: '',
+          weaponProperties: '',
+        };
+
+    updateSelectedPersonalInventoryItems((currentItems, now) => {
+      const items = Array.isArray(currentItems) ? currentItems : [];
+      const buildItem = (existing = null) => ({
+        ...(existing || {}),
+        id: cleanText(existing?.id) || createId('bag'),
+        name,
+        qty,
+        category,
+        rarity: normalizeInventoryRarity(sheetInventoryDraft.rarity || existing?.rarity),
+        value: Number.isFinite(value) ? value : (existing ? normalizeOptionalNumber(existing.value) : null),
+        weight: Number.isFinite(weight) ? weight : (existing ? normalizeOptionalNumber(existing.weight) : null),
+        notes: cleanText(sheetInventoryDraft.notes),
+        tags,
+        assignedTo: '',
+        ...weaponFields,
+        equipped: !!sheetInventoryDraft.equipped,
+        hidden: !!sheetInventoryDraft.hidden,
+        createdAt: cleanText(existing?.createdAt) || now,
+        updatedAt: now,
+      });
+      if (!sheetInventoryEditingId) return [buildItem(null), ...items];
+      return items.map((entry) => (
+        cleanText(entry.id) === sheetInventoryEditingId
+          ? buildItem(entry)
+          : entry
+      ));
+    });
+    closeSheetInventoryModal();
+  }, [closeSheetInventoryModal, selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryDraft, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
+
+  const bumpSheetInventoryQty = useCallback((id, delta) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const targetId = cleanText(id);
+    if (!targetId) return;
+    updateSelectedPersonalInventoryItems((currentItems, now) => (
+      currentItems.map((entry) => (
+        cleanText(entry.id) === targetId
+          ? { ...entry, qty: clamp((toInt(entry.qty, 1) + delta), 1, 9999), updatedAt: now }
+          : entry
+      ))
+    ));
+  }, [selectedCanEdit, selectedInventoryOwnerUserId, updateSelectedPersonalInventoryItems]);
+
+  const toggleSheetInventoryEquipped = useCallback((id) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const targetId = cleanText(id);
+    if (!targetId) return;
+    updateSelectedPersonalInventoryItems((currentItems, now) => (
+      currentItems.map((entry) => (
+        cleanText(entry.id) === targetId
+          ? { ...entry, equipped: !entry.equipped, updatedAt: now }
+          : entry
+      ))
+    ));
+  }, [selectedCanEdit, selectedInventoryOwnerUserId, updateSelectedPersonalInventoryItems]);
+
+  const toggleSheetInventoryHidden = useCallback((id) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const targetId = cleanText(id);
+    if (!targetId) return;
+    updateSelectedPersonalInventoryItems((currentItems, now) => (
+      currentItems.map((entry) => (
+        cleanText(entry.id) === targetId
+          ? { ...entry, hidden: !entry.hidden, updatedAt: now }
+          : entry
+      ))
+    ));
+  }, [selectedCanEdit, selectedInventoryOwnerUserId, updateSelectedPersonalInventoryItems]);
+
+  const deleteSheetInventoryItem = useCallback((id) => {
+    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+    const targetId = cleanText(id);
+    if (!targetId) return;
+    updateSelectedPersonalInventoryItems((currentItems) => (
+      currentItems.filter((entry) => cleanText(entry.id) !== targetId)
+    ));
+    if (sheetInventoryEditingId && sheetInventoryEditingId === targetId) {
+      setSheetInventoryEditingId('');
+      setSheetInventoryDraft(createSheetInventoryDraft());
+    }
+  }, [selectedCanEdit, selectedInventoryOwnerUserId, sheetInventoryEditingId, updateSelectedPersonalInventoryItems]);
 
   const longRestSelected = () => {
     setStatusDraft('');
@@ -4831,6 +5057,28 @@ export default function CombatPanel({
 
                 <div className={styles.divider}/>
 
+                {selectedInventoryManagedInPartyHub && (
+                  <div className={styles.sectionTopGap}>
+                    <div className={styles.toolsHeaderRow}>
+                      <div className={styles.label}>Inventory</div>
+                      <button
+                        type="button"
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => {
+                          playNav();
+                          setSheetInventoryEditingId('');
+                          setSheetInventoryDraft(createSheetInventoryDraft());
+                          setSheetInventoryModalOpen(true);
+                        }}
+                        disabled={!selectedCanEdit || !selectedInventoryOwnerUserId}
+                      >
+                        Open Inventory
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div><div className={styles.label}>Status (comma separated)</div>
                   <input
                     className={styles.input}
@@ -4873,6 +5121,251 @@ export default function CombatPanel({
                 </div>
               </div>
               </fieldset>
+              )}
+
+              {editorMode === 'sheet' && sheetInventoryModalOpen && (
+                <div className={styles.spellDetailOverlay}>
+                  <div className={`${styles.modalCard} ${styles.sheetInventoryModalCard}`}>
+                    <div className={styles.modalHeader}>
+                      <div className={styles.modalTitle}>My Inventory</div>
+                      <button
+                        className={btnClass('danger', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); closeSheetInventoryModal(); }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className={styles.sheetInventoryModalBody}>
+                      <div className={styles.sheetInventoryListPane}>
+                        <div className={styles.sheetInventoryPaneHead}>
+                          <div className={styles.label}>Items</div>
+                          <button
+                            type="button"
+                            className={btnClass('ghost', 'sm')}
+                            onMouseEnter={playHover}
+                            onClick={() => { playNav(); openSheetInventoryAdd(); }}
+                            disabled={!selectedCanEdit || !selectedInventoryOwnerUserId}
+                          >
+                            + Add Item
+                          </button>
+                        </div>
+                        <div className={`${styles.sheetInventoryList} koa-scrollbar-thin`}>
+                          {sheetInventoryItems.length === 0 ? (
+                            <div className={styles.sheetListFallback}>No personal items tracked.</div>
+                          ) : (
+                            sheetInventoryItems.map((item) => {
+                              const isActive = cleanText(item.id) === sheetInventoryEditingId;
+                              return (
+                                <div
+                                  key={`sheet-inventory-item-${item.id}`}
+                                  className={`${styles.sheetInventoryRow}${isActive ? ` ${styles.sheetInventoryRowActive}` : ''}`}
+                                  onMouseEnter={() => {
+                                    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+                                    playHover();
+                                  }}
+                                  onClick={() => {
+                                    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+                                    playNav();
+                                    openSheetInventoryEdit(item);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (!selectedCanEdit || !selectedInventoryOwnerUserId) return;
+                                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                                    e.preventDefault();
+                                    openSheetInventoryEdit(item);
+                                  }}
+                                  role={selectedCanEdit && selectedInventoryOwnerUserId ? 'button' : undefined}
+                                  tabIndex={selectedCanEdit && selectedInventoryOwnerUserId ? 0 : -1}
+                                >
+                                  <div className={styles.sheetInventoryMeta}>
+                                    <div className={styles.sheetInventoryNameRow}>
+                                      <span className={styles.sheetInventoryName}>{cleanText(item.name) || 'Unnamed Item'}</span>
+                                      {item.equipped && <span className={styles.sheetInventoryPill}>Equipped</span>}
+                                      {item.hidden && <span className={styles.sheetInventoryPill}>Hidden</span>}
+                                    </div>
+                                    <div className={styles.sheetInventorySub}>{cleanText(item.rarity) || 'Common'} - {cleanText(item.category) || 'Gear'}</div>
+                                  </div>
+                                  <div className={styles.sheetInventoryRowActions} onClick={(e) => e.stopPropagation()}>
+                                    <span className={styles.qtyBadge}>x{item.qty ?? 1}</span>
+                                    <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => bumpSheetInventoryQty(item.id, -1)} disabled={!selectedCanEdit}>-</button>
+                                    <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => bumpSheetInventoryQty(item.id, 1)} disabled={!selectedCanEdit}>+</button>
+                                    <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => toggleSheetInventoryEquipped(item.id)} disabled={!selectedCanEdit}>Equip</button>
+                                    <button type="button" className={btnClass('ghost', 'sm')} onMouseEnter={playHover} onClick={() => toggleSheetInventoryHidden(item.id)} disabled={!selectedCanEdit}>Hide</button>
+                                    <button type="button" className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => deleteSheetInventoryItem(item.id)} disabled={!selectedCanEdit}>Delete</button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+
+                      <div className={styles.sheetInventoryEditorPane}>
+                        <div className={styles.sheetInventoryPaneHead}>
+                          <div className={styles.label}>{sheetInventoryEditingId ? 'Edit Item' : 'New Item'}</div>
+                        </div>
+                        <div className={`${styles.sheetInventoryEditorGrid} koa-scrollbar-thin`}>
+                          <div className={styles.sheetInventoryFieldWide}>
+                            <div className={styles.label}>Name</div>
+                            <input
+                              className={styles.input}
+                              value={sheetInventoryDraft.name}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, name: e.target.value }))}
+                              placeholder="e.g. Longsword +1"
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Category</div>
+                            <select
+                              className={`${styles.input} ${styles.selectInput}`}
+                              value={sheetInventoryDraft.category}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, category: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            >
+                              {INVENTORY_CATEGORIES.map((category) => (
+                                <option key={`sheet-inv-category-${category}`} value={category}>{category}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Rarity</div>
+                            <select
+                              className={`${styles.input} ${styles.selectInput}`}
+                              value={sheetInventoryDraft.rarity}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, rarity: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            >
+                              {INVENTORY_RARITIES.map((rarity) => (
+                                <option key={`sheet-inv-rarity-${rarity}`} value={rarity}>{rarity}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Qty</div>
+                            <input
+                              className={styles.input}
+                              inputMode="numeric"
+                              value={sheetInventoryDraft.qty}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, qty: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>{isSheetInventoryDraftWeapon ? 'Cost (gp)' : 'Value (gp)'}</div>
+                            <input
+                              className={styles.input}
+                              inputMode="decimal"
+                              value={sheetInventoryDraft.value}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, value: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div>
+                            <div className={styles.label}>Weight (lb)</div>
+                            <input
+                              className={styles.input}
+                              inputMode="decimal"
+                              value={sheetInventoryDraft.weight}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weight: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+
+                          {isSheetInventoryDraftWeapon && (
+                            <>
+                              <div>
+                                <div className={styles.label}>Proficient</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponProficiency} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponProficiency: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div>
+                                <div className={styles.label}>Hit / DC</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponHitDc} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponHitDc: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div>
+                                <div className={styles.label}>Attack Type</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponAttackType} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponAttackType: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div>
+                                <div className={styles.label}>Reach</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponReach} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponReach: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div>
+                                <div className={styles.label}>Damage</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponDamage} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponDamage: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div>
+                                <div className={styles.label}>Damage Type</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponDamageType} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponDamageType: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                              <div className={styles.sheetInventoryFieldWide}>
+                                <div className={styles.label}>Properties</div>
+                                <input className={styles.input} value={sheetInventoryDraft.weaponProperties} onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, weaponProperties: e.target.value }))} disabled={!selectedCanEdit} />
+                              </div>
+                            </>
+                          )}
+
+                          <div className={styles.sheetInventoryFieldWide}>
+                            <div className={styles.label}>Notes</div>
+                            <textarea
+                              className={`${styles.input} ${styles.actionDetailTextarea}`}
+                              value={sheetInventoryDraft.notes}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, notes: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div className={styles.sheetInventoryFieldWide}>
+                            <div className={styles.label}>Tags (comma separated)</div>
+                            <input
+                              className={styles.input}
+                              value={sheetInventoryDraft.tags}
+                              onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, tags: e.target.value }))}
+                              disabled={!selectedCanEdit}
+                            />
+                          </div>
+                          <div className={styles.sheetInventoryFieldWide}>
+                            <label className={styles.equippedPickerRow}>
+                              <input
+                                type="checkbox"
+                                checked={!!sheetInventoryDraft.equipped}
+                                onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, equipped: e.target.checked }))}
+                                disabled={!selectedCanEdit}
+                              />
+                              <span>Equipped</span>
+                            </label>
+                            <label className={styles.equippedPickerRow}>
+                              <input
+                                type="checkbox"
+                                checked={!!sheetInventoryDraft.hidden}
+                                onChange={(e) => setSheetInventoryDraft((prev) => ({ ...prev, hidden: e.target.checked }))}
+                                disabled={!selectedCanEdit}
+                              />
+                              <span>Hide From Other Players</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div className={styles.managerActions}>
+                      <button
+                        className={btnClass('ghost', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); closeSheetInventoryModal(); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className={btnClass('gold', 'sm')}
+                        onMouseEnter={playHover}
+                        onClick={() => { playNav(); saveSheetInventoryDraft(); }}
+                        disabled={!selectedCanEdit || !selectedInventoryOwnerUserId || !cleanText(sheetInventoryDraft.name)}
+                      >
+                        {sheetInventoryEditingId ? 'Save Changes' : 'Add Item'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {editorMode === 'sheet' && sheetActionDetail && (
@@ -4970,7 +5463,13 @@ export default function CombatPanel({
                           <div>
                             <div className={styles.label}>Proficient</div>
                             <div className={styles.actionDetailValue}>
-                              {cleanText(inventoryWeaponActionPayload?.weaponProficiency || inventoryWeaponActionPayload?.hitDc) || '--'}
+                              {cleanText(inventoryWeaponActionPayload?.weaponProficiency) || '--'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className={styles.label}>Hit / DC</div>
+                            <div className={styles.actionDetailValue}>
+                              {cleanText(inventoryWeaponActionPayload?.weaponHitDc || inventoryWeaponActionPayload?.hitDc) || '--'}
                             </div>
                           </div>
                           <div>

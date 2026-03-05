@@ -69,6 +69,57 @@
   z-index: 5;
 }
 
+.panelErrorCard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, 92vw);
+  padding: 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 220, 160, 0.32);
+  background: linear-gradient(180deg, rgba(14, 10, 6, 0.95), rgba(8, 6, 4, 0.95));
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.64);
+  z-index: 12;
+}
+
+.panelErrorTitle {
+  color: rgba(255, 240, 210, 0.96);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.panelErrorBody {
+  margin-top: 10px;
+  color: rgba(255, 228, 188, 0.88);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.panelErrorActions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.panelErrorBtn {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.34);
+  background: linear-gradient(180deg, rgba(72, 52, 34, 0.9), rgba(30, 21, 13, 0.9));
+  color: rgba(255, 240, 212, 0.96);
+  font-family: serif;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
 .chatLayer {
   position: absolute;
   inset: 0;

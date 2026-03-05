@@ -2,7 +2,7 @@ import { createId } from '../domain/ids';
 
 export const INVENTORY_CATEGORIES = ['Weapon', 'Armor', 'Gear', 'Consumable', 'Loot', 'Quest', 'Magic', 'Misc'];
 export const INVENTORY_RARITIES = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Legendary'];
-const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied']);
+const TRADE_STATUS_SET = new Set(['pending', 'accepted', 'denied', 'open', 'completed', 'cancelled']);
 
 function newBagItemId() {
   return createId('bag');
@@ -54,6 +54,23 @@ function normalizeItemTags(value) {
     .filter(Boolean);
 }
 
+function normalizeTradeOfferLines(value) {
+  const list = Array.isArray(value) ? value : [];
+  return list
+    .map((entry) => {
+      const source = entry && typeof entry === 'object' ? entry : {};
+      const itemId = normalizeText(source.itemId || source.id);
+      if (!itemId) return null;
+      const qty = clampInt(Number.parseInt(source.qty, 10) || 1, 1, 9999);
+      return {
+        itemId,
+        name: normalizeText(source.name || source.itemName),
+        qty,
+      };
+    })
+    .filter(Boolean);
+}
+
 export function inventoryTokenKey(value) {
   return normalizeText(value)
     .toLowerCase()
@@ -77,12 +94,14 @@ export function normalizeInventoryItem(rawItem, options = {}) {
     tags: normalizeItemTags(source.tags),
     assignedTo: normalizeText(source.assignedTo),
     weaponProficiency: normalizeText(source.weaponProficiency ?? source.proficiency),
+    weaponHitDc: normalizeText(source.weaponHitDc ?? source.hitDc),
     weaponAttackType: normalizeText(source.weaponAttackType ?? source.attackType),
     weaponReach: normalizeText(source.weaponReach ?? source.reach),
     weaponDamage: normalizeText(source.weaponDamage ?? source.damage),
     weaponDamageType: normalizeText(source.weaponDamageType ?? source.damageType),
     weaponProperties: normalizeText(source.weaponProperties ?? source.properties),
     equipped: !!source.equipped,
+    hidden: !!source.hidden,
     createdAt: normalizeIso(source.createdAt) || now,
     updatedAt: normalizeIso(source.updatedAt) || now,
   };
@@ -131,10 +150,15 @@ export function normalizeTradeRequests(rawValue, options = {}) {
       const request = rawRequest && typeof rawRequest === 'object' ? rawRequest : {};
       const statusRaw = normalizeText(request.status).toLowerCase();
       const status = TRADE_STATUS_SET.has(statusRaw) ? statusRaw : 'pending';
+      const explicitType = normalizeText(request.type).toLowerCase();
+      const hasPlayerTradeFields = !!(normalizeText(request.fromUserId) || normalizeText(request.toUserId));
+      const type = explicitType === 'player-trade' || hasPlayerTradeFields ? 'player-trade' : 'bag-request';
+      const requestedAt = normalizeIso(request.requestedAt) || now;
       return {
         id: normalizeText(request.id) || createId('trade'),
+        type,
         status,
-        requestedAt: normalizeIso(request.requestedAt) || now,
+        requestedAt,
         requesterUserId: normalizeText(request.requesterUserId),
         requesterUsername: normalizeText(request.requesterUsername || request.requesterLabel),
         requesterEmail: normalizeEmail(request.requesterEmail),
@@ -153,9 +177,25 @@ export function normalizeTradeRequests(rawValue, options = {}) {
         decidedByUserId: normalizeText(request.decidedByUserId),
         decidedByUsername: normalizeText(request.decidedByUsername),
         decisionNote: normalizeText(request.decisionNote),
+        fromUserId: normalizeText(request.fromUserId),
+        fromUsername: normalizeText(request.fromUsername),
+        toUserId: normalizeText(request.toUserId),
+        toUsername: normalizeText(request.toUsername),
+        fromOffer: normalizeTradeOfferLines(request.fromOffer),
+        toOffer: normalizeTradeOfferLines(request.toOffer),
+        fromAccepted: !!request.fromAccepted,
+        toAccepted: !!request.toAccepted,
+        message: normalizeText(request.message || request.note),
+        completedAt: normalizeIso(request.completedAt),
+        cancelledAt: normalizeIso(request.cancelledAt),
+        updatedAt: normalizeIso(request.updatedAt) || requestedAt,
       };
     })
-    .filter((request) => !!request.partyItemId)
+    .filter((request) => (
+      request.type === 'player-trade'
+        ? !!request.fromUserId && !!request.toUserId
+        : !!request.partyItemId
+    ))
     .sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
 }
 

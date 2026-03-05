@@ -1786,6 +1786,70 @@
   line-height: 1.5;
 }
 
+.tradeComposerGrid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.6fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.tradeSidebarList {
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.tradeSessionCard {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.tradeSessionCardActive {
+  border-color: rgba(255, 220, 160, 0.36);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.36);
+}
+
+.tradeWorkspace {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tradeOfferGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tradeOfferCol {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: linear-gradient(160deg, rgba(66, 45, 26, 0.62), rgba(32, 22, 12, 0.76));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tradeOfferList {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tradeOfferControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .presenceModal {
   width: min(680px, 95vw);
   max-height: min(620px, 86vh);
@@ -1924,6 +1988,10 @@
   .inventoryControls {
     grid-template-columns: 1fr;
   }
+
+  .tradeComposerGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -2000,6 +2068,10 @@
   .personalInventoryRow {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .tradeOfferGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2107,6 +2179,10 @@
   }
 
   .inventoryModalBody {
+    grid-template-columns: 1fr;
+  }
+
+  .tradeOfferControls {
     grid-template-columns: 1fr;
   }
 }

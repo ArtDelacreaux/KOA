@@ -1100,6 +1100,15 @@ export default function CampaignHub(props) {
     offerQty: 1,
     note: '',
   });
+  const [playerTradeCenterOpen, setPlayerTradeCenterOpen] = useState(false);
+  const [playerTradeFocusId, setPlayerTradeFocusId] = useState('');
+  const [playerTradeTargetUserId, setPlayerTradeTargetUserId] = useState('');
+  const [playerTradeMessage, setPlayerTradeMessage] = useState('');
+  const [playerTradeOwnItemId, setPlayerTradeOwnItemId] = useState('');
+  const [playerTradeOwnQty, setPlayerTradeOwnQty] = useState('1');
+  const [playerTradeTargetItemId, setPlayerTradeTargetItemId] = useState('');
+  const [playerTradeTargetQty, setPlayerTradeTargetQty] = useState('1');
+  const [inventoryViewerUserId, setInventoryViewerUserId] = useState('');
 
   const bagOwnerUserId = normalizeText(bag?.ownerUserId);
   const bagOwnerEmail = normalizeEmail(bag?.ownerEmail);
@@ -1191,21 +1200,29 @@ export default function CampaignHub(props) {
     () => (Array.isArray(bag?.tradeRequests) ? bag.tradeRequests : []),
     [bag?.tradeRequests]
   );
-  const pendingTradeRequests = useMemo(
-    () => tradeRequests.filter((entry) => entry.status === 'pending'),
+  const bagTradeRequests = useMemo(
+    () => tradeRequests.filter((entry) => normalizeText(entry.type).toLowerCase() !== 'player-trade'),
     [tradeRequests]
+  );
+  const playerTradeRequests = useMemo(
+    () => tradeRequests.filter((entry) => normalizeText(entry.type).toLowerCase() === 'player-trade'),
+    [tradeRequests]
+  );
+  const pendingTradeRequests = useMemo(
+    () => bagTradeRequests.filter((entry) => entry.status === 'pending'),
+    [bagTradeRequests]
   );
   const myTradeRequests = useMemo(() => {
     if (!activeInventoryUserId) return [];
-    return tradeRequests.filter((entry) => normalizeText(entry.requesterUserId) === activeInventoryUserId);
-  }, [activeInventoryUserId, tradeRequests]);
+    return bagTradeRequests.filter((entry) => normalizeText(entry.requesterUserId) === activeInventoryUserId);
+  }, [activeInventoryUserId, bagTradeRequests]);
   const myPendingTradeCount = useMemo(
     () => myTradeRequests.filter((entry) => entry.status === 'pending').length,
     [myTradeRequests]
   );
   const visibleTradeRequests = useMemo(
-    () => (canEditInventory ? tradeRequests : myTradeRequests).slice(0, 40),
-    [canEditInventory, myTradeRequests, tradeRequests]
+    () => (canEditInventory ? bagTradeRequests : myTradeRequests).slice(0, 40),
+    [bagTradeRequests, canEditInventory, myTradeRequests]
   );
   const tradeRequestTargetItem = useMemo(
     () => (bag.items || []).find((entry) => entry.id === tradeRequestTargetItemId) || null,
@@ -1219,6 +1236,172 @@ export default function CampaignHub(props) {
     () => tradeOfferItemOptions.find((entry) => entry.id === normalizeText(tradeDraft.offerItemId)) || null,
     [tradeDraft.offerItemId, tradeOfferItemOptions]
   );
+  const playerInventoryEntriesByUserId = useMemo(() => {
+    const normalized = normalizePlayerInventories(playerInventories);
+    const out = {};
+    Object.entries(normalized).forEach(([userId, entry]) => {
+      out[userId] = {
+        userId,
+        username: normalizeText(entry?.username),
+        items: normalizeInventoryItems(entry?.items || []),
+      };
+    });
+    return out;
+  }, [playerInventories]);
+  const tradingPlayerOptions = useMemo(() => {
+    const byId = new Map();
+    inventoryOwnerChoices.forEach((player, idx) => {
+      const userId = normalizeText(player.userId);
+      if (!userId || byId.has(userId)) return;
+      byId.set(userId, {
+        userId,
+        label: normalizeText(player.label || player.username || fallbackPlayerLabel(idx)),
+      });
+    });
+    Object.entries(playerInventoryEntriesByUserId).forEach(([userId, entry], idx) => {
+      if (!userId || byId.has(userId)) return;
+      byId.set(userId, {
+        userId,
+        label: normalizeText(entry.username || fallbackPlayerLabel(idx)),
+      });
+    });
+    if (activeInventoryUserId && !byId.has(activeInventoryUserId)) {
+      byId.set(activeInventoryUserId, {
+        userId: activeInventoryUserId,
+        label: activeInventoryLabel || 'You',
+      });
+    }
+    return Array.from(byId.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [activeInventoryLabel, activeInventoryUserId, inventoryOwnerChoices, playerInventoryEntriesByUserId]);
+  const tradingPlayerLabelById = useMemo(() => {
+    const map = {};
+    tradingPlayerOptions.forEach((player) => {
+      map[player.userId] = player.label;
+    });
+    return map;
+  }, [tradingPlayerOptions]);
+  const otherTradingPlayers = useMemo(
+    () => tradingPlayerOptions.filter((player) => player.userId !== activeInventoryUserId),
+    [activeInventoryUserId, tradingPlayerOptions]
+  );
+  useEffect(() => {
+    if (!activeInventoryUserId) {
+      setInventoryViewerUserId('');
+      return;
+    }
+    if (!inventoryViewerUserId) {
+      setInventoryViewerUserId(activeInventoryUserId);
+      return;
+    }
+    if (tradingPlayerOptions.some((player) => player.userId === inventoryViewerUserId)) return;
+    setInventoryViewerUserId(activeInventoryUserId);
+  }, [activeInventoryUserId, inventoryViewerUserId, tradingPlayerOptions]);
+
+  useEffect(() => {
+    if (!playerTradeTargetUserId) return;
+    if (otherTradingPlayers.some((player) => player.userId === playerTradeTargetUserId)) return;
+    setPlayerTradeTargetUserId('');
+  }, [otherTradingPlayers, playerTradeTargetUserId]);
+
+  const viewerIsSelf = normalizeText(inventoryViewerUserId || activeInventoryUserId) === normalizeText(activeInventoryUserId);
+  const viewedInventoryEntry = useMemo(() => {
+    const viewerId = normalizeText(inventoryViewerUserId || activeInventoryUserId);
+    if (!viewerId) return { userId: '', username: '', items: [] };
+    const existing = playerInventoryEntriesByUserId[viewerId];
+    if (existing) return existing;
+    return {
+      userId: viewerId,
+      username: tradingPlayerLabelById[viewerId] || '',
+      items: [],
+    };
+  }, [activeInventoryUserId, inventoryViewerUserId, playerInventoryEntriesByUserId, tradingPlayerLabelById]);
+  const viewedInventoryLabel = useMemo(() => {
+    const viewerId = normalizeText(inventoryViewerUserId || activeInventoryUserId);
+    if (!viewerId) return 'Player';
+    return tradingPlayerLabelById[viewerId] || viewedInventoryEntry.username || 'Player';
+  }, [activeInventoryUserId, inventoryViewerUserId, tradingPlayerLabelById, viewedInventoryEntry.username]);
+  const viewedInventoryItems = useMemo(() => {
+    const list = Array.isArray(viewedInventoryEntry?.items) ? [...viewedInventoryEntry.items] : [];
+    const visible = viewerIsSelf ? list : list.filter((item) => !item.hidden);
+    visible.sort((a, b) => {
+      const equippedDelta = Number(!!b?.equipped) - Number(!!a?.equipped);
+      if (equippedDelta !== 0) return equippedDelta;
+      const updatedDelta = new Date(b?.updatedAt || 0) - new Date(a?.updatedAt || 0);
+      if (updatedDelta !== 0) return updatedDelta;
+      return (a?.name || '').localeCompare(b?.name || '');
+    });
+    return visible;
+  }, [viewerIsSelf, viewedInventoryEntry?.items]);
+  const playerTradeSessions = useMemo(() => {
+    if (!activeInventoryUserId) return [];
+    return playerTradeRequests
+      .filter((trade) => (
+        normalizeText(trade.fromUserId) === activeInventoryUserId
+        || normalizeText(trade.toUserId) === activeInventoryUserId
+      ))
+      .sort((a, b) => new Date(b.updatedAt || b.requestedAt || 0) - new Date(a.updatedAt || a.requestedAt || 0));
+  }, [activeInventoryUserId, playerTradeRequests]);
+  const focusedPlayerTrade = useMemo(
+    () => playerTradeSessions.find((trade) => trade.id === normalizeText(playerTradeFocusId)) || null,
+    [playerTradeFocusId, playerTradeSessions]
+  );
+  const activePlayerTradeTargetUserId = useMemo(() => {
+    if (focusedPlayerTrade) {
+      const fromUserId = normalizeText(focusedPlayerTrade.fromUserId);
+      const toUserId = normalizeText(focusedPlayerTrade.toUserId);
+      if (fromUserId === activeInventoryUserId) return toUserId;
+      if (toUserId === activeInventoryUserId) return fromUserId;
+    }
+    return normalizeText(playerTradeTargetUserId);
+  }, [activeInventoryUserId, focusedPlayerTrade, playerTradeTargetUserId]);
+  const activePlayerTradeTargetLabel = activePlayerTradeTargetUserId
+    ? (tradingPlayerLabelById[activePlayerTradeTargetUserId] || viewedInventoryEntry.username || 'Player')
+    : '';
+  const activePlayerTradeIsViewerFrom = focusedPlayerTrade
+    ? normalizeText(focusedPlayerTrade.fromUserId) === activeInventoryUserId
+    : true;
+  const focusedTradeOwnOffer = useMemo(
+    () => normalizeText(activeInventoryUserId) && focusedPlayerTrade
+      ? (
+        activePlayerTradeIsViewerFrom
+          ? (Array.isArray(focusedPlayerTrade.fromOffer) ? focusedPlayerTrade.fromOffer : [])
+          : (Array.isArray(focusedPlayerTrade.toOffer) ? focusedPlayerTrade.toOffer : [])
+      )
+      : [],
+    [activeInventoryUserId, activePlayerTradeIsViewerFrom, focusedPlayerTrade]
+  );
+  const focusedTradeTargetOffer = useMemo(
+    () => normalizeText(activeInventoryUserId) && focusedPlayerTrade
+      ? (
+        activePlayerTradeIsViewerFrom
+          ? (Array.isArray(focusedPlayerTrade.toOffer) ? focusedPlayerTrade.toOffer : [])
+          : (Array.isArray(focusedPlayerTrade.fromOffer) ? focusedPlayerTrade.fromOffer : [])
+      )
+      : [],
+    [activeInventoryUserId, activePlayerTradeIsViewerFrom, focusedPlayerTrade]
+  );
+  const focusedTradeViewerAccepted = focusedPlayerTrade
+    ? (activePlayerTradeIsViewerFrom ? !!focusedPlayerTrade.fromAccepted : !!focusedPlayerTrade.toAccepted)
+    : false;
+  const focusedTradeOtherAccepted = focusedPlayerTrade
+    ? (activePlayerTradeIsViewerFrom ? !!focusedPlayerTrade.toAccepted : !!focusedPlayerTrade.fromAccepted)
+    : false;
+  const playerTradeOwnItemOptions = useMemo(
+    () => personalInventoryItems.filter((item) => (item.qty || 0) > 0),
+    [personalInventoryItems]
+  );
+  const playerTradeTargetInventoryItems = useMemo(() => {
+    if (!activePlayerTradeTargetUserId) return [];
+    const targetEntry = playerInventoryEntriesByUserId[activePlayerTradeTargetUserId];
+    const targetItems = Array.isArray(targetEntry?.items) ? targetEntry.items : [];
+    if (normalizeText(activePlayerTradeTargetUserId) === activeInventoryUserId) return normalizeInventoryItems(targetItems);
+    return normalizeInventoryItems(targetItems).filter((item) => !item.hidden);
+  }, [activeInventoryUserId, activePlayerTradeTargetUserId, playerInventoryEntriesByUserId]);
+  const playerTradeTargetItemOptions = useMemo(
+    () => playerTradeTargetInventoryItems.filter((item) => (item.qty || 0) > 0),
+    [playerTradeTargetInventoryItems]
+  );
+  const canManagePlayerTrade = !!(canEditPersonalInventory && activeInventoryUserId);
 
   const ensureInventoryEditPermission = () => {
     if (canEditInventory) return true;
@@ -1258,11 +1441,15 @@ export default function CampaignHub(props) {
   };
 
   useEffect(() => {
-    if (!invModalOpen && !tradeRequestModalOpen && !tradeCenterOpen) return;
+    if (!invModalOpen && !tradeRequestModalOpen && !tradeCenterOpen && !playerTradeCenterOpen) return;
     const onKeyDown = (e) => {
       if (e.key !== 'Escape') return;
       if (tradeRequestModalOpen) setTradeRequestModalOpen(false);
       if (tradeCenterOpen) setTradeCenterOpen(false);
+      if (playerTradeCenterOpen) {
+        setPlayerTradeCenterOpen(false);
+        setPlayerTradeFocusId('');
+      }
       if (invModalOpen) {
         setInvModalOpen(false);
         setInvEditingId(null);
@@ -1271,7 +1458,7 @@ export default function CampaignHub(props) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [invModalOpen, tradeCenterOpen, tradeRequestModalOpen]);
+  }, [invModalOpen, playerTradeCenterOpen, tradeCenterOpen, tradeRequestModalOpen]);
 
   const invEmptyDraft = {
     name: '',
@@ -1284,12 +1471,14 @@ export default function CampaignHub(props) {
     tags: '',
     assignedTo: '',
     weaponProficiency: '',
+    weaponHitDc: '',
     weaponAttackType: '',
     weaponReach: '',
     weaponDamage: '',
     weaponDamageType: '',
     weaponProperties: '',
     equipped: false,
+    hidden: false,
   };
   const [invDraft, setInvDraft] = useState(invEmptyDraft);
 
@@ -1304,12 +1493,14 @@ export default function CampaignHub(props) {
     tags: Array.isArray(item.tags) ? item.tags.join(', ') : '',
     assignedTo: item.assignedTo || '',
     weaponProficiency: item.weaponProficiency || item.proficiency || '',
+    weaponHitDc: item.weaponHitDc || item.hitDc || '',
     weaponAttackType: item.weaponAttackType || item.attackType || '',
     weaponReach: item.weaponReach || item.reach || '',
     weaponDamage: item.weaponDamage || item.damage || '',
     weaponDamageType: item.weaponDamageType || item.damageType || '',
     weaponProperties: item.weaponProperties || item.properties || '',
     equipped: !!item.equipped,
+    hidden: !!item.hidden,
   });
 
   const closeInventoryModal = () => {
@@ -1393,6 +1584,7 @@ export default function CampaignHub(props) {
     const weaponFields = category === 'Weapon'
       ? {
           weaponProficiency: normalizeText(invDraft.weaponProficiency),
+          weaponHitDc: normalizeText(invDraft.weaponHitDc),
           weaponAttackType: normalizeText(invDraft.weaponAttackType),
           weaponReach: normalizeText(invDraft.weaponReach),
           weaponDamage: normalizeText(invDraft.weaponDamage),
@@ -1401,6 +1593,7 @@ export default function CampaignHub(props) {
         }
       : {
           weaponProficiency: '',
+          weaponHitDc: '',
           weaponAttackType: '',
           weaponReach: '',
           weaponDamage: '',
@@ -1424,6 +1617,7 @@ export default function CampaignHub(props) {
         assignedTo,
         ...weaponFields,
         equipped: !!invDraft.equipped,
+        hidden: editingPersonal ? !!invDraft.hidden : false,
         createdAt: normalizeIso(existing?.createdAt) || now,
         updatedAt: now,
       });
@@ -1575,6 +1769,397 @@ export default function CampaignHub(props) {
         playerInventories: nextPlayerInventories,
       };
     });
+  };
+
+  const invTogglePersonalHidden = (id) => {
+    if (!ensurePersonalInventoryEditPermission()) return;
+    if (!activeInventoryUserId) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      const existingInventory = nextPlayerInventories[activeInventoryUserId] || {
+        userId: activeInventoryUserId,
+        username: activeInventoryLabel,
+        items: [],
+      };
+      nextPlayerInventories[activeInventoryUserId] = {
+        ...existingInventory,
+        userId: activeInventoryUserId,
+        username: normalizeText(existingInventory.username || activeInventoryLabel),
+        updatedAt: now,
+        items: normalizeInventoryItems(existingInventory.items, now).map((entry) => (
+          entry.id === id
+            ? { ...entry, hidden: !entry.hidden, updatedAt: now }
+            : entry
+        )),
+      };
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+      };
+    });
+  };
+
+  const normalizeTradeOfferLine = (entry, fallbackName = '') => {
+    const source = entry && typeof entry === 'object' ? entry : {};
+    const itemId = normalizeText(source.itemId || source.id);
+    if (!itemId) return null;
+    const qty = clampInt(Number.parseInt(source.qty, 10) || 1, 1, 9999);
+    return {
+      itemId,
+      name: normalizeText(source.name || source.itemName || fallbackName),
+      qty,
+    };
+  };
+
+  const updatePlayerTradeEntry = (tradeId, updater) => {
+    const normalizedTradeId = normalizeText(tradeId);
+    if (!normalizedTradeId) return;
+    const now = new Date().toISOString();
+    setBag((prev) => {
+      const requests = normalizeTradeRequests(prev?.tradeRequests, now);
+      let didUpdate = false;
+      const nextRequests = requests.map((entry) => {
+        if (entry.id !== normalizedTradeId) return entry;
+        const nextEntry = updater(entry, now, prev);
+        if (!nextEntry || nextEntry === entry) return entry;
+        didUpdate = true;
+        return nextEntry;
+      });
+      if (!didUpdate) return prev;
+      return {
+        ...prev,
+        tradeRequests: nextRequests,
+      };
+    });
+  };
+
+  const startPlayerTrade = (targetUserId, options = {}) => {
+    if (!canManagePlayerTrade) {
+      alert(personalInventoryReadOnlyMessage);
+      return;
+    }
+    const normalizedTargetUserId = normalizeText(targetUserId);
+    if (!normalizedTargetUserId || normalizedTargetUserId === activeInventoryUserId) {
+      alert('Select another player to trade with.');
+      return;
+    }
+
+    const targetLabel = tradingPlayerLabelById[normalizedTargetUserId] || 'Player';
+    const now = new Date().toISOString();
+    const targetItem = options.targetItem && typeof options.targetItem === 'object'
+      ? options.targetItem
+      : null;
+    const requestedQty = clampInt(
+      Number.parseInt(options.targetQty, 10) || 1,
+      1,
+      Math.max(1, Number.parseInt(targetItem?.qty, 10) || 1)
+    );
+    const initialTargetOffer = targetItem
+      ? [normalizeTradeOfferLine({ itemId: targetItem.id, name: targetItem.name, qty: requestedQty })].filter(Boolean)
+      : [];
+    const tradeId = tradeNewId();
+    const newTrade = {
+      id: tradeId,
+      type: 'player-trade',
+      status: 'open',
+      requestedAt: now,
+      updatedAt: now,
+      requesterUserId: activeInventoryUserId,
+      requesterUsername: activeInventoryLabel,
+      requesterEmail: currentUserEmail,
+      targetOwnerUserId: normalizedTargetUserId,
+      targetOwnerUsername: targetLabel,
+      partyItemId: '',
+      partyItemName: '',
+      partyItemCategory: '',
+      partyItemRarity: '',
+      requestedQty: 0,
+      offerItemId: '',
+      offerItemName: '',
+      offerQty: 0,
+      note: '',
+      decidedAt: '',
+      decidedByUserId: '',
+      decidedByUsername: '',
+      decisionNote: '',
+      fromUserId: activeInventoryUserId,
+      fromUsername: activeInventoryLabel,
+      toUserId: normalizedTargetUserId,
+      toUsername: targetLabel,
+      fromOffer: [],
+      toOffer: initialTargetOffer,
+      fromAccepted: false,
+      toAccepted: false,
+      message: normalizeText(options.message || ''),
+      completedAt: '',
+      cancelledAt: '',
+    };
+
+    setBag((prev) => ({
+      ...prev,
+      tradeRequests: [newTrade, ...normalizeTradeRequests(prev?.tradeRequests, now)],
+    }));
+    setPlayerTradeTargetUserId(normalizedTargetUserId);
+    setPlayerTradeFocusId(tradeId);
+    setPlayerTradeCenterOpen(true);
+    setPlayerTradeOwnItemId('');
+    setPlayerTradeOwnQty('1');
+    setPlayerTradeTargetItemId('');
+    setPlayerTradeTargetQty('1');
+    setPlayerTradeMessage('');
+  };
+
+  const openTradeFromViewedInventoryItem = (item) => {
+    if (!item || viewerIsSelf) return;
+    const targetUserId = normalizeText(viewedInventoryEntry.userId);
+    if (!targetUserId) return;
+    startPlayerTrade(targetUserId, { targetItem: item, targetQty: 1 });
+  };
+
+  const addLineToPlayerTrade = (tradeId, side) => {
+    if (!canManagePlayerTrade) return;
+    const requestedItemId = side === 'own' ? normalizeText(playerTradeOwnItemId) : normalizeText(playerTradeTargetItemId);
+    if (!requestedItemId) return;
+    const qtyInput = side === 'own' ? playerTradeOwnQty : playerTradeTargetQty;
+    const requestedQty = clampInt(Number.parseInt(qtyInput, 10) || 1, 1, 9999);
+    updatePlayerTradeEntry(tradeId, (trade, now, prevBag) => {
+      if (normalizeText(trade.type).toLowerCase() !== 'player-trade') return trade;
+      if (trade.status === 'completed' || trade.status === 'cancelled') return trade;
+      const viewerIsFrom = normalizeText(trade.fromUserId) === activeInventoryUserId;
+      const sourceUserId = side === 'own'
+        ? activeInventoryUserId
+        : (viewerIsFrom ? normalizeText(trade.toUserId) : normalizeText(trade.fromUserId));
+      const normalizedBag = normalizeBagInventoryState(prevBag, { now, idFactory: bagNewId });
+      const sourceInventory = normalizeInventoryItems(
+        normalizedBag.playerInventories?.[sourceUserId]?.items || [],
+        now
+      );
+      const sourceItem = sourceInventory.find((entry) => entry.id === requestedItemId);
+      if (!sourceItem || sourceItem.hidden && sourceUserId !== activeInventoryUserId) return trade;
+      const maxQty = Math.max(1, sourceItem.qty || 1);
+      const offerKey = side === 'own'
+        ? (viewerIsFrom ? 'fromOffer' : 'toOffer')
+        : (viewerIsFrom ? 'toOffer' : 'fromOffer');
+      const currentOffer = Array.isArray(trade[offerKey]) ? trade[offerKey] : [];
+      const existing = currentOffer.find((line) => normalizeText(line.itemId) === requestedItemId);
+      const nextOffer = existing
+        ? currentOffer.map((line) => (
+          normalizeText(line.itemId) === requestedItemId
+            ? { ...line, qty: clampInt((line.qty || 0) + requestedQty, 1, maxQty), name: normalizeText(line.name || sourceItem.name) }
+            : line
+        ))
+        : [...currentOffer, { itemId: requestedItemId, name: sourceItem.name, qty: clampInt(requestedQty, 1, maxQty) }];
+
+      return {
+        ...trade,
+        [offerKey]: nextOffer,
+        fromAccepted: false,
+        toAccepted: false,
+        status: 'open',
+        updatedAt: now,
+      };
+    });
+    if (side === 'own') {
+      setPlayerTradeOwnItemId('');
+      setPlayerTradeOwnQty('1');
+    } else {
+      setPlayerTradeTargetItemId('');
+      setPlayerTradeTargetQty('1');
+    }
+  };
+
+  const removeLineFromPlayerTrade = (tradeId, side, itemId) => {
+    const normalizedItemId = normalizeText(itemId);
+    if (!normalizedItemId) return;
+    updatePlayerTradeEntry(tradeId, (trade, now) => {
+      if (normalizeText(trade.type).toLowerCase() !== 'player-trade') return trade;
+      if (trade.status === 'completed' || trade.status === 'cancelled') return trade;
+      const viewerIsFrom = normalizeText(trade.fromUserId) === activeInventoryUserId;
+      const offerKey = side === 'own'
+        ? (viewerIsFrom ? 'fromOffer' : 'toOffer')
+        : (viewerIsFrom ? 'toOffer' : 'fromOffer');
+      const currentOffer = Array.isArray(trade[offerKey]) ? trade[offerKey] : [];
+      const nextOffer = currentOffer.filter((line) => normalizeText(line.itemId) !== normalizedItemId);
+      if (nextOffer.length === currentOffer.length) return trade;
+      return {
+        ...trade,
+        [offerKey]: nextOffer,
+        fromAccepted: false,
+        toAccepted: false,
+        status: 'open',
+        updatedAt: now,
+      };
+    });
+  };
+
+  const consumeTradeOfferFromInventory = (items, offerLines, now) => {
+    let nextItems = normalizeInventoryItems(items, now);
+    const movedItems = [];
+    for (let i = 0; i < offerLines.length; i += 1) {
+      const line = offerLines[i];
+      const itemId = normalizeText(line?.itemId);
+      const qty = clampInt(Number.parseInt(line?.qty, 10) || 1, 1, 9999);
+      const itemIndex = nextItems.findIndex((entry) => entry.id === itemId);
+      if (itemIndex < 0) {
+        return { ok: false, error: `${line?.name || 'An item'} is no longer available.` };
+      }
+      const item = nextItems[itemIndex];
+      if ((item.qty || 1) < qty) {
+        return { ok: false, error: `Not enough quantity for ${item.name}.` };
+      }
+      movedItems.push({ ...item, qty });
+      const remainingQty = (item.qty || 1) - qty;
+      if (remainingQty <= 0) {
+        nextItems = nextItems.filter((entry) => entry.id !== item.id);
+      } else {
+        nextItems = nextItems.map((entry) => (
+          entry.id === item.id
+            ? { ...entry, qty: remainingQty, updatedAt: now }
+            : entry
+        ));
+      }
+    }
+    return { ok: true, nextItems, movedItems };
+  };
+
+  const appendMovedTradeItems = (items, movedItems, now) => {
+    const base = normalizeInventoryItems(items, now);
+    const additions = movedItems.map((item) => ({
+      ...normalizeInventoryItem(item, now),
+      id: bagNewId(),
+      qty: clampInt(Number.parseInt(item.qty, 10) || 1, 1, 9999),
+      equipped: false,
+      hidden: false,
+      assignedTo: '',
+      createdAt: now,
+      updatedAt: now,
+    }));
+    return normalizeInventoryItems([...additions, ...base], now);
+  };
+
+  const togglePlayerTradeAccepted = (tradeId) => {
+    if (!canManagePlayerTrade) return;
+    const normalizedTradeId = normalizeText(tradeId);
+    if (!normalizedTradeId) return;
+    let alertMessage = '';
+    const now = new Date().toISOString();
+
+    setBag((prev) => {
+      const requests = normalizeTradeRequests(prev?.tradeRequests, now);
+      const trade = requests.find((entry) => entry.id === normalizedTradeId);
+      if (!trade || normalizeText(trade.type).toLowerCase() !== 'player-trade') return prev;
+      if (trade.status === 'completed' || trade.status === 'cancelled') return prev;
+
+      const viewerIsFrom = normalizeText(trade.fromUserId) === activeInventoryUserId;
+      const viewerIsTo = normalizeText(trade.toUserId) === activeInventoryUserId;
+      if (!viewerIsFrom && !viewerIsTo) return prev;
+      const fromAccepted = viewerIsFrom ? !trade.fromAccepted : !!trade.fromAccepted;
+      const toAccepted = viewerIsTo ? !trade.toAccepted : !!trade.toAccepted;
+
+      const nextPlayerInventories = normalizePlayerInventories(prev?.playerInventories, now);
+      let nextStatus = trade.status || 'open';
+      let completedAt = normalizeIso(trade.completedAt);
+
+      if (fromAccepted && toAccepted) {
+        const fromUserId = normalizeText(trade.fromUserId);
+        const toUserId = normalizeText(trade.toUserId);
+        const fromInventory = nextPlayerInventories[fromUserId] || { userId: fromUserId, username: trade.fromUsername, items: [] };
+        const toInventory = nextPlayerInventories[toUserId] || { userId: toUserId, username: trade.toUsername, items: [] };
+        const fromOffer = Array.isArray(trade.fromOffer) ? trade.fromOffer : [];
+        const toOffer = Array.isArray(trade.toOffer) ? trade.toOffer : [];
+        const fromResult = consumeTradeOfferFromInventory(fromInventory.items, fromOffer, now);
+        if (!fromResult.ok) {
+          alertMessage = fromResult.error;
+          return prev;
+        }
+        const toResult = consumeTradeOfferFromInventory(toInventory.items, toOffer, now);
+        if (!toResult.ok) {
+          alertMessage = toResult.error;
+          return prev;
+        }
+
+        nextPlayerInventories[fromUserId] = {
+          ...fromInventory,
+          userId: fromUserId,
+          username: normalizeText(fromInventory.username || trade.fromUsername),
+          updatedAt: now,
+          items: appendMovedTradeItems(fromResult.nextItems, toResult.movedItems, now),
+        };
+        nextPlayerInventories[toUserId] = {
+          ...toInventory,
+          userId: toUserId,
+          username: normalizeText(toInventory.username || trade.toUsername),
+          updatedAt: now,
+          items: appendMovedTradeItems(toResult.nextItems, fromResult.movedItems, now),
+        };
+        nextStatus = 'completed';
+        completedAt = now;
+      } else {
+        nextStatus = 'open';
+        completedAt = '';
+      }
+
+      return {
+        ...prev,
+        playerInventories: nextPlayerInventories,
+        tradeRequests: requests.map((entry) => (
+          entry.id === normalizedTradeId
+            ? {
+                ...entry,
+                status: nextStatus,
+                fromAccepted,
+                toAccepted,
+                completedAt,
+                updatedAt: now,
+              }
+            : entry
+        )),
+      };
+    });
+
+    if (alertMessage) alert(alertMessage);
+  };
+
+  const cancelPlayerTrade = (tradeId) => {
+    if (!canManagePlayerTrade) return;
+    const normalizedTradeId = normalizeText(tradeId);
+    if (!normalizedTradeId) return;
+    updatePlayerTradeEntry(normalizedTradeId, (trade, now) => {
+      if (normalizeText(trade.type).toLowerCase() !== 'player-trade') return trade;
+      if (trade.status === 'completed' || trade.status === 'cancelled') return trade;
+      const isParticipant = normalizeText(trade.fromUserId) === activeInventoryUserId
+        || normalizeText(trade.toUserId) === activeInventoryUserId;
+      if (!isParticipant) return trade;
+      return {
+        ...trade,
+        status: 'cancelled',
+        cancelledAt: now,
+        updatedAt: now,
+      };
+    });
+  };
+
+  const openPlayerTradeCenter = () => {
+    if (!canManagePlayerTrade) {
+      alert(personalInventoryReadOnlyMessage);
+      return;
+    }
+    setPlayerTradeCenterOpen(true);
+  };
+
+  const openExistingPlayerTrade = (tradeId) => {
+    setPlayerTradeFocusId(normalizeText(tradeId));
+    setPlayerTradeCenterOpen(true);
+  };
+
+  const createPlayerTradeFromComposer = () => {
+    const targetUserId = normalizeText(playerTradeTargetUserId);
+    if (!targetUserId) {
+      alert('Select a player to trade with.');
+      return;
+    }
+    startPlayerTrade(targetUserId, { message: playerTradeMessage });
   };
 
   const openTradeRequestForItem = (item) => {
@@ -1739,6 +2324,7 @@ export default function CampaignHub(props) {
                     qty: requestedQty,
                     assignedTo: normalizeText(request.requesterUsername || requesterInventory.username),
                     equipped: false,
+                    hidden: false,
                     createdAt: now,
                     updatedAt: now,
                   },
@@ -1764,6 +2350,7 @@ export default function CampaignHub(props) {
                       qty: offerQty,
                       assignedTo: normalizeText(request.requesterUsername || offerItem.assignedTo),
                       equipped: false,
+                      hidden: false,
                       createdAt: now,
                       updatedAt: now,
                     },
@@ -1827,11 +2414,13 @@ export default function CampaignHub(props) {
           it.notes,
           it.assignedTo,
           it.weaponProficiency,
+          it.weaponHitDc,
           it.weaponAttackType,
           it.weaponReach,
           it.weaponDamage,
           it.weaponDamageType,
           it.weaponProperties,
+          it.hidden ? 'hidden' : '',
         ]
           .map((value) => String(value || '').toLowerCase())
           .join(' ');
@@ -1886,17 +2475,13 @@ export default function CampaignHub(props) {
 
         <div className={styles.bodyContent}>
           <div className={styles.actionRow}>
-            {((campaignTab === 'quests' && canManageQuests) || campaignTab === 'inventory') && (
+            {((campaignTab === 'quests' && canManageQuests) || (campaignTab === 'inventory' && !showingPersonalInventoryBoard)) && (
               <button
                 type="button"
                 onMouseEnter={smallBtnHover}
                 onClick={() => {
                   if (campaignTab === 'quests') {
                     openAddQuest();
-                    return;
-                  }
-                  if (showingPersonalInventoryBoard) {
-                    invOpenPersonalAdd();
                     return;
                   }
                   if (canEditInventory) {
@@ -1910,7 +2495,7 @@ export default function CampaignHub(props) {
               >
                 {campaignTab === 'quests'
                   ? '+ Add Quest'
-                  : (showingPersonalInventoryBoard ? '+ Add My Item' : (canEditInventory ? '+ Add Item' : '+ Add My Item'))}
+                  : (canEditInventory ? '+ Add Item' : '+ Add My Item')}
               </button>
             )}
           </div>
@@ -2398,7 +2983,7 @@ export default function CampaignHub(props) {
                   </div>
                   <span className={styles.boardStatusPill}>
                     {showingPersonalInventoryBoard
-                      ? (canEditPersonalInventory ? 'Personal Edit' : 'Read Only')
+                      ? 'Trading Center'
                       : (canEditInventory ? 'DM / Owner Edit' : 'Read Only')}
                   </span>
                 </div>
@@ -2606,71 +3191,84 @@ export default function CampaignHub(props) {
                   <div className={`${styles.softCard} ${styles.boardNoteCard} ${styles.personalInventoryCard}`}>
                     <div className={styles.cardHeaderRow}>
                       <div>
-                        <div className={styles.cardTitle}>My Inventory</div>
-                        <div className={styles.cardSub}>Personal equipment and items used when offering trades.</div>
-                        <div className={styles.modalHint}>Inventory owner: <strong>{activeInventoryLabel || 'Player'}</strong></div>
+                        <div className={styles.cardTitle}>Trading Center</div>
+                        <div className={styles.cardSub}>Browse inventories, hide private items, and open player-to-player trades.</div>
+                        <div className={styles.modalHint}>Viewing: <strong>{viewedInventoryLabel}</strong></div>
                       </div>
                       <div className={styles.actionsRow}>
-                        {(canEditInventory || canSubmitTradeRequests) && (
-                          <button
-                            className={smallBtnClass('ghost')}
-                            onMouseEnter={smallBtnHover}
-                            onClick={() => setTradeCenterOpen(true)}
-                          >
-                            {canEditInventory
-                              ? `Trade Requests (${pendingTradeRequests.length})`
-                              : `My Requests (${myPendingTradeCount})`}
-                          </button>
-                        )}
                         <button
                           className={smallBtnClass('ghost')}
                           onMouseEnter={smallBtnHover}
-                          onClick={invOpenPersonalAdd}
-                          disabled={!canEditPersonalInventory}
+                          onClick={openPlayerTradeCenter}
+                          disabled={!canManagePlayerTrade}
                         >
-                          + Add Personal Item
+                          Trade Requests ({playerTradeSessions.filter((entry) => entry.status === 'open').length})
                         </button>
                       </div>
                     </div>
                     <div className={styles.sectionDivider} />
-                    {personalInventoryItems.length === 0 ? (
-                      <div className={styles.modalHint}>No personal items yet. Add a few to trade with the bag owner.</div>
+                    <div className={styles.filtersGrid}>
+                      <div className={styles.fullCol}>
+                        <div className={styles.inputLabel}>Inventory View</div>
+                        <select
+                          value={inventoryViewerUserId || activeInventoryUserId || ''}
+                          onChange={(e) => setInventoryViewerUserId(e.target.value)}
+                          className={styles.inputBase}
+                        >
+                          {tradingPlayerOptions.map((player) => (
+                            <option key={`view-inventory-${player.userId}`} value={player.userId}>
+                              {player.userId === activeInventoryUserId ? 'My Inventory' : `${player.label}'s Inventory`}
+                            </option>
+                          ))}
+                        </select>
+                        {!viewerIsSelf && (
+                          <div className={styles.modalHint}>Items marked hidden will not appear when viewing another player.</div>
+                        )}
+                      </div>
+                    </div>
+                    {viewedInventoryItems.length === 0 ? (
+                      <div className={styles.modalHint}>
+                        {viewerIsSelf
+                          ? 'No personal items tracked yet. Manage inventory from your Character Sheet inventory modal.'
+                          : `No visible items in ${viewedInventoryLabel}'s inventory.`}
+                      </div>
                     ) : (
                       <div className={styles.personalInventoryList}>
-                        {personalInventoryItems.map((item) => (
+                        {viewedInventoryItems.map((item) => (
                           <div
                             key={item.id}
-                            className={`${styles.personalInventoryRow} ${canEditPersonalInventory ? styles.personalInventoryRowClickable : ''}`}
-                            onMouseEnter={() => {
-                              if (!canEditPersonalInventory) return;
-                              playHover();
-                            }}
-                            onClick={() => {
-                              if (!canEditPersonalInventory) return;
-                              invOpenPersonalEdit(item);
-                            }}
-                            onKeyDown={(e) => {
-                              if (!canEditPersonalInventory) return;
-                              if (e.key !== 'Enter' && e.key !== ' ') return;
-                              e.preventDefault();
-                              invOpenPersonalEdit(item);
-                            }}
-                            role={canEditPersonalInventory ? 'button' : undefined}
-                            tabIndex={canEditPersonalInventory ? 0 : -1}
+                            className={styles.personalInventoryRow}
                           >
                             <div className={styles.personalInventoryMeta}>
                               <div className={styles.personalInventoryNameRow}>
                                 <div className={styles.personalInventoryName}>{item.name}</div>
                                 {item.equipped && <span className={`${styles.pill} ${styles.pillMain} ${styles.pillTiny}`}>Equipped</span>}
+                                {viewerIsSelf && !!item.hidden && <span className={`${styles.pill} ${styles.pillSide} ${styles.pillTiny}`}>Hidden</span>}
                               </div>
                               <div className={styles.personalInventorySub}>{item.rarity} - {item.category}</div>
                             </div>
-                            <div className={styles.actionsRow} onClick={(e) => e.stopPropagation()}>
+                            <div className={styles.actionsRow}>
                               <span className={styles.qtyBadge}>x{item.qty ?? 1}</span>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, -1)} disabled={!canEditPersonalInventory}>-</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invBumpPersonalQty(item.id, +1)} disabled={!canEditPersonalInventory}>+</button>
-                              <button className={smallBtnClass('ghost')} onMouseEnter={smallBtnHover} onClick={() => invTogglePersonalEquipped(item.id)} disabled={!canEditPersonalInventory}>Equip</button>
-                              <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => invDeletePersonalItem(item.id)} disabled={!canEditPersonalInventory}>Delete</button>
+                              {viewerIsSelf ? (
+                                <label className={styles.checkboxRow}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!item.hidden}
+                                    onChange={() => invTogglePersonalHidden(item.id)}
+                                    disabled={!canEditPersonalInventory}
+                                  />
+                                  <span className={styles.checkboxLabel}>Hide</span>
+                                </label>
+                              ) : (
+                                <button
+                                  className={smallBtnClass('gold')}
+                                  onMouseEnter={smallBtnHover}
+                                  onClick={() => openTradeFromViewedInventoryItem(item)}
+                                  disabled={!canManagePlayerTrade}
+                                >
+                                  Request Trade
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -2691,6 +3289,7 @@ export default function CampaignHub(props) {
                         const isWeaponItem = normalizeItemCategory(it.category) === 'Weapon';
                         const weaponDetailRows = [
                           { label: 'Proficient', value: normalizeText(it.weaponProficiency) },
+                          { label: 'Hit / DC', value: normalizeText(it.weaponHitDc || it.hitDc) },
                           { label: 'Attack Type', value: normalizeText(it.weaponAttackType) },
                           { label: 'Reach', value: normalizeText(it.weaponReach) },
                           { label: 'Damage', value: normalizeText(it.weaponDamage) },
@@ -2924,6 +3523,15 @@ export default function CampaignHub(props) {
                       />
                     </div>
                     <div>
+                      <div className={styles.inputLabel}>Hit / DC</div>
+                      <input
+                        value={invDraft.weaponHitDc}
+                        onChange={(e) => setInvDraft((d) => ({ ...d, weaponHitDc: e.target.value }))}
+                        placeholder="+7 / DC 15"
+                        className={styles.inputBase}
+                      />
+                    </div>
+                    <div>
                       <div className={styles.inputLabel}>Attack Type</div>
                       <input
                         value={invDraft.weaponAttackType}
@@ -2990,6 +3598,14 @@ export default function CampaignHub(props) {
                     <label htmlFor="inv-equipped" className={styles.checkboxLabel}>Equipped</label>
                   </div>
                 </div>
+                {invModalTarget === 'personal' && (
+                  <div className={styles.fullCol}>
+                    <div className={styles.checkboxRow}>
+                      <input type="checkbox" id="inv-hidden" checked={!!invDraft.hidden} onChange={(e) => setInvDraft((d) => ({ ...d, hidden: e.target.checked }))} />
+                      <label htmlFor="inv-hidden" className={styles.checkboxLabel}>Hide From Other Players</label>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className={styles.sectionDivider} />
               <div className={styles.modalFooter}>
@@ -3153,6 +3769,246 @@ export default function CampaignHub(props) {
                     ))}
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {playerTradeCenterOpen && (
+          <div className={`${styles.modalOverlay} ${styles.modalOverlayTop}`}>
+            <div className={`${styles.modalCard} ${styles.tradeModal}`}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>Player Trade Requests</div>
+                <button
+                  className={smallBtnClass('danger')}
+                  onMouseEnter={smallBtnHover}
+                  onClick={() => {
+                    setPlayerTradeCenterOpen(false);
+                    setPlayerTradeFocusId('');
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div className={styles.sectionDivider} />
+              <div className={`${styles.modalBody} ${styles.tradeComposerGrid}`}>
+                <div className={`${styles.tradeRequestList} ${styles.tradeSidebarList}`}>
+                  {playerTradeSessions.length === 0 ? (
+                    <div className={styles.modalHint}>No player trades yet.</div>
+                  ) : (
+                    playerTradeSessions.map((trade) => {
+                      const otherUserId = normalizeText(trade.fromUserId) === activeInventoryUserId
+                        ? normalizeText(trade.toUserId)
+                        : normalizeText(trade.fromUserId);
+                      const otherLabel = tradingPlayerLabelById[otherUserId] || 'Player';
+                      const isActive = normalizeText(playerTradeFocusId) === trade.id;
+                      return (
+                        <button
+                          key={`player-trade-session-${trade.id}`}
+                          type="button"
+                          className={`${styles.tradeRequestCard} ${styles.tradeSessionCard}${isActive ? ` ${styles.tradeSessionCardActive}` : ''}`}
+                          onMouseEnter={smallBtnHover}
+                          onClick={() => openExistingPlayerTrade(trade.id)}
+                        >
+                          <div className={styles.tradeSummaryRow}>
+                            <strong>{otherLabel}</strong>
+                            <span className={styles.tradeStatus}>{trade.status}</span>
+                          </div>
+                          <div className={styles.tradeMeta}>
+                            Updated: {new Date(trade.updatedAt || trade.requestedAt || 0).toLocaleString()}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className={styles.tradeWorkspace}>
+                  {!focusedPlayerTrade ? (
+                    <>
+                      <div>
+                        <div className={styles.inputLabel}>Send Trade To</div>
+                        <select
+                          value={playerTradeTargetUserId}
+                          onChange={(e) => setPlayerTradeTargetUserId(e.target.value)}
+                          className={styles.inputBase}
+                        >
+                          <option value="">Select player...</option>
+                          {otherTradingPlayers.map((player) => (
+                            <option key={`player-trade-target-${player.userId}`} value={player.userId}>
+                              {player.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <div className={styles.inputLabel}>Message (optional)</div>
+                        <textarea
+                          value={playerTradeMessage}
+                          onChange={(e) => setPlayerTradeMessage(e.target.value)}
+                          rows={3}
+                          className={`${styles.inputBase} ${styles.textarea} ${styles.noResize}`}
+                          placeholder="What do you want to trade for?"
+                        />
+                      </div>
+                      <div className={styles.actionsRow}>
+                        <button
+                          className={smallBtnClass('gold')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={createPlayerTradeFromComposer}
+                          disabled={!playerTradeTargetUserId}
+                        >
+                          Create Trade Window
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={styles.tradeSummaryBlock}>
+                        <div className={styles.tradeSummaryRow}>
+                          <strong>Trading With {activePlayerTradeTargetLabel || 'Player'}</strong>
+                          <span className={styles.tradeStatus}>{focusedPlayerTrade.status}</span>
+                        </div>
+                        {!!focusedPlayerTrade.message && (
+                          <div className={styles.tradeMeta}>{focusedPlayerTrade.message}</div>
+                        )}
+                        <div className={styles.tradeMeta}>
+                          You: {focusedTradeViewerAccepted ? 'Accepted' : 'Waiting'} • {activePlayerTradeTargetLabel || 'Other Player'}: {focusedTradeOtherAccepted ? 'Accepted' : 'Waiting'}
+                        </div>
+                      </div>
+
+                      <div className={styles.tradeOfferGrid}>
+                        <div className={styles.tradeOfferCol}>
+                          <div className={styles.inputLabel}>Your Offer</div>
+                          <div className={styles.tradeOfferList}>
+                            {focusedTradeOwnOffer.length === 0 ? (
+                              <div className={styles.modalHint}>No items added yet.</div>
+                            ) : (
+                              focusedTradeOwnOffer.map((line) => (
+                                <div key={`own-offer-${line.itemId}`} className={styles.tradeSummaryRow}>
+                                  <span>{line.name || 'Item'} x{line.qty}</span>
+                                  <button
+                                    className={smallBtnClass('danger')}
+                                    onMouseEnter={smallBtnHover}
+                                    onClick={() => removeLineFromPlayerTrade(focusedPlayerTrade.id, 'own', line.itemId)}
+                                    disabled={focusedPlayerTrade.status !== 'open'}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className={styles.tradeOfferControls}>
+                            <select
+                              value={playerTradeOwnItemId}
+                              onChange={(e) => setPlayerTradeOwnItemId(e.target.value)}
+                              className={styles.inputBase}
+                              disabled={focusedPlayerTrade.status !== 'open'}
+                            >
+                              <option value="">Choose your item...</option>
+                              {playerTradeOwnItemOptions.map((item) => (
+                                <option key={`own-item-option-${item.id}`} value={item.id}>
+                                  {item.name} (x{item.qty ?? 1})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              value={playerTradeOwnQty}
+                              onChange={(e) => setPlayerTradeOwnQty(e.target.value)}
+                              className={styles.inputBase}
+                              disabled={focusedPlayerTrade.status !== 'open'}
+                            />
+                            <button
+                              className={smallBtnClass('ghost')}
+                              onMouseEnter={smallBtnHover}
+                              onClick={() => addLineToPlayerTrade(focusedPlayerTrade.id, 'own')}
+                              disabled={focusedPlayerTrade.status !== 'open' || !playerTradeOwnItemId}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className={styles.tradeOfferCol}>
+                          <div className={styles.inputLabel}>{activePlayerTradeTargetLabel || 'Other Player'} Offer</div>
+                          <div className={styles.tradeOfferList}>
+                            {focusedTradeTargetOffer.length === 0 ? (
+                              <div className={styles.modalHint}>No items requested yet.</div>
+                            ) : (
+                              focusedTradeTargetOffer.map((line) => (
+                                <div key={`target-offer-${line.itemId}`} className={styles.tradeSummaryRow}>
+                                  <span>{line.name || 'Item'} x{line.qty}</span>
+                                  <button
+                                    className={smallBtnClass('danger')}
+                                    onMouseEnter={smallBtnHover}
+                                    onClick={() => removeLineFromPlayerTrade(focusedPlayerTrade.id, 'target', line.itemId)}
+                                    disabled={focusedPlayerTrade.status !== 'open'}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className={styles.tradeOfferControls}>
+                            <select
+                              value={playerTradeTargetItemId}
+                              onChange={(e) => setPlayerTradeTargetItemId(e.target.value)}
+                              className={styles.inputBase}
+                              disabled={focusedPlayerTrade.status !== 'open'}
+                            >
+                              <option value="">Choose their item...</option>
+                              {playerTradeTargetItemOptions.map((item) => (
+                                <option key={`target-item-option-${item.id}`} value={item.id}>
+                                  {item.name} (x{item.qty ?? 1})
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              value={playerTradeTargetQty}
+                              onChange={(e) => setPlayerTradeTargetQty(e.target.value)}
+                              className={styles.inputBase}
+                              disabled={focusedPlayerTrade.status !== 'open'}
+                            />
+                            <button
+                              className={smallBtnClass('ghost')}
+                              onMouseEnter={smallBtnHover}
+                              onClick={() => addLineToPlayerTrade(focusedPlayerTrade.id, 'target')}
+                              disabled={focusedPlayerTrade.status !== 'open' || !playerTradeTargetItemId}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.actionsRow}>
+                        <button
+                          className={smallBtnClass(focusedTradeViewerAccepted ? 'ghost' : 'gold')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={() => togglePlayerTradeAccepted(focusedPlayerTrade.id)}
+                          disabled={focusedPlayerTrade.status !== 'open'}
+                        >
+                          {focusedTradeViewerAccepted ? 'Unaccept Trade' : 'Accept Trade'}
+                        </button>
+                        <button
+                          className={smallBtnClass('danger')}
+                          onMouseEnter={smallBtnHover}
+                          onClick={() => cancelPlayerTrade(focusedPlayerTrade.id)}
+                          disabled={focusedPlayerTrade.status !== 'open'}
+                        >
+                          Cancel Trade
+                        </button>
+                      </div>
+                      <div className={styles.modalHint}>Trade completes automatically once both players accept.</div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </div>
