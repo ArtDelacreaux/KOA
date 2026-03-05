@@ -262,6 +262,7 @@ export default function CampaignHub(props) {
   );
   const managerOnlyQuestMessage = 'Only owner/DM accounts can manage party quests.';
   const personalQuestCreatorMessage = 'Players can add personal quests from the Personal board only.';
+  const personalQuestManageMessage = 'You can only manage personal quests assigned to your account.';
   const [assignablePlayers, setAssignablePlayers] = useState([]);
   const [playersLoading, setPlayersLoading] = useState(false);
   const [playersError, setPlayersError] = useState('');
@@ -488,8 +489,23 @@ export default function CampaignHub(props) {
     : 'Completed party quests appear here.';
 
   const newId = () => createId('quest');
+  const questById = useMemo(() => {
+    const out = {};
+    (quests || []).forEach((quest) => {
+      const id = normalizeText(quest?.id);
+      if (!id) return;
+      out[id] = quest;
+    });
+    return out;
+  }, [quests]);
   const canOpenQuestModal = canManageQuests || canCreateOwnPersonalQuests;
   const canAddQuestFromCurrentView = canManageQuests || (showingPersonalQuestBoard && canCreateOwnPersonalQuests);
+  const canManageQuestEntry = (quest) => {
+    if (!quest) return false;
+    if (canManageQuests) return true;
+    if (!canEditCampaignData) return false;
+    return questBoardType(quest) === 'personal' && canViewPersonalQuest(quest);
+  };
   const selfQuestAssignment = useMemo(() => {
     const label = currentUsernameRaw || 'You';
     return {
@@ -517,6 +533,16 @@ export default function CampaignHub(props) {
     return false;
   };
 
+  const ensureQuestActionPermission = (quest) => {
+    if (canManageQuestEntry(quest)) return true;
+    if (!canEditCampaignData) {
+      alert(readOnlyStatusMessage);
+      return false;
+    }
+    alert(personalQuestManageMessage);
+    return false;
+  };
+
   const openAddQuest = () => {
     if (!ensurePersonalQuestCreatePermission()) return;
     const canSelfCreate = !canManageQuests && canCreateOwnPersonalQuests;
@@ -537,7 +563,7 @@ export default function CampaignHub(props) {
   };
 
   const openEditQuest = (q) => {
-    if (!ensureQuestManagePermission()) return;
+    if (!ensureQuestActionPermission(q)) return;
     setEditingQuestId(q.id);
     setQuestDraft({
       title: q.title || '',
@@ -559,8 +585,15 @@ export default function CampaignHub(props) {
       alert(canEditCampaignData ? managerOnlyQuestMessage : readOnlyStatusMessage);
       return;
     }
-    if (!canManageQuests && editingQuestId) {
-      alert(managerOnlyQuestMessage);
+    const normalizedEditingQuestId = normalizeText(editingQuestId);
+    const editingQuest = normalizedEditingQuestId ? questById[normalizedEditingQuestId] : null;
+    if (normalizedEditingQuestId && !editingQuest) {
+      alert('This quest no longer exists.');
+      setQuestModalOpen(false);
+      setEditingQuestId(null);
+      return;
+    }
+    if (normalizedEditingQuestId && !ensureQuestActionPermission(editingQuest)) {
       return;
     }
 
@@ -616,7 +649,7 @@ export default function CampaignHub(props) {
       updatedAt: now,
     };
 
-    if (!editingQuestId) {
+    if (!normalizedEditingQuestId) {
       const q = {
         id: newId(),
         ...questPayload,
@@ -628,7 +661,7 @@ export default function CampaignHub(props) {
       setQuests((prev) => (
         prev || []
       ).map((q) => (
-        q.id === editingQuestId
+        normalizeText(q.id) === normalizedEditingQuestId
           ? { ...q, ...questPayload }
           : q
       )));
@@ -639,26 +672,38 @@ export default function CampaignHub(props) {
   };
 
   const deleteQuest = (id) => {
-    if (!ensureQuestManagePermission()) return;
+    const questId = normalizeText(id);
+    if (!questId) return;
+    const quest = questById[questId];
+    if (!quest) return;
+    if (!ensureQuestActionPermission(quest)) return;
     if (!confirm('Delete this quest?')) return;
-    setQuests((prev) => (prev || []).filter((q) => q.id !== id));
+    setQuests((prev) => (prev || []).filter((q) => normalizeText(q.id) !== questId));
   };
 
   const completeQuest = (id) => {
-    if (!ensureQuestManagePermission()) return;
+    const questId = normalizeText(id);
+    if (!questId) return;
+    const quest = questById[questId];
+    if (!quest) return;
+    if (!ensureQuestActionPermission(quest)) return;
     setQuests((prev) => (
       prev || []
     ).map((q) => (
-      q.id === id ? { ...q, status: 'completed', updatedAt: new Date().toISOString() } : q
+      normalizeText(q.id) === questId ? { ...q, status: 'completed', updatedAt: new Date().toISOString() } : q
     )));
   };
 
   const reopenQuest = (id) => {
-    if (!ensureQuestManagePermission()) return;
+    const questId = normalizeText(id);
+    if (!questId) return;
+    const quest = questById[questId];
+    if (!quest) return;
+    if (!ensureQuestActionPermission(quest)) return;
     setQuests((prev) => (
       prev || []
     ).map((q) => (
-      q.id === id ? { ...q, status: 'active', updatedAt: new Date().toISOString() } : q
+      normalizeText(q.id) === questId ? { ...q, status: 'active', updatedAt: new Date().toISOString() } : q
     )));
   };
 
@@ -3098,7 +3143,7 @@ export default function CampaignHub(props) {
                                 )}
                                 {q.description && <div className={styles.questDesc}>{q.description}</div>}
                               </div>
-                              {canManageQuests && (
+                              {canManageQuestEntry(q) && (
                                 <div className={styles.actionsRow}>
                                   <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => openEditQuest(q)}>Edit</button>
                                   <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => completeQuest(q.id)}>Complete</button>
@@ -3145,7 +3190,7 @@ export default function CampaignHub(props) {
                                 )}
                                 {q.description && <div className={`${styles.questDesc} ${styles.questMetaMuted}`}>{q.description}</div>}
                               </div>
-                              {canManageQuests && (
+                              {canManageQuestEntry(q) && (
                                 <div className={styles.actionsRow}>
                                   <button className={smallBtnClass('gold')} onMouseEnter={smallBtnHover} onClick={() => reopenQuest(q.id)}>Reopen</button>
                                   <button className={smallBtnClass('danger')} onMouseEnter={smallBtnHover} onClick={() => deleteQuest(q.id)}>Delete</button>
