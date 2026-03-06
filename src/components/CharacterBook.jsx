@@ -2257,18 +2257,30 @@ export default function CharacterBook({
               <div className={styles.npcDetailStack}>
                 <div className={styles.lightCard}>
                   <div className={styles.npcDetailGrid}>
-                    {activeSelectedNpc.image ? (
-                      <img
-                        src={activeSelectedNpc.image}
-                        alt={activeSelectedNpc.name || 'NPC'}
-                        className={styles.npcDetailThumb130}
-                      />
-                    ) : (
-                      <div
-                        aria-hidden
-                        className={styles.npcDetailThumb130Empty}
-                      />
-                    )}
+                    <button
+                      type="button"
+                      className={styles.npcDetailThumbButton}
+                      onMouseEnter={(e) => { if (selectedCharCanEdit) tinyBtnHover(e); }}
+                      onMouseLeave={(e) => { if (selectedCharCanEdit) tinyBtnLeave(e); }}
+                      onMouseDown={(e) => { if (selectedCharCanEdit) navClick(e); }}
+                      onClick={() => openNpcEditorFromRelation(activeSelectedNpc)}
+                      disabled={!selectedCharCanEdit}
+                      title={selectedCharCanEdit ? 'Edit NPC' : 'Only the assigned controller can edit this NPC'}
+                      aria-label={`Edit ${activeSelectedNpc.name || 'NPC'}`}
+                    >
+                      {activeSelectedNpc.image ? (
+                        <img
+                          src={activeSelectedNpc.image}
+                          alt={activeSelectedNpc.name || 'NPC'}
+                          className={styles.npcDetailThumb130}
+                        />
+                      ) : (
+                        <div
+                          aria-hidden
+                          className={styles.npcDetailThumb130Empty}
+                        />
+                      )}
+                    </button>
                     <div>
                       <div className={styles.npcDetailTopRow}>
                         <div className={styles.npcDetailName}>{activeSelectedNpc.name}</div>
@@ -2302,10 +2314,9 @@ export default function CharacterBook({
                       onMouseEnter={btnHover}
                       onMouseLeave={btnLeave}
                       onMouseDown={(e) => { btnDown(e); navClick(); }}
-                      onClick={() => openNpcEditorFromRelation(activeSelectedNpc)}
-                      disabled={!selectedCharCanEdit}
+                      onClick={() => setCharView('relations')}
                     >
-                      View / Edit NPC
+                      Back
                     </button>
                   </div>
                 </div>
