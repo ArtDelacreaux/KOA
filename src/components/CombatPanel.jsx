@@ -6,6 +6,7 @@ import styles from './CombatPanel.module.css';
 import { createId } from '../domain/ids';
 import { repository } from '../repository';
 import { STORAGE_KEYS } from '../lib/storageKeys';
+import { getCampaignId, getSupabaseClient } from '../lib/supabaseClient';
 import { parseCharacterSheetFile } from '../lib/sheetParser';
 import { getCharacterAccessEntry } from '../lib/characterAccess';
 import useLocalStorageState from '../lib/useLocalStorageState';
@@ -224,6 +225,24 @@ const PC_COLORS = ['#a0c4ff','#c0a8ff','#ffd6a0','#a0ffcc','#ffb3b3','#ffe4a0','
 const SPELL_SLOT_LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 const SPELLBOOK_LEVELS = [0, ...SPELL_SLOT_LEVELS];
 const ENCOUNTER_PERSIST_DEBOUNCE_MS = 120;
+const COMBAT_MEDIA_BUCKET = 'koa-combat-media';
+const BOARD_UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
+const BOARD_ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible'];
+const DEFAULT_BOARD_WIDTH = 2048;
+const DEFAULT_BOARD_HEIGHT = 1365;
+const DEFAULT_BATTLEFIELD = Object.freeze({
+  backgroundSrc: BATTLE_BACKGROUNDS[0]?.src || '',
+  mediaStoragePath: '',
+  mediaMimeType: '',
+  mediaWidth: 0,
+  mediaHeight: 0,
+  mediaUpdatedAt: 0,
+  gridEnabled: true,
+  gridCellSize: 72,
+  gridOffsetX: 0,
+  gridOffsetY: 0,
+});
 const PROFILE_SYNC_FIELDS = new Set([
   'race',
   'className',
@@ -348,6 +367,99 @@ const SKILL_TO_ABILITY = {
 
 function tokenKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeGridCoordinate(value, fallback = null) {
+  if (value == null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.round(parsed));
+}
+
+function defaultGridPlacementFor(side, slotIndex) {
+  const normalizedSide = side === 'Enemy' ? 'Enemy' : side === 'Ally' ? 'Ally' : 'PC';
+  const zeroBased = Math.max(0, toInt(slotIndex, 0));
+  const col = 2 + (zeroBased % 10);
+  const rowBase = normalizedSide === 'Enemy' ? 2 : normalizedSide === 'Ally' ? 8 : 10;
+  const row = rowBase + Math.floor(zeroBased / 10);
+  return { gridCol: col, gridRow: row };
+}
+
+function nextGridPlacementForCombatantList(combatants, side) {
+  const normalizedSide = side === 'Enemy' ? 'Enemy' : side === 'Ally' ? 'Ally' : 'PC';
+  const list = Array.isArray(combatants) ? combatants : [];
+  const taken = new Set(
+    list
+      .map((entry) => {
+        const col = normalizeGridCoordinate(entry?.gridCol, null);
+        const row = normalizeGridCoordinate(entry?.gridRow, null);
+        return col == null || row == null ? '' : `${col}:${row}`;
+      })
+      .filter(Boolean)
+  );
+  let slot = list.filter((entry) => {
+    const entrySide = entry?.side === 'Enemy' ? 'Enemy' : entry?.side === 'Ally' ? 'Ally' : 'PC';
+    return entrySide === normalizedSide;
+  }).length;
+  while (slot < 500) {
+    const candidate = defaultGridPlacementFor(normalizedSide, slot);
+    const key = `${candidate.gridCol}:${candidate.gridRow}`;
+    if (!taken.has(key)) return candidate;
+    slot += 1;
+  }
+  return defaultGridPlacementFor(normalizedSide, 0);
+}
+
+function normalizeBattlefield(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    backgroundSrc: cleanText(source.backgroundSrc) || DEFAULT_BATTLEFIELD.backgroundSrc,
+    mediaStoragePath: cleanText(source.mediaStoragePath),
+    mediaMimeType: cleanText(source.mediaMimeType),
+    mediaWidth: Math.max(0, toInt(source.mediaWidth, 0)),
+    mediaHeight: Math.max(0, toInt(source.mediaHeight, 0)),
+    mediaUpdatedAt: Math.max(0, toInt(source.mediaUpdatedAt, 0)),
+    gridEnabled: source.gridEnabled == null ? DEFAULT_BATTLEFIELD.gridEnabled : !!source.gridEnabled,
+    gridCellSize: clamp(toInt(source.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192),
+    gridOffsetX: clamp(toInt(source.gridOffsetX, DEFAULT_BATTLEFIELD.gridOffsetX), -2048, 2048),
+    gridOffsetY: clamp(toInt(source.gridOffsetY, DEFAULT_BATTLEFIELD.gridOffsetY), -2048, 2048),
+  };
+}
+
+function sanitizeUploadFileName(name) {
+  const cleaned = String(name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+  return cleaned || 'battle-map';
+}
+
+function buildCombatMediaPath(campaignId, encounterId, fileName) {
+  const campaignKey = cleanText(campaignId) || 'main-party';
+  const encounterKey = cleanText(encounterId) || 'encounter';
+  const safeName = sanitizeUploadFileName(fileName);
+  return `${campaignKey}/combat/maps/${encounterKey}/${Date.now()}-${safeName}`;
+}
+
+function readImageDimensionsFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        width: Math.max(0, toInt(img.naturalWidth, 0)),
+        height: Math.max(0, toInt(img.naturalHeight, 0)),
+      });
+      URL.revokeObjectURL(objectUrl);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Unable to read map image dimensions.'));
+    };
+    img.src = objectUrl;
+  });
 }
 
 function tokenImageForCharacter(id, name) {
@@ -1386,6 +1498,8 @@ function applySheetProfileToCombatant(combatant, profile) {
     enemyType: combatant.enemyType || 'goblin',
     customImage: combatant.customImage || '',
     pcColorIndex: combatant.pcColorIndex != null ? combatant.pcColorIndex : 0,
+    gridCol: normalizeGridCoordinate(combatant.gridCol, 0),
+    gridRow: normalizeGridCoordinate(combatant.gridRow, 0),
   };
 }
 
@@ -1401,6 +1515,7 @@ function defaultEncounter() {
     round: 1,
     activeIndex: 0,
     combatants: [],
+    battlefield: normalizeBattlefield(null),
     castorWilliamResourceSync: false,
     sheetProfiles: {},
     updatedAt: Date.now(),
@@ -1411,6 +1526,7 @@ function normalize(enc) {
   const base = defaultEncounter();
   const e = { ...base, ...(enc || {}) };
   if (!Array.isArray(e.combatants)) e.combatants = [];
+  e.battlefield = normalizeBattlefield(e.battlefield);
   const rawProfiles = e.sheetProfiles && typeof e.sheetProfiles === 'object' ? e.sheetProfiles : {};
   e.sheetProfiles = Object.entries(rawProfiles).reduce((acc, [key, value]) => {
     const normalizedKey = cleanText(key);
@@ -1418,6 +1534,7 @@ function normalize(enc) {
     acc[normalizedKey] = normalizeSheetProfile(value);
     return acc;
   }, {});
+  const sideCounts = { Enemy: 0, Ally: 0, PC: 0 };
   e.combatants = e.combatants.map((c, i) => {
     const spellbookEntries = normalizeSpellbookEntries(c.spellbookEntries, c.spellList);
     const spellList = normalizeStringList(spellbookEntries.map((entry) => entry.name));
@@ -1427,6 +1544,10 @@ function normalize(enc) {
     const weaponActions = normalizeWeaponActions(c.weaponActions, rawEquipmentItems);
     const equipmentItems = hasExplicitWeaponActions ? rawEquipmentItems : separatedEquipmentLayout.gear;
     const equipableItems = buildEquipableItems(weaponActions, equipmentItems);
+    const normalizedSide = c.side === 'Enemy' ? 'Enemy' : c.side === 'Ally' ? 'Ally' : 'PC';
+    const slotIndex = sideCounts[normalizedSide];
+    sideCounts[normalizedSide] += 1;
+    const fallbackGrid = defaultGridPlacementFor(normalizedSide, slotIndex);
     return {
       sourceCharacterId: c.sourceCharacterId || '',
       createdByUserId: cleanText(c.createdByUserId),
@@ -1479,6 +1600,8 @@ function normalize(enc) {
       enemyType: c.enemyType || 'goblin',
       customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
       pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
+      gridCol: normalizeGridCoordinate(c.gridCol, fallbackGrid.gridCol),
+      gridRow: normalizeGridCoordinate(c.gridRow, fallbackGrid.gridRow),
     };
   });
   e.round = toInt(e.round, 1);
@@ -1551,7 +1674,19 @@ function CropImage({ src, imgRef, cropBox, zoom, offset, onLoad }) {
 }
 
 // ── Battlefield Token ──────────────────────────────────────────────────────
-function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90, flipped = false }) {
+function BattlefieldToken({
+  c,
+  isActive,
+  isSelected,
+  onClick,
+  onHover,
+  onContextMenu,
+  onPointerDown,
+  onDoubleClick,
+  size = 90,
+  flipped = false,
+  title,
+}) {
   const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
   const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
   const pct = max > 0 ? (hp / max) * 100 : 100;
@@ -1581,7 +1716,10 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
     <div
       onClick={onClick}
       onMouseEnter={onHover}
-      title={`${c.name} — Click to edit`}
+      onContextMenu={onContextMenu}
+      onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
+      title={title || `${c.name} — Click to edit`}
       className={rootClass}
     >
       {/* Active turn glow ring */}
@@ -1661,128 +1799,461 @@ function BattlefieldToken({ c, isActive, isSelected, onClick, onHover, size = 90
 }
 
 // ── Battlefield Scene ──────────────────────────────────────────────────────
-function BattlefieldScene({ combatants, activeCombatantId, selectedId, openEditorFor, playHover, playNav, battleBg }) {
-  const pcs    = combatants.filter(c => c.side === 'PC' || c.side === 'Ally');
-  const enemies = combatants.filter(c => c.side === 'Enemy');
-  const bgStyle = {
-    background: battleBg
-      ? `url(${battleBg}) center/cover no-repeat`
-      : 'linear-gradient(180deg, rgba(8,6,4,0.30) 0%, rgba(0,0,0,0) 40%)',
+function BattlefieldScene({
+  combatants,
+  activeCombatantId,
+  selectedId,
+  setSelectedId,
+  openEditorFor,
+  playHover,
+  playNav,
+  battleBg,
+  battlefield,
+  battlefieldMediaUrl,
+  canMoveCombatant,
+  canQuickEditCombatant,
+  moveCombatantToCell,
+  adjustCombatantHp,
+  toggleCombatantDead,
+  toggleCombatantStatus,
+  clearCombatantStatuses,
+  removeCombatant,
+}) {
+  const stageRef = useRef(null);
+  const [viewState, setViewState] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const [panState, setPanState] = useState(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [dragState, setDragState] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const boardWidth = Math.max(DEFAULT_BOARD_WIDTH, toInt(battlefield.mediaWidth, 0) || DEFAULT_BOARD_WIDTH);
+  const boardHeight = Math.max(DEFAULT_BOARD_HEIGHT, toInt(battlefield.mediaHeight, 0) || DEFAULT_BOARD_HEIGHT);
+  const cellSize = clamp(toInt(battlefield.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192);
+  const gridOffsetX = toInt(battlefield.gridOffsetX, 0);
+  const gridOffsetY = toInt(battlefield.gridOffsetY, 0);
+  const backgroundUrl = battlefieldMediaUrl || battleBg || '';
+  const tokenSize = clamp(Math.round(cellSize * 0.8), 48, 96);
+  const maxGridCol = Math.max(0, Math.floor((boardWidth - gridOffsetX - 1) / cellSize));
+  const maxGridRow = Math.max(0, Math.floor((boardHeight - gridOffsetY - 1) / cellSize));
+
+  const fitBoardToStage = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const zoom = clamp(Math.min((rect.width - 32) / boardWidth, (rect.height - 32) / boardHeight), 0.2, 1.4);
+    setViewState({
+      zoom,
+      panX: Math.round((rect.width - boardWidth * zoom) / 2),
+      panY: Math.round((rect.height - boardHeight * zoom) / 2),
+    });
+  }, [boardHeight, boardWidth]);
+
+  useLayoutEffect(() => {
+    fitBoardToStage();
+    window.addEventListener('resize', fitBoardToStage);
+    return () => window.removeEventListener('resize', fitBoardToStage);
+  }, [fitBoardToStage]);
+
+  const clientToBoardPoint = useCallback((clientX, clientY) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: (clientX - rect.left - viewState.panX) / viewState.zoom,
+      y: (clientY - rect.top - viewState.panY) / viewState.zoom,
+    };
+  }, [viewState.panX, viewState.panY, viewState.zoom]);
+
+  const boardPointToCell = useCallback((point) => {
+    const col = clamp(Math.floor((point.x - gridOffsetX) / cellSize), 0, maxGridCol);
+    const row = clamp(Math.floor((point.y - gridOffsetY) / cellSize), 0, maxGridRow);
+    return { col, row };
+  }, [cellSize, gridOffsetX, gridOffsetY, maxGridCol, maxGridRow]);
+
+  const cellCenter = useCallback((col, row) => ({
+    x: gridOffsetX + (clamp(toInt(col, 0), 0, maxGridCol) * cellSize) + cellSize / 2,
+    y: gridOffsetY + (clamp(toInt(row, 0), 0, maxGridRow) * cellSize) + cellSize / 2,
+  }), [cellSize, gridOffsetX, gridOffsetY, maxGridCol, maxGridRow]);
+
+  useEffect(() => {
+    if (!panState?.active) return undefined;
+    const onPointerMove = (event) => {
+      setIsPanning(true);
+      setViewState((prev) => ({
+        ...prev,
+        panX: panState.originX + (event.clientX - panState.startX),
+        panY: panState.originY + (event.clientY - panState.startY),
+      }));
+    };
+    const onPointerUp = () => {
+      setPanState(null);
+      setTimeout(() => setIsPanning(false), 0);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [panState]);
+
+  useEffect(() => {
+    if (!dragState?.active) return undefined;
+    const onPointerMove = (event) => {
+      const dx = (event.clientX - dragState.startClientX) / viewState.zoom;
+      const dy = (event.clientY - dragState.startClientY) / viewState.zoom;
+      const moved = dragState.moved || Math.abs(dx) > 3 || Math.abs(dy) > 3;
+      setDragState((prev) => prev ? {
+        ...prev,
+        moved,
+        previewX: prev.originX + dx,
+        previewY: prev.originY + dy,
+      } : prev);
+    };
+    const onPointerUp = () => {
+      setDragState((prev) => {
+        if (!prev) return prev;
+        if (prev.moved) {
+          const cell = boardPointToCell({ x: prev.previewX, y: prev.previewY });
+          moveCombatantToCell(prev.combatantId, cell.col, cell.row);
+        } else {
+          setSelectedId(prev.combatantId);
+        }
+        return null;
+      });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [boardPointToCell, moveCombatantToCell, setSelectedId, viewState.zoom, dragState]);
+
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const dismiss = () => setContextMenu(null);
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') dismiss();
+    };
+    window.addEventListener('pointerdown', dismiss);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', dismiss);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleStageWheel = useCallback((event) => {
+    event.preventDefault();
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const nextZoom = clamp(viewState.zoom + (event.deltaY < 0 ? 0.1 : -0.1), 0.2, 2.25);
+    const boardX = (pointerX - viewState.panX) / viewState.zoom;
+    const boardY = (pointerY - viewState.panY) / viewState.zoom;
+    setViewState({
+      zoom: nextZoom,
+      panX: pointerX - boardX * nextZoom,
+      panY: pointerY - boardY * nextZoom,
+    });
+  }, [viewState.panX, viewState.panY, viewState.zoom]);
+
+  const handleStagePointerDown = useCallback((event) => {
+    if (event.button !== 0) return;
+    setContextMenu(null);
+    setPanState({
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: viewState.panX,
+      originY: viewState.panY,
+    });
+  }, [viewState.panX, viewState.panY]);
+
+  const handleStageContextMenu = useCallback((event) => {
+    event.preventDefault();
+    const point = clientToBoardPoint(event.clientX, event.clientY);
+    const cell = boardPointToCell(point);
+    setContextMenu({
+      type: 'board',
+      clientX: event.clientX,
+      clientY: event.clientY,
+      cell,
+    });
+  }, [boardPointToCell, clientToBoardPoint]);
+
+  const renderTokenAt = (combatant) => {
+    const dragging = dragState?.combatantId === combatant.id;
+    const center = dragging
+      ? { x: dragState.previewX, y: dragState.previewY }
+      : cellCenter(combatant.gridCol, combatant.gridRow);
+    return (
+      <div
+        key={combatant.id}
+        className={`${styles.boardTokenAnchor} ${dragging ? styles.boardTokenDragging : ''}`}
+        style={{
+          left: `${center.x}px`,
+          top: `${center.y}px`,
+          zIndex: dragging ? 30 : (combatant.id === selectedId ? 20 : combatant.id === activeCombatantId ? 16 : 12),
+        }}
+      >
+        <BattlefieldToken
+          c={combatant}
+          isActive={combatant.id === activeCombatantId}
+          isSelected={combatant.id === selectedId}
+          size={tokenSize}
+          flipped={(combatant.side || 'Enemy') !== 'Enemy'}
+          onHover={playHover}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.stopPropagation();
+            const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
+            setContextMenu(null);
+            setSelectedId(combatant.id);
+            if (!canMoveCombatant(combatant)) return;
+            setDragState({
+              active: true,
+              combatantId: combatant.id,
+              startClientX: event.clientX,
+              startClientY: event.clientY,
+              originX: centerPoint.x,
+              originY: centerPoint.y,
+              previewX: centerPoint.x,
+              previewY: centerPoint.y,
+              moved: false,
+            });
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setSelectedId(combatant.id);
+            setContextMenu({
+              type: 'token',
+              clientX: event.clientX,
+              clientY: event.clientY,
+              combatantId: combatant.id,
+            });
+          }}
+          onDoubleClick={() => {
+            playNav();
+            openEditorFor(combatant.id);
+          }}
+        />
+      </div>
+    );
   };
-  const enemyGap = Math.max(6, 48 - enemies.length * 4);
-  const pcGap = Math.max(8, 52 - pcs.length * 5);
+
+  const menuCombatant = contextMenu?.type === 'token'
+    ? combatants.find((combatant) => combatant.id === contextMenu.combatantId) || null
+    : null;
+  const stageRect = stageRef.current?.getBoundingClientRect();
+  const menuLeft = contextMenu && stageRect
+    ? clamp(contextMenu.clientX - stageRect.left, 12, Math.max(12, stageRect.width - 220))
+    : 12;
+  const menuTop = contextMenu && stageRect
+    ? clamp(contextMenu.clientY - stageRect.top, 12, Math.max(12, stageRect.height - 320))
+    : 12;
+  const selectedCombatant = selectedId
+    ? combatants.find((combatant) => combatant.id === selectedId) || null
+    : null;
 
   return (
-    <div className={styles.sceneRoot} style={bgStyle}>
-
-      {/* Dark overlay to keep tokens readable over bright backgrounds */}
-      {battleBg && (
-        <div className={styles.sceneOverlay} />
-      )}
-
-      {/* Ground plane perspective lines */}
-      <svg className={styles.sceneSvg} viewBox="0 0 800 500" preserveAspectRatio="xMidYMid slice">
-        {/* Horizon fog */}
-        <defs>
-          <linearGradient id="groundGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="rgba(20,30,10,0.0)"/>
-            <stop offset="55%"  stopColor="rgba(15,25,8,0.28)"/>
-            <stop offset="100%" stopColor="rgba(8,12,4,0.72)"/>
-          </linearGradient>
-          <linearGradient id="fogGrad" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%"  stopColor="rgba(60,80,30,0.0)"/>
-            <stop offset="100%" stopColor="rgba(60,80,40,0.22)"/>
-          </linearGradient>
-          <radialGradient id="glowR" cx="50%" cy="50%">
-            <stop offset="0%"  stopColor="rgba(220,60,40,0.22)"/>
-            <stop offset="100%" stopColor="rgba(0,0,0,0)"/>
-          </radialGradient>
-          <radialGradient id="glowB" cx="50%" cy="50%">
-            <stop offset="0%"  stopColor="rgba(60,100,220,0.14)"/>
-            <stop offset="100%" stopColor="rgba(0,0,0,0)"/>
-          </radialGradient>
-        </defs>
-
-        {/* Ground fill */}
-        <rect x="0" y="240" width="800" height="260" fill="url(#groundGrad)"/>
-        {/* Perspective grid lines converging to vanishing point */}
-        {[-4,-2,0,2,4].map(i => (
-          <line key={i} x1={400 + i * 600} y1={500} x2={400} y2={240}
-            stroke="rgba(120,160,60,0.08)" strokeWidth="1"/>
-        ))}
-        {/* Horizontal lines */}
-        {[0,1,2,3,4].map(i => {
-          const y = 260 + i * 50; const spread = 30 + i * 60;
-          return <line key={i} x1={400 - spread * 4} y1={y} x2={400 + spread * 4} y2={y}
-            stroke="rgba(120,160,60,0.06)" strokeWidth="1"/>;
-        })}
-
-        {/* Enemy side ambient red glow */}
-        {enemies.length > 0 && <ellipse cx="400" cy="280" rx="280" ry="80" fill="url(#glowR)" opacity="0.7"/>}
-        {/* PC side ambient blue glow */}
-        {pcs.length > 0 && <ellipse cx="400" cy="440" rx="260" ry="60" fill="url(#glowB)" opacity="0.7"/>}
-
-        {/* Bottom fog */}
-        <rect x="0" y="360" width="800" height="140" fill="url(#fogGrad)" opacity="0.5"/>
-
-        {/* Dividing battle line */}
-        <line x1="100" y1="348" x2="700" y2="348" stroke="rgba(200,160,60,0.12)" strokeWidth="1" strokeDasharray="6 8"/>
-      </svg>
-
-      {/* Empty state */}
-      {combatants.length === 0 && (
-        <div className={styles.sceneEmpty}>
-          <div className={styles.sceneEmptyIcon}>⚔️</div>
-          <div className={styles.sceneEmptyText}>Add combatants to see the battlefield</div>
+    <div className={styles.sceneRoot}>
+      <div
+        ref={stageRef}
+        className={styles.boardStage}
+        onWheel={handleStageWheel}
+        onPointerDown={handleStagePointerDown}
+        onContextMenu={handleStageContextMenu}
+        style={{ cursor: dragState ? 'grabbing' : isPanning ? 'grabbing' : 'grab' }}
+      >
+        <div
+          className={styles.boardLayer}
+          style={{
+            width: boardWidth,
+            height: boardHeight,
+            transform: `translate(${viewState.panX}px, ${viewState.panY}px) scale(${viewState.zoom})`,
+          }}
+        >
+          <div
+            className={styles.boardBackdrop}
+            style={{
+              width: boardWidth,
+              height: boardHeight,
+              background: backgroundUrl
+                ? `url(${backgroundUrl}) center/cover no-repeat`
+                : 'radial-gradient(circle at 20% 18%, rgba(255, 225, 150, 0.22), rgba(18, 12, 8, 0.92) 58%), linear-gradient(180deg, rgba(56, 32, 18, 0.94), rgba(10, 7, 5, 0.98))',
+            }}
+          />
+          <div className={styles.boardShade} />
+          {battlefield.gridEnabled && (
+            <div
+              className={styles.boardGrid}
+              style={{
+                width: boardWidth,
+                height: boardHeight,
+                backgroundSize: `${cellSize}px ${cellSize}px`,
+                backgroundPosition: `${gridOffsetX}px ${gridOffsetY}px`,
+              }}
+            />
+          )}
+          <div className={styles.boardTokenLayer}>
+            {combatants.map((combatant) => renderTokenAt(combatant))}
+          </div>
         </div>
-      )}
 
-      {/* ENEMIES — upper half, facing toward us, spread horizontally */}
-      {enemies.length > 0 && (
-        <div className={styles.sceneEnemiesRow} style={{ gap: enemyGap }}>
-          {enemies.map((c, i) => {
-            const scale = 0.68 + (enemies.length <= 2 ? 0.18 : enemies.length <= 4 ? 0.08 : 0);
-            const tokenSize = Math.round(108 * scale);
-            return (
-              <BattlefieldToken
-                key={c.id} c={c}
-                isActive={c.id === activeCombatantId}
-                isSelected={c.id === selectedId}
-                size={tokenSize}
-                flipped={false}
-                onClick={() => { playNav(); openEditorFor(c.id); }}
-                onHover={playHover}
-              />
-            );
-          })}
+        {combatants.length === 0 && (
+          <div className={styles.sceneEmpty}>
+            <div className={styles.sceneEmptyIcon}>Grid</div>
+            <div className={styles.sceneEmptyText}>Add combatants to place tokens on the battle map.</div>
+          </div>
+        )}
+
+        <div className={styles.boardHud}>
+          <div className={styles.boardHudTitle}>Tactical Board</div>
+          <div className={styles.boardHudMeta}>
+            {battlefieldMediaUrl ? 'Uploaded map' : 'Preset backdrop'} • {cellSize}px grid • Drag to move, wheel to zoom
+          </div>
+          <div className={styles.boardHudMeta}>Double-click a token to open details. Right-click for quick actions.</div>
         </div>
-      )}
 
-      {/* VS divider label */}
-      {pcs.length > 0 && enemies.length > 0 && (
-        <div className={styles.sceneVs}>VS</div>
-      )}
+        <button
+          type="button"
+          className={styles.boardResetView}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            fitBoardToStage();
+          }}
+        >
+          Reset View
+        </button>
 
-      {/* PCs — lower half, facing away (backs shown), larger (closer) */}
-      {pcs.length > 0 && (
-        <div className={styles.scenePcsRow} style={{ gap: pcGap }}>
-          {pcs.map((c, i) => {
-            const scale = 0.80 + (pcs.length <= 2 ? 0.22 : pcs.length <= 4 ? 0.10 : 0);
-            const tokenSize = Math.round(132 * scale);
-            return (
-              <BattlefieldToken
-                key={c.id} c={c}
-                isActive={c.id === activeCombatantId}
-                isSelected={c.id === selectedId}
-                size={tokenSize}
-                flipped={true}
-                onClick={() => { playNav(); openEditorFor(c.id); }}
-                onHover={playHover}
-              />
-            );
-          })}
-        </div>
-      )}
+        {contextMenu && (
+          <div
+            className={styles.boardContextMenu}
+            style={{ left: menuLeft, top: menuTop }}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            {contextMenu.type === 'board' ? (
+              <>
+                <div className={styles.boardContextTitle}>Cell {contextMenu.cell.col}, {contextMenu.cell.row}</div>
+                {selectedCombatant && canMoveCombatant(selectedCombatant) ? (
+                  <button
+                    type="button"
+                    className={styles.boardContextAction}
+                    onClick={() => {
+                      playNav();
+                      moveCombatantToCell(selectedCombatant.id, contextMenu.cell.col, contextMenu.cell.row);
+                      setContextMenu(null);
+                    }}
+                  >
+                    Move selected here
+                  </button>
+                ) : (
+                  <div className={styles.boardContextHint}>Select a token to move it here.</div>
+                )}
+              </>
+            ) : menuCombatant ? (
+              <>
+                <div className={styles.boardContextTitle}>{menuCombatant.name}</div>
+                <button
+                  type="button"
+                  className={styles.boardContextAction}
+                  onClick={() => {
+                    playNav();
+                    openEditorFor(menuCombatant.id);
+                    setContextMenu(null);
+                  }}
+                >
+                  Open details
+                </button>
+                <div className={styles.boardContextRow}>
+                  {[-5, -1, 1, 5].map((amount) => (
+                    <button
+                      key={`${menuCombatant.id}-${amount}`}
+                      type="button"
+                      className={styles.boardContextChip}
+                      disabled={!canQuickEditCombatant(menuCombatant)}
+                      onClick={() => {
+                        playNav();
+                        adjustCombatantHp(menuCombatant.id, amount);
+                        setContextMenu(null);
+                      }}
+                    >
+                      HP {amount > 0 ? `+${amount}` : amount}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={styles.boardContextAction}
+                  disabled={!canQuickEditCombatant(menuCombatant)}
+                  onClick={() => {
+                    playNav();
+                    toggleCombatantDead(menuCombatant.id);
+                    setContextMenu(null);
+                  }}
+                >
+                  {menuCombatant.dead ? 'Mark alive' : 'Mark dead'}
+                </button>
+                <div className={styles.boardContextDivider} />
+                <div className={styles.boardContextSubtitle}>Conditions</div>
+                <div className={styles.boardContextRow}>
+                  {BOARD_STATUS_PRESETS.map((statusLabel) => {
+                    const active = Array.isArray(menuCombatant.status)
+                      && menuCombatant.status.some((entry) => tokenKey(entry) === tokenKey(statusLabel));
+                    return (
+                      <button
+                        key={`${menuCombatant.id}-${statusLabel}`}
+                        type="button"
+                        className={`${styles.boardContextChip} ${active ? styles.boardContextChipActive : ''}`}
+                        disabled={!canQuickEditCombatant(menuCombatant)}
+                        onClick={() => {
+                          playNav();
+                          toggleCombatantStatus(menuCombatant.id, statusLabel);
+                          setContextMenu(null);
+                        }}
+                      >
+                        {statusLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className={styles.boardContextAction}
+                  disabled={!canQuickEditCombatant(menuCombatant)}
+                  onClick={() => {
+                    playNav();
+                    clearCombatantStatuses(menuCombatant.id);
+                    setContextMenu(null);
+                  }}
+                >
+                  Clear conditions
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.boardContextAction} ${styles.boardContextDanger}`}
+                  disabled={!canQuickEditCombatant(menuCombatant)}
+                  onClick={() => {
+                    playNav();
+                    removeCombatant(menuCombatant.id);
+                    setContextMenu(null);
+                  }}
+                >
+                  Remove combatant
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1999,15 +2470,14 @@ export default function CombatPanel({
   });
   const [initSlideDirection, setInitSlideDirection] = useState('next');
   const [initSlideTick, setInitSlideTick] = useState(0);
+  const [battlefieldUploadBusy, setBattlefieldUploadBusy] = useState(false);
+  const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
 
   useEffect(() => {
     setBagInventoryState((prev) => normalizeBagInventoryState(prev));
     // Normalize persisted shape once for cross-panel inventory sync.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // ── Battle Background state ─────────────────────────────────────────────
-  const [battleBg, setBattleBg] = useState(null);
 
   // ── Image Crop state ────────────────────────────────────────────────────
   const CROP_BOX = 260;
@@ -2017,6 +2487,7 @@ export default function CombatPanel({
   const [cropOffset, setCropOffset] = useState({ x: 0, y: 0 });
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const battlefieldFileInputRef = useRef(null);
   const sheetFileInputRef = useRef(null);
   const sheetImportAbortRef = useRef(null);
   const [sheetPopoutOpen, setSheetPopoutOpen] = useState(false);
@@ -2186,6 +2657,52 @@ export default function CombatPanel({
     [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
+  const battlefield = useMemo(
+    () => normalizeBattlefield(encounter?.battlefield),
+    [encounter?.battlefield]
+  );
+  const battleBg = battlefield.backgroundSrc || DEFAULT_BATTLEFIELD.backgroundSrc;
+  const canConfigureBattlefield = canManageCombat;
+  const canBoardMoveCombatant = useCallback(
+    (combatant) => !!combatant && canWriteCombat,
+    [canWriteCombat]
+  );
+  const canBoardQuickEditCombatant = useCallback(
+    (combatant) => !!combatant && canWriteCombat,
+    [canWriteCombat]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const storagePath = cleanText(battlefield.mediaStoragePath);
+    if (!storagePath) {
+      setBattlefieldMediaUrl('');
+      return () => { cancelled = true; };
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setBattlefieldMediaUrl('');
+      return () => { cancelled = true; };
+    }
+
+    const resolveSignedUrl = async () => {
+      const { data, error } = await supabase.storage
+        .from(COMBAT_MEDIA_BUCKET)
+        .createSignedUrl(storagePath, 60 * 60);
+      if (cancelled) return;
+      if (error) {
+        console.warn('[CombatPanel] Unable to resolve signed map URL.', error);
+        setBattlefieldMediaUrl('');
+        return;
+      }
+      setBattlefieldMediaUrl(cleanText(data?.signedUrl));
+    };
+
+    resolveSignedUrl();
+    return () => { cancelled = true; };
+  }, [battlefield.mediaStoragePath, battlefield.mediaUpdatedAt]);
+
   const resolveCombatantInventoryAssignment = useCallback(
     (combatant) => {
       if (!combatant) return null;
@@ -2754,9 +3271,19 @@ export default function CombatPanel({
     const incomingCombatant = stampCombatantCreator(c);
     setEncounter(prev => {
       const next = normalize(prev);
+      const startingGrid = (
+        normalizeGridCoordinate(incomingCombatant.gridCol, null) != null
+        && normalizeGridCoordinate(incomingCombatant.gridRow, null) != null
+      )
+        ? {
+            gridCol: normalizeGridCoordinate(incomingCombatant.gridCol, 0),
+            gridRow: normalizeGridCoordinate(incomingCombatant.gridRow, 0),
+          }
+        : nextGridPlacementForCombatantList(next.combatants, incomingCombatant.side);
       const profileKey = sheetProfileKey(incomingCombatant.sourceCharacterId, incomingCombatant.name);
       const profile = profileKey ? next.sheetProfiles?.[profileKey] : null;
-      const nextCombatant = profile ? applySheetProfileToCombatant(incomingCombatant, profile) : incomingCombatant;
+      const withGrid = { ...incomingCombatant, ...startingGrid };
+      const nextCombatant = profile ? applySheetProfileToCombatant(withGrid, profile) : withGrid;
       const activeId = next.combatants[next.activeIndex]?.id || null;
       next.combatants = sortCombatants([...next.combatants, nextCombatant]);
       if (next.combatants.length === 0) next.activeIndex = 0;
@@ -3066,6 +3593,134 @@ export default function CombatPanel({
       return next;
     });
   };
+
+  const updateBattlefield = useCallback((patchOrBuilder) => {
+    if (!canConfigureBattlefield) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const current = normalizeBattlefield(next.battlefield);
+      const patch = typeof patchOrBuilder === 'function' ? patchOrBuilder(current) : patchOrBuilder;
+      if (!patch || typeof patch !== 'object') return prev;
+      const merged = normalizeBattlefield({ ...current, ...patch });
+      const changed = Object.keys(merged).some((key) => !Object.is(current[key], merged[key]));
+      if (!changed) return prev;
+      next.battlefield = merged;
+      return next;
+    });
+  }, [canConfigureBattlefield]);
+
+  const moveCombatantToCell = useCallback((combatantId, nextCol, nextRow) => {
+    if (!canWriteCombat) return;
+    const safeCol = clamp(normalizeGridCoordinate(nextCol, 0), 0, 400);
+    const safeRow = clamp(normalizeGridCoordinate(nextRow, 0), 0, 400);
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardMoveCombatant(combatant)) return combatant;
+        if (combatant.gridCol === safeCol && combatant.gridRow === safeRow) return combatant;
+        changed = true;
+        return { ...combatant, gridCol: safeCol, gridRow: safeRow };
+      });
+      return changed ? next : prev;
+    });
+    setSelectedId(combatantId);
+  }, [canBoardMoveCombatant, canWriteCombat]);
+
+  const adjustCombatantHpViaBoard = useCallback((combatantId, amount) => {
+    if (!canWriteCombat) return;
+    const delta = toInt(amount, 0);
+    if (!delta) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardQuickEditCombatant(combatant)) return combatant;
+        const currentHp = combatant.hp === '' ? 0 : toInt(combatant.hp, 0);
+        const updatedHp = Math.max(0, currentHp + delta);
+        if (updatedHp === currentHp) return combatant;
+        changed = true;
+        return { ...combatant, hp: updatedHp };
+      });
+      return changed ? next : prev;
+    });
+  }, [canBoardQuickEditCombatant, canWriteCombat]);
+
+  const toggleCombatantDeadViaBoard = useCallback((combatantId) => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardQuickEditCombatant(combatant)) return combatant;
+        changed = true;
+        return { ...combatant, dead: !combatant.dead };
+      });
+      return changed ? next : prev;
+    });
+  }, [canBoardQuickEditCombatant, canWriteCombat]);
+
+  const toggleCombatantStatusViaBoard = useCallback((combatantId, statusLabel) => {
+    if (!canWriteCombat) return;
+    const label = cleanText(statusLabel);
+    if (!label) return;
+    const labelKey = tokenKey(label);
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardQuickEditCombatant(combatant)) return combatant;
+        const current = Array.isArray(combatant.status) ? combatant.status : [];
+        const hasLabel = current.some((entry) => tokenKey(entry) === labelKey);
+        const nextStatus = hasLabel
+          ? current.filter((entry) => tokenKey(entry) !== labelKey)
+          : [...current, label];
+        if (nextStatus.length === current.length && hasLabel === false) return combatant;
+        changed = true;
+        return { ...combatant, status: nextStatus };
+      });
+      return changed ? next : prev;
+    });
+  }, [canBoardQuickEditCombatant, canWriteCombat]);
+
+  const clearCombatantStatusesViaBoard = useCallback((combatantId) => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardQuickEditCombatant(combatant)) return combatant;
+        if (!Array.isArray(combatant.status) || combatant.status.length === 0) return combatant;
+        changed = true;
+        return { ...combatant, status: [] };
+      });
+      return changed ? next : prev;
+    });
+  }, [canBoardQuickEditCombatant, canWriteCombat]);
+
+  const removeCombatantViaBoard = useCallback((combatantId) => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const target = next.combatants.find((combatant) => combatant.id === combatantId);
+      if (!target || !canBoardQuickEditCombatant(target)) return prev;
+      const idx = next.combatants.findIndex((combatant) => combatant.id === combatantId);
+      next.combatants = next.combatants.filter((combatant) => combatant.id !== combatantId);
+      if (next.combatants.length === 0) next.activeIndex = 0;
+      else if (idx >= 0) next.activeIndex = clamp(next.activeIndex, 0, next.combatants.length - 1);
+      return next;
+    });
+    if (selectedId === combatantId) {
+      setSelectedId(null);
+      setEditorOpen(false);
+      setRestrictedModalOpen(false);
+    }
+  }, [canBoardQuickEditCombatant, canWriteCombat, selectedId]);
 
   useEffect(() => {
     if (!selected || !selectedCanEdit || !selectedInventoryOwnerUserId) return;
@@ -3683,6 +4338,7 @@ export default function CombatPanel({
 
   const clearEncounter = () => {
     if (!canManageCombat) return;
+    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
     setEncounter((prev) => {
       const next = defaultEncounter();
       const prior = normalize(prev);
@@ -3692,6 +4348,9 @@ export default function CombatPanel({
     setSelectedId(null);
     setEditorOpen(false);
     setRestrictedModalOpen(false);
+    if (previousStoragePath) {
+      deleteBattlefieldMedia(previousStoragePath);
+    }
   };
   const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
@@ -3942,6 +4601,88 @@ export default function CombatPanel({
     setListEditorMode('');
   };
 
+  const deleteBattlefieldMedia = useCallback(async (storagePath) => {
+    const targetPath = cleanText(storagePath);
+    if (!targetPath) return;
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.storage.from(COMBAT_MEDIA_BUCKET).remove([targetPath]);
+    if (error) {
+      console.warn('[CombatPanel] Unable to delete previous battle map.', error);
+    }
+  }, []);
+
+  const handleBattlefieldMediaUpload = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !canConfigureBattlefield) return;
+    if (!BOARD_ALLOWED_IMAGE_TYPES.has(file.type)) {
+      window.alert('Battle maps must be PNG, JPG, or WEBP files.');
+      return;
+    }
+    if (file.size > BOARD_UPLOAD_MAX_BYTES) {
+      window.alert('Battle maps must be 15 MB or smaller.');
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      window.alert('Supabase storage is not available in this environment.');
+      return;
+    }
+
+    const campaignId = getCampaignId();
+    const nextStoragePath = buildCombatMediaPath(campaignId, encounter.id, file.name);
+    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
+    setBattlefieldUploadBusy(true);
+    try {
+      const dimensions = await readImageDimensionsFromFile(file);
+      const { error } = await supabase.storage.from(COMBAT_MEDIA_BUCKET).upload(nextStoragePath, file, {
+        upsert: false,
+        contentType: file.type,
+      });
+      if (error) throw error;
+
+      updateBattlefield({
+        mediaStoragePath: nextStoragePath,
+        mediaMimeType: file.type,
+        mediaWidth: dimensions.width,
+        mediaHeight: dimensions.height,
+        mediaUpdatedAt: Date.now(),
+      });
+
+      if (previousStoragePath && previousStoragePath !== nextStoragePath) {
+        deleteBattlefieldMedia(previousStoragePath);
+      }
+    } catch (error) {
+      console.error('[CombatPanel] Battle map upload failed.', error);
+      window.alert(error?.message || 'Battle map upload failed.');
+    } finally {
+      setBattlefieldUploadBusy(false);
+    }
+  }, [
+    battlefield.mediaStoragePath,
+    canConfigureBattlefield,
+    deleteBattlefieldMedia,
+    encounter.id,
+    updateBattlefield,
+  ]);
+
+  const clearBattlefieldMedia = useCallback(() => {
+    if (!canConfigureBattlefield) return;
+    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
+    updateBattlefield({
+      mediaStoragePath: '',
+      mediaMimeType: '',
+      mediaWidth: 0,
+      mediaHeight: 0,
+      mediaUpdatedAt: Date.now(),
+    });
+    if (previousStoragePath) {
+      deleteBattlefieldMedia(previousStoragePath);
+    }
+  }, [battlefield.mediaStoragePath, canConfigureBattlefield, deleteBattlefieldMedia, updateBattlefield]);
+
   // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
@@ -4004,7 +4745,7 @@ export default function CombatPanel({
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
   const HUD_GAP = 10;
-  const WINDOW_BAR_H = 40;
+  const WINDOW_BAR_H = 78;
   const PAD    = 14;
   const WINDOW_MAX_W = 1560;
 
@@ -4122,17 +4863,23 @@ export default function CombatPanel({
               </div>
 
             <div className={styles.controlsRight}>
+              <input
+                ref={battlefieldFileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className={styles.hiddenInput}
+                onChange={handleBattlefieldMediaUpload}
+              />
               <label className={styles.sceneLabel}>Scene</label>
               <select
                 value={battleBg || ''}
                 onChange={e => {
-                  if (!canWriteCombat) return;
                   playNav();
-                  setBattleBg(e.target.value || null);
+                  updateBattlefield({ backgroundSrc: e.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
                 }}
                 onMouseEnter={playHover}
                 className={styles.sceneSelect}
-                disabled={!canWriteCombat}
+                disabled={!canConfigureBattlefield}
               >
                 {BATTLE_BACKGROUNDS.map((b, i) => (
                   <option key={i} value={b.src || ''}>
@@ -4140,6 +4887,68 @@ export default function CombatPanel({
                   </option>
                 ))}
               </select>
+              <button
+                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  battlefieldFileInputRef.current?.click();
+                }}
+                disabled={!canConfigureBattlefield || battlefieldUploadBusy}
+              >
+                {battlefieldUploadBusy ? 'Uploading...' : (battlefield.mediaStoragePath ? 'Replace Map' : 'Upload Map')}
+              </button>
+              <button
+                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  clearBattlefieldMedia();
+                }}
+                disabled={!canConfigureBattlefield || !battlefield.mediaStoragePath}
+              >
+                Clear Map
+              </button>
+              <button
+                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
+                }}
+                disabled={!canConfigureBattlefield}
+              >
+                {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
+              </button>
+              <label className={styles.sceneLabel}>Cell</label>
+              <input
+                type="number"
+                min="32"
+                max="192"
+                className={styles.toolbarNumberInput}
+                value={battlefield.gridCellSize}
+                onChange={(e) => updateBattlefield({ gridCellSize: clamp(toInt(e.target.value, battlefield.gridCellSize), 32, 192) })}
+                disabled={!canConfigureBattlefield}
+              />
+              <label className={styles.sceneLabel}>Offset</label>
+              <input
+                type="number"
+                min="-2048"
+                max="2048"
+                className={styles.toolbarNumberInput}
+                value={battlefield.gridOffsetX}
+                onChange={(e) => updateBattlefield({ gridOffsetX: clamp(toInt(e.target.value, battlefield.gridOffsetX), -2048, 2048) })}
+                disabled={!canConfigureBattlefield}
+              />
+              <input
+                type="number"
+                min="-2048"
+                max="2048"
+                className={styles.toolbarNumberInput}
+                value={battlefield.gridOffsetY}
+                onChange={(e) => updateBattlefield({ gridOffsetY: clamp(toInt(e.target.value, battlefield.gridOffsetY), -2048, 2048) })}
+                disabled={!canConfigureBattlefield}
+              />
             </div>
           </div>
 
@@ -4159,10 +4968,21 @@ export default function CombatPanel({
                 combatants={combatants}
                 activeCombatantId={activeCombatantId}
                 selectedId={selectedId}
+                setSelectedId={setSelectedId}
                 openEditorFor={openEditorFor}
                 playHover={playHover}
                 playNav={playNav}
                 battleBg={battleBg}
+                battlefield={battlefield}
+                battlefieldMediaUrl={battlefieldMediaUrl}
+                canMoveCombatant={canBoardMoveCombatant}
+                canQuickEditCombatant={canBoardQuickEditCombatant}
+                moveCombatantToCell={moveCombatantToCell}
+                adjustCombatantHp={adjustCombatantHpViaBoard}
+                toggleCombatantDead={toggleCombatantDeadViaBoard}
+                toggleCombatantStatus={toggleCombatantStatusViaBoard}
+                clearCombatantStatuses={clearCombatantStatusesViaBoard}
+                removeCombatant={removeCombatantViaBoard}
               />
 
               <div className={styles.initOverlay}>

@@ -164,8 +164,10 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
+  flex-wrap: wrap;
+  align-content: center;
 }
 
 .sceneLabel {
@@ -191,7 +193,25 @@
   letter-spacing: 0.08em;
   cursor: pointer;
   outline: none;
-  max-width: 170px;
+  max-width: 150px;
+  font-family: var(--koa-font-display);
+}
+
+.toolbarActionBtn {
+  white-space: nowrap;
+}
+
+.toolbarNumberInput {
+  width: 68px;
+  height: 31px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 220, 160, 0.22);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.03));
+  color: var(--koa-cream);
+  font-size: 11px;
+  font-weight: 900;
+  outline: none;
   font-family: var(--koa-font-display);
 }
 
@@ -527,25 +547,53 @@
   height: 100%;
   overflow: hidden;
   border-radius: 14px;
-  transition: background-image 300ms ease;
+  background: linear-gradient(180deg, rgba(10, 8, 6, 0.94), rgba(4, 3, 2, 0.98));
 }
 
-.sceneOverlay {
+.boardStage {
   position: absolute;
   inset: 0;
-  z-index: 0;
   border-radius: 14px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.3) 0%, rgba(0, 0, 0, 0.1) 50%, rgba(0, 0, 0, 0.44) 100%);
-  pointer-events: none;
+  overflow: hidden;
+  touch-action: none;
+  background:
+    radial-gradient(circle at 22% 16%, rgba(255, 220, 150, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(18, 12, 8, 0.96), rgba(5, 4, 3, 1));
 }
 
-.sceneSvg {
+.boardLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.boardBackdrop,
+.boardShade,
+.boardGrid,
+.boardTokenLayer {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+}
+
+.boardBackdrop {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.boardShade {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0.38)),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18));
+}
+
+.boardGrid {
+  background-image:
+    linear-gradient(to right, rgba(255, 235, 180, 0.18) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 235, 180, 0.18) 1px, transparent 1px);
+  opacity: 0.72;
   pointer-events: none;
-  z-index: 1;
 }
 
 .sceneEmpty {
@@ -554,62 +602,182 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: 4;
   flex-direction: column;
   gap: 10px;
-  color: rgba(255, 245, 220, 0.4);
+  color: rgba(255, 245, 220, 0.62);
   font-weight: 900;
   text-align: center;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(6, 5, 4, 0.24), rgba(6, 5, 4, 0.52));
 }
 
 .sceneEmptyIcon {
-  font-size: 44px;
-  opacity: 0.3;
+  font-size: 20px;
+  opacity: 0.72;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-family: var(--koa-font-display);
 }
 
 .sceneEmptyText {
   font-size: 13px;
+  max-width: 300px;
 }
 
-.sceneEnemiesRow {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 22%;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  flex-wrap: wrap;
-  padding: 0 28px;
+.boardTokenLayer {
   z-index: 3;
 }
 
-.sceneVs {
+.boardTokenAnchor {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 4;
-  color: rgba(255, 210, 80, 0.22);
-  font-weight: 950;
-  font-size: 28px;
-  letter-spacing: 6px;
-  text-shadow: 0 0 20px rgba(255, 180, 40, 0.3);
+  transform: translate(-50%, -58%);
   user-select: none;
-  pointer-events: none;
 }
 
-.scenePcsRow {
+.boardTokenDragging {
+  filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.6));
+}
+
+.boardHud {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 3%;
+  left: 16px;
+  bottom: 16px;
+  z-index: 5;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: linear-gradient(180deg, rgba(8, 6, 4, 0.84), rgba(4, 3, 2, 0.7));
+  backdrop-filter: blur(10px);
+  max-width: 320px;
+}
+
+.boardHudTitle {
+  color: var(--koa-cream);
+  font-family: var(--koa-font-display);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.boardHudMeta {
+  margin-top: 4px;
+  color: rgba(255, 235, 190, 0.78);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.boardResetView {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 5;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.2);
+  background: linear-gradient(180deg, rgba(20, 16, 12, 0.88), rgba(8, 6, 5, 0.74));
+  color: var(--koa-cream);
+  font-family: var(--koa-font-display);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.boardContextMenu {
+  position: absolute;
+  z-index: 8;
+  min-width: 212px;
+  max-width: 238px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(10, 8, 6, 0.97), rgba(5, 4, 3, 0.96));
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.46);
+  backdrop-filter: blur(12px);
+}
+
+.boardContextTitle {
+  color: var(--koa-cream);
+  font-family: var(--koa-font-display);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.boardContextSubtitle {
+  margin-top: 8px;
+  color: rgba(255, 220, 160, 0.72);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.boardContextHint {
+  margin-top: 8px;
+  color: rgba(255, 235, 190, 0.74);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.boardContextDivider {
+  height: 1px;
+  margin: 10px 0 8px;
+  background: rgba(255, 220, 160, 0.12);
+}
+
+.boardContextRow {
   display: flex;
-  justify-content: center;
-  align-items: flex-end;
   flex-wrap: wrap;
-  padding: 0 28px;
-  z-index: 3;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.boardContextAction,
+.boardContextChip {
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: linear-gradient(180deg, rgba(28, 20, 14, 0.82), rgba(12, 8, 6, 0.8));
+  color: var(--koa-cream);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.boardContextAction {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 0 10px;
+  border-radius: 10px;
+  text-align: left;
+}
+
+.boardContextChip {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+}
+
+.boardContextChipActive {
+  border-color: rgba(255, 220, 160, 0.44);
+  background: linear-gradient(180deg, rgba(128, 86, 28, 0.92), rgba(76, 48, 14, 0.82));
+}
+
+.boardContextDanger {
+  border-color: rgba(214, 86, 86, 0.22);
+  background: linear-gradient(180deg, rgba(92, 28, 28, 0.92), rgba(44, 16, 16, 0.82));
+}
+
+.boardContextAction:disabled,
+.boardContextChip:disabled,
+.boardResetView:disabled,
+.toolbarNumberInput:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .tokenRoot {
