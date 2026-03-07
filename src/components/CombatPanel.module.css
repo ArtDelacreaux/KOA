@@ -787,6 +787,8 @@
   gap: 4px;
   cursor: pointer;
   user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
   transition: opacity 300ms, filter 300ms;
   position: relative;
 }
@@ -822,6 +824,9 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .tokenLabelBox {

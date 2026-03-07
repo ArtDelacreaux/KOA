@@ -1678,11 +1678,9 @@ function BattlefieldToken({
   c,
   isActive,
   isSelected,
-  onClick,
   onHover,
   onContextMenu,
   onPointerDown,
-  onDoubleClick,
   size = 90,
   flipped = false,
   title,
@@ -1714,12 +1712,11 @@ function BattlefieldToken({
 
   return (
     <div
-      onClick={onClick}
       onMouseEnter={onHover}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
-      onDoubleClick={onDoubleClick}
-      title={title || `${c.name} — Click to edit`}
+      onDragStart={(event) => event.preventDefault()}
+      title={title || c.name}
       className={rootClass}
     >
       {/* Active turn glow ring */}
@@ -1747,6 +1744,7 @@ function BattlefieldToken({
             src={c.customImage}
             alt={c.name}
             className={styles.tokenImage}
+            draggable={false}
             style={{ transform: flipped ? 'scaleX(-1)' : 'none' }}
           />
         ) : c.side === 'Enemy' ? (
@@ -2009,6 +2007,7 @@ function BattlefieldScene({
           size={tokenSize}
           flipped={(combatant.side || 'Enemy') !== 'Enemy'}
           onHover={playHover}
+          title={`${combatant.name} — drag token`}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.stopPropagation();
@@ -2038,10 +2037,6 @@ function BattlefieldScene({
               clientY: event.clientY,
               combatantId: combatant.id,
             });
-          }}
-          onDoubleClick={() => {
-            playNav();
-            openEditorFor(combatant.id);
           }}
         />
       </div>
