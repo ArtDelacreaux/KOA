@@ -231,6 +231,8 @@ const BOARD_ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/web
 const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible'];
 const DEFAULT_BOARD_WIDTH = 2048;
 const DEFAULT_BOARD_HEIGHT = 1365;
+const TOKEN_SCALE_MIN = 0.35;
+const TOKEN_SCALE_MAX = 3;
 const DEFAULT_BATTLEFIELD = Object.freeze({
   backgroundSrc: BATTLE_BACKGROUNDS[0]?.src || '',
   mediaStoragePath: '',
@@ -374,6 +376,33 @@ function normalizeGridCoordinate(value, fallback = null) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, Math.round(parsed));
+}
+
+function normalizeTokenScale(value, fallback = 1) {
+  if (value == null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return clamp(parsed, TOKEN_SCALE_MIN, TOKEN_SCALE_MAX);
+}
+
+function normalizeTokenRotation(value, fallback = 0) {
+  if (value == null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const wrapped = Math.round(parsed) % 360;
+  return wrapped < 0 ? wrapped + 360 : wrapped;
+}
+
+function normalizeAngleDelta(nextAngle, startAngle) {
+  let delta = nextAngle - startAngle;
+  if (delta > 180) delta -= 360;
+  if (delta < -180) delta += 360;
+  return delta;
+}
+
+function pointerAngleFromCenter(centerX, centerY, clientX, clientY) {
+  const degrees = (Math.atan2(clientY - centerY, clientX - centerX) * 180) / Math.PI + 90;
+  return normalizeTokenRotation(degrees, 0);
 }
 
 function defaultGridPlacementFor(side, slotIndex) {
@@ -1498,6 +1527,8 @@ function applySheetProfileToCombatant(combatant, profile) {
     enemyType: combatant.enemyType || 'goblin',
     customImage: combatant.customImage || '',
     pcColorIndex: combatant.pcColorIndex != null ? combatant.pcColorIndex : 0,
+    tokenScale: normalizeTokenScale(combatant.tokenScale, 1),
+    tokenRotation: normalizeTokenRotation(combatant.tokenRotation, 0),
     gridCol: normalizeGridCoordinate(combatant.gridCol, 0),
     gridRow: normalizeGridCoordinate(combatant.gridRow, 0),
   };
@@ -1600,6 +1631,8 @@ function normalize(enc) {
       enemyType: c.enemyType || 'goblin',
       customImage: c.customImage || ((c.side || 'Enemy') === 'Enemy' ? '' : tokenImageForCharacter(c.sourceCharacterId, c.name)),
       pcColorIndex: c.pcColorIndex != null ? c.pcColorIndex : (i % PC_COLORS.length),
+      tokenScale: normalizeTokenScale(c.tokenScale, 1),
+      tokenRotation: normalizeTokenRotation(c.tokenRotation, 0),
       gridCol: normalizeGridCoordinate(c.gridCol, fallbackGrid.gridCol),
       gridRow: normalizeGridCoordinate(c.gridRow, fallbackGrid.gridRow),
     };
@@ -1678,9 +1711,14 @@ function BattlefieldToken({
   c,
   isActive,
   isSelected,
+  canRotate = false,
+  isRotating = false,
   onHover,
   onContextMenu,
   onPointerDown,
+  onRotateHandlePointerDown,
+  onDoubleClick,
+  rotationOverride = null,
   size = 90,
   flipped = false,
   title,
@@ -1688,10 +1726,14 @@ function BattlefieldToken({
   const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
   const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
   const pct = max > 0 ? (hp / max) * 100 : 100;
+  const tokenScale = normalizeTokenScale(c.tokenScale, 1);
+  const tokenRotation = normalizeTokenRotation(rotationOverride == null ? c.tokenRotation : rotationOverride, 0);
+  const displaySize = clamp(Math.round(size * tokenScale), 32, 256);
+  const rotateHandleOffset = Math.round(displaySize / 2 + 18);
 
   const EnemyRender = ENEMY_TYPES.find(e => e.key === c.enemyType)?.Render || GoblinSVG;
   const pcColor = PC_COLORS[c.pcColorIndex % PC_COLORS.length];
-  const rootClass = `${styles.tokenRoot} ${c.dead ? styles.tokenDead : ''}`;
+  const rootClass = `${styles.tokenRoot} ${c.dead ? styles.tokenDead : ''} ${isSelected || isRotating ? styles.tokenRootActive : ''}`;
   const ringShadow = c.side === 'Enemy'
     ? '0 0 0 3px rgba(220,60,60,0.90), 0 0 22px rgba(220,60,60,0.55)'
     : '0 0 0 3px rgba(255,210,80,0.90), 0 0 22px rgba(255,210,80,0.45)';
@@ -1709,59 +1751,91 @@ function BattlefieldToken({
   const labelBg = isActive ? 'rgba(255,210,80,0.18)' : 'rgba(0,0,0,0.68)';
   const labelBorder = `1px solid ${isActive ? 'rgba(255,210,80,0.40)' : 'rgba(255,255,255,0.10)'}`;
   const nameColor = c.dead ? 'rgba(200,150,150,0.70)' : 'var(--koa-cream)';
+  const renderedRotation = flipped ? -tokenRotation : tokenRotation;
+  const visualTransforms = [];
+  if (flipped) visualTransforms.push('scaleX(-1)');
+  if (renderedRotation) visualTransforms.push(`rotate(${renderedRotation}deg)`);
+  const visualTransform = visualTransforms.length ? visualTransforms.join(' ') : 'none';
+  const handleTransforms = ['translate(-50%, -50%)'];
+  if (flipped) handleTransforms.push('scaleX(-1)');
+  if (renderedRotation) handleTransforms.push(`rotate(${renderedRotation}deg)`);
+  handleTransforms.push(`translateY(-${rotateHandleOffset}px)`);
+  const handleTransform = handleTransforms.join(' ');
 
   return (
     <div
       onMouseEnter={onHover}
       onContextMenu={onContextMenu}
       onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
       onDragStart={(event) => event.preventDefault()}
       title={title || c.name}
       className={rootClass}
+      style={{ width: displaySize, height: displaySize }}
     >
-      {/* Active turn glow ring */}
-      {isActive && (
-        <div
-          className={styles.tokenActiveRing}
-          style={{ width: size + 16, height: size + 16, boxShadow: ringShadow }}
-        />
-      )}
-
-      {/* Token circle / image */}
-      <div
-        className={styles.tokenCircle}
-        style={{
-          width: size,
-          height: size,
-          border: circleBorder,
-          background: circleBg,
-          boxShadow: circleShadow,
-          transform: flipped ? 'scaleX(-1)' : 'none',
-        }}
-      >
-        {c.customImage ? (
-          <img
-            src={c.customImage}
-            alt={c.name}
-            className={styles.tokenImage}
-            draggable={false}
-            style={{ transform: flipped ? 'scaleX(-1)' : 'none' }}
+      <div className={styles.tokenVisual}>
+        {/* Active turn glow ring */}
+        {isActive && (
+          <div
+            className={styles.tokenActiveRing}
+            style={{ width: displaySize + 16, height: displaySize + 16, boxShadow: ringShadow }}
           />
-        ) : c.side === 'Enemy' ? (
-          <EnemyRender size={size * 0.72} />
-        ) : (
-          <HeroSVG color={pcColor} size={size * 0.72} />
+        )}
+
+        {/* Token circle / image */}
+        <div
+          className={styles.tokenCircle}
+          style={{
+            width: displaySize,
+            height: displaySize,
+            border: circleBorder,
+            background: circleBg,
+            boxShadow: circleShadow,
+            transform: visualTransform,
+          }}
+        >
+          {c.customImage ? (
+            <img
+              src={c.customImage}
+              alt={c.name}
+              className={styles.tokenImage}
+              draggable={false}
+            />
+          ) : c.side === 'Enemy' ? (
+            <EnemyRender size={displaySize * 0.72} />
+          ) : (
+            <HeroSVG color={pcColor} size={displaySize * 0.72} />
+          )}
+        </div>
+
+        {/* Dead skull */}
+        {c.dead && (
+          <div className={styles.tokenDeadSkull} style={{ fontSize: displaySize * 0.35 }}>💀</div>
+        )}
+
+        {canRotate && (
+          <button
+            type="button"
+            className={`${styles.tokenRotateHandle} ${isRotating ? styles.tokenRotateHandleVisible : ''}`}
+            style={{ transform: handleTransform }}
+            onPointerDown={onRotateHandlePointerDown}
+            onClick={(event) => event.stopPropagation()}
+            aria-label={`Rotate ${c.name}`}
+            title={`Rotate ${c.name}`}
+          >
+            <span className={styles.tokenRotateHandleIcon} aria-hidden="true">↻</span>
+          </button>
         )}
       </div>
 
       {/* Name tag + status */}
       <div
         className={styles.tokenLabelBox}
-        style={{ background: labelBg, border: labelBorder, maxWidth: size + 30 }}
+        style={{ background: labelBg, border: labelBorder, maxWidth: displaySize + 30 }}
       >
         <div
           className={styles.tokenName}
-          style={{ color: nameColor, maxWidth: size + 20, textDecoration: c.dead ? 'line-through' : 'none' }}
+          style={{ color: nameColor, maxWidth: displaySize + 20, textDecoration: c.dead ? 'line-through' : 'none' }}
         >
           {c.name}
         </div>
@@ -1782,16 +1856,11 @@ function BattlefieldToken({
         )}
         {/* Concentration indicator */}
         {c.concentration && (
-          <div className={styles.tokenConcentration} style={{ maxWidth: size + 20 }}>
+          <div className={styles.tokenConcentration} style={{ maxWidth: displaySize + 20 }}>
             ⚬ {c.concentration}
           </div>
         )}
       </div>
-
-      {/* Dead skull */}
-      {c.dead && (
-        <div className={styles.tokenDeadSkull} style={{ fontSize: size * 0.35 }}>💀</div>
-      )}
     </div>
   );
 }
@@ -1808,14 +1877,17 @@ function BattlefieldScene({
   battleBg,
   battlefield,
   battlefieldMediaUrl,
+  resetViewRequestToken,
   canMoveCombatant,
   canQuickEditCombatant,
   moveCombatantToCell,
+  setCombatantTokenRotation,
   adjustCombatantHp,
   toggleCombatantDead,
   toggleCombatantStatus,
   clearCombatantStatuses,
   removeCombatant,
+  openSheetFor,
 }) {
   const stageRef = useRef(null);
   const contextMenuRef = useRef(null);
@@ -1824,6 +1896,7 @@ function BattlefieldScene({
   const [panState, setPanState] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
   const [dragState, setDragState] = useState(null);
+  const [rotateState, setRotateState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ left: 12, top: 12, ready: false });
   const boardWidth = Math.max(DEFAULT_BOARD_WIDTH, toInt(battlefield.mediaWidth, 0) || DEFAULT_BOARD_WIDTH);
@@ -1857,12 +1930,26 @@ function BattlefieldScene({
     return () => window.removeEventListener('resize', fitBoardToStage);
   }, [fitBoardToStage]);
 
+  useEffect(() => {
+    if (!resetViewRequestToken) return;
+    fitBoardToStage();
+  }, [fitBoardToStage, resetViewRequestToken]);
+
   const clientToBoardPoint = useCallback((clientX, clientY) => {
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
       x: (clientX - rect.left - viewState.panX) / viewState.zoom,
       y: (clientY - rect.top - viewState.panY) / viewState.zoom,
+    };
+  }, [viewState.panX, viewState.panY, viewState.zoom]);
+
+  const boardPointToClientPoint = useCallback((boardPoint) => {
+    const rect = stageRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return {
+      x: rect.left + viewState.panX + boardPoint.x * viewState.zoom,
+      y: rect.top + viewState.panY + boardPoint.y * viewState.zoom,
     };
   }, [viewState.panX, viewState.panY, viewState.zoom]);
 
@@ -1935,6 +2022,41 @@ function BattlefieldScene({
       window.removeEventListener('pointercancel', onPointerUp);
     };
   }, [boardPointToCell, moveCombatantToCell, setSelectedId, viewState.zoom, dragState]);
+
+  useEffect(() => {
+    if (!rotateState?.active) return undefined;
+    const onPointerMove = (event) => {
+      const pointerAngle = pointerAngleFromCenter(
+        rotateState.centerClientX,
+        rotateState.centerClientY,
+        event.clientX,
+        event.clientY
+      );
+      const nextRotation = normalizeTokenRotation(
+        rotateState.startRotation + normalizeAngleDelta(pointerAngle, rotateState.startPointerAngle),
+        rotateState.previewRotation
+      );
+      setRotateState((prev) => {
+        if (!prev || prev.previewRotation === nextRotation) return prev;
+        return { ...prev, previewRotation: nextRotation };
+      });
+    };
+    const onPointerUp = () => {
+      setRotateState((prev) => {
+        if (!prev) return prev;
+        setCombatantTokenRotation(prev.combatantId, prev.previewRotation);
+        return null;
+      });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [rotateState, setCombatantTokenRotation]);
 
   useEffect(() => {
     if (!contextMenu) return undefined;
@@ -2013,6 +2135,7 @@ function BattlefieldScene({
 
   const renderTokenAt = (combatant) => {
     const dragging = dragState?.combatantId === combatant.id;
+    const rotating = rotateState?.combatantId === combatant.id;
     const center = dragging
       ? { x: dragState.previewX, y: dragState.previewY }
       : cellCenter(combatant.gridCol, combatant.gridRow);
@@ -2030,15 +2153,46 @@ function BattlefieldScene({
           c={combatant}
           isActive={combatant.id === activeCombatantId}
           isSelected={combatant.id === selectedId}
+          canRotate={canMoveCombatant(combatant)}
+          isRotating={rotating}
           size={tokenSize}
           flipped={(combatant.side || 'Enemy') !== 'Enemy'}
           onHover={playHover}
-          title={`${combatant.name} — drag token`}
+          onRotateHandlePointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
+            const centerClientPoint = boardPointToClientPoint(centerPoint);
+            const startRotation = normalizeTokenRotation(combatant.tokenRotation, 0);
+            setContextMenu(null);
+            setPanState(null);
+            setDragState(null);
+            setSelectedId(combatant.id);
+            if (!canMoveCombatant(combatant)) return;
+            setRotateState({
+              active: true,
+              combatantId: combatant.id,
+              centerClientX: centerClientPoint.x,
+              centerClientY: centerClientPoint.y,
+              startPointerAngle: pointerAngleFromCenter(
+                centerClientPoint.x,
+                centerClientPoint.y,
+                event.clientX,
+                event.clientY
+              ),
+              startRotation,
+              previewRotation: startRotation,
+            });
+          }}
+          rotationOverride={rotating ? rotateState.previewRotation : null}
+          title={`${combatant.name} — drag to move, hover for rotate handle, double-click to open sheet`}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.stopPropagation();
             const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
             setContextMenu(null);
+            setRotateState(null);
             setSelectedId(combatant.id);
             if (!canMoveCombatant(combatant)) return;
             setDragState({
@@ -2063,6 +2217,11 @@ function BattlefieldScene({
               clientY: event.clientY,
               combatantId: combatant.id,
             });
+          }}
+          onDoubleClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openSheetFor(combatant.id);
           }}
         />
       </div>
@@ -2254,27 +2413,6 @@ function BattlefieldScene({
             <div className={styles.sceneEmptyText}>Add combatants to place tokens on the battle map.</div>
           </div>
         )}
-
-        <div className={styles.boardHud}>
-          <div className={styles.boardHudTitle}>Tactical Board</div>
-          <div className={styles.boardHudMeta}>
-            {battlefieldMediaUrl ? 'Uploaded map' : 'Preset backdrop'} • {cellSize}px grid • Drag to move, wheel to zoom
-          </div>
-          <div className={styles.boardHudMeta}>Right-click a token for details and quick actions.</div>
-        </div>
-
-        <button
-          type="button"
-          className={styles.boardResetView}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            fitBoardToStage();
-          }}
-        >
-          Reset View
-        </button>
-
       </div>
       {contextMenuNode}
     </div>
@@ -2495,6 +2633,8 @@ export default function CombatPanel({
   const [initSlideTick, setInitSlideTick] = useState(0);
   const [battlefieldUploadBusy, setBattlefieldUploadBusy] = useState(false);
   const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
+  const [sceneDockOpen, setSceneDockOpen] = useState(false);
+  const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
 
   useEffect(() => {
     setBagInventoryState((prev) => normalizeBagInventoryState(prev));
@@ -2642,6 +2782,8 @@ export default function CombatPanel({
     [canRemoveCombatant, selected]
   );
   const selectedReadOnly = !!selected && !selectedCanEdit;
+  const selectedTokenScalePercent = selected ? Math.round(normalizeTokenScale(selected.tokenScale, 1) * 100) : 100;
+  const selectedTokenRotationDegrees = selected ? normalizeTokenRotation(selected.tokenRotation, 0) : 0;
   const battlefield = useMemo(
     () => normalizeBattlefield(encounter?.battlefield),
     [encounter?.battlefield]
@@ -3324,6 +3466,8 @@ export default function CombatPanel({
       enemyType: draft.enemyType || 'goblin', customImage:'',
       sourceCharacterId:'',
       pcColorIndex: combatants.length % PC_COLORS.length,
+      tokenScale: 1,
+      tokenRotation: 0,
     });
     setDraft(d => ({ ...d, name:'' }));
   };
@@ -3367,6 +3511,8 @@ export default function CombatPanel({
       enemyType:'goblin', customImage: tokenImageForCharacter(adv.id, adv.name),
       sourceCharacterId: adv.id || '',
       pcColorIndex: combatants.length % PC_COLORS.length,
+      tokenScale: 1,
+      tokenRotation: 0,
     });
   };
 
@@ -4354,6 +4500,38 @@ export default function CombatPanel({
     setEditorOpen(true);
   };
 
+  const openSheetFor = (id) => {
+    openEditorFor(id, 'sheet');
+  };
+
+  const setSelectedTokenScalePercent = (nextPercent) => {
+    if (!selected || !selectedCanEdit) return;
+    const normalizedPercent = clamp(toInt(nextPercent, selectedTokenScalePercent), Math.round(TOKEN_SCALE_MIN * 100), Math.round(TOKEN_SCALE_MAX * 100));
+    setSelectedField({ tokenScale: normalizedPercent / 100 });
+  };
+
+  const setSelectedTokenRotationDegrees = (nextDegrees) => {
+    if (!selected || !selectedCanEdit) return;
+    setSelectedField({ tokenRotation: normalizeTokenRotation(nextDegrees, selectedTokenRotationDegrees) });
+  };
+
+  const setCombatantTokenRotation = useCallback((combatantId, nextRotation) => {
+    const normalizedRotation = normalizeTokenRotation(nextRotation, 0);
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      let changed = false;
+      next.combatants = next.combatants.map((combatant) => {
+        if (combatant.id !== combatantId) return combatant;
+        if (!canBoardMoveCombatant(combatant)) return combatant;
+        if (normalizeTokenRotation(combatant.tokenRotation, 0) === normalizedRotation) return combatant;
+        changed = true;
+        return { ...combatant, tokenRotation: normalizedRotation };
+      });
+      return changed ? next : prev;
+    });
+    setSelectedId(combatantId);
+  }, [canBoardMoveCombatant]);
+
   useEffect(() => {
     const requestToken = Math.max(0, toInt(sheetPopoutRequestToken, 0));
     if (requestToken <= 0) return;
@@ -4819,95 +4997,148 @@ export default function CombatPanel({
             )}
           </div>
 
-          <div className={styles.floatingConfigDock}>
-            <input
-              ref={battlefieldFileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className={styles.hiddenInput}
-              onChange={handleBattlefieldMediaUpload}
-            />
-            <div className={styles.controlsRight}>
-              <label className={styles.sceneLabel}>Scene</label>
-              <select
-                value={battleBg || ''}
-                onChange={e => {
-                  playNav();
-                  updateBattlefield({ backgroundSrc: e.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
-                }}
-                onMouseEnter={playHover}
-                className={styles.sceneSelect}
-                disabled={!canConfigureBattlefield}
-              >
-                {BATTLE_BACKGROUNDS.map((b, i) => (
-                  <option key={i} value={b.src || ''}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-              <button
-                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                onMouseEnter={playHover}
-                onClick={() => {
-                  playNav();
-                  battlefieldFileInputRef.current?.click();
-                }}
-                disabled={!canConfigureBattlefield || battlefieldUploadBusy}
-              >
-                {battlefieldUploadBusy ? 'Uploading...' : (battlefield.mediaStoragePath ? 'Replace Map' : 'Upload Map')}
-              </button>
-              <button
-                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                onMouseEnter={playHover}
-                onClick={() => {
-                  playNav();
-                  clearBattlefieldMedia();
-                }}
-                disabled={!canConfigureBattlefield || !battlefield.mediaStoragePath}
-              >
-                Clear Map
-              </button>
-              <button
-                className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                onMouseEnter={playHover}
-                onClick={() => {
-                  playNav();
-                  updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
-                }}
-                disabled={!canConfigureBattlefield}
-              >
-                {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
-              </button>
-              <label className={styles.sceneLabel}>Cell</label>
-              <input
-                type="number"
-                min="32"
-                max="192"
-                className={styles.toolbarNumberInput}
-                value={battlefield.gridCellSize}
-                onChange={(e) => updateBattlefield({ gridCellSize: clamp(toInt(e.target.value, battlefield.gridCellSize), 32, 192) })}
-                disabled={!canConfigureBattlefield}
-              />
-              <label className={styles.sceneLabel}>Offset</label>
-              <input
-                type="number"
-                min="-2048"
-                max="2048"
-                className={styles.toolbarNumberInput}
-                value={battlefield.gridOffsetX}
-                onChange={(e) => updateBattlefield({ gridOffsetX: clamp(toInt(e.target.value, battlefield.gridOffsetX), -2048, 2048) })}
-                disabled={!canConfigureBattlefield}
-              />
-              <input
-                type="number"
-                min="-2048"
-                max="2048"
-                className={styles.toolbarNumberInput}
-                value={battlefield.gridOffsetY}
-                onChange={(e) => updateBattlefield({ gridOffsetY: clamp(toInt(e.target.value, battlefield.gridOffsetY), -2048, 2048) })}
-                disabled={!canConfigureBattlefield}
-              />
-            </div>
+          <div className={styles.sceneDockWrap}>
+            {sceneDockOpen && (
+              <div className={styles.floatingConfigDock}>
+                <input
+                  ref={battlefieldFileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className={styles.hiddenInput}
+                  onChange={handleBattlefieldMediaUpload}
+                />
+                <div className={styles.controlsRight}>
+                  <label className={styles.sceneLabel}>Scene</label>
+                  <select
+                    value={battleBg || ''}
+                    onChange={e => {
+                      playNav();
+                      updateBattlefield({ backgroundSrc: e.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
+                    }}
+                    onMouseEnter={playHover}
+                    className={styles.sceneSelect}
+                    disabled={!canConfigureBattlefield}
+                  >
+                    {BATTLE_BACKGROUNDS.map((b, i) => (
+                      <option key={i} value={b.src || ''}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                    onMouseEnter={playHover}
+                    onClick={() => {
+                      playNav();
+                      battlefieldFileInputRef.current?.click();
+                    }}
+                    disabled={!canConfigureBattlefield || battlefieldUploadBusy}
+                  >
+                    {battlefieldUploadBusy ? 'Uploading...' : (battlefield.mediaStoragePath ? 'Replace Map' : 'Upload Map')}
+                  </button>
+                  <button
+                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                    onMouseEnter={playHover}
+                    onClick={() => {
+                      playNav();
+                      clearBattlefieldMedia();
+                    }}
+                    disabled={!canConfigureBattlefield || !battlefield.mediaStoragePath}
+                  >
+                    Clear Map
+                  </button>
+                  <button
+                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                    onMouseEnter={playHover}
+                    onClick={() => {
+                      playNav();
+                      updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
+                    }}
+                    disabled={!canConfigureBattlefield}
+                  >
+                    {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
+                  </button>
+                  <label className={styles.sceneLabel}>Cell</label>
+                  <input
+                    type="number"
+                    min="32"
+                    max="192"
+                    className={styles.toolbarNumberInput}
+                    value={battlefield.gridCellSize}
+                    onChange={(e) => updateBattlefield({ gridCellSize: clamp(toInt(e.target.value, battlefield.gridCellSize), 32, 192) })}
+                    disabled={!canConfigureBattlefield}
+                  />
+                  <label className={styles.sceneLabel}>Offset</label>
+                  <input
+                    type="number"
+                    min="-2048"
+                    max="2048"
+                    className={styles.toolbarNumberInput}
+                    value={battlefield.gridOffsetX}
+                    onChange={(e) => updateBattlefield({ gridOffsetX: clamp(toInt(e.target.value, battlefield.gridOffsetX), -2048, 2048) })}
+                    disabled={!canConfigureBattlefield}
+                  />
+                  <input
+                    type="number"
+                    min="-2048"
+                    max="2048"
+                    className={styles.toolbarNumberInput}
+                    value={battlefield.gridOffsetY}
+                    onChange={(e) => updateBattlefield({ gridOffsetY: clamp(toInt(e.target.value, battlefield.gridOffsetY), -2048, 2048) })}
+                    disabled={!canConfigureBattlefield}
+                  />
+                  <button
+                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                    onMouseEnter={playHover}
+                    onClick={() => setBattlefieldResetRequestToken((tick) => tick + 1)}
+                  >
+                    Reset View
+                  </button>
+                  {selected ? (
+                    <>
+                      <label className={styles.sceneLabel}>Token</label>
+                      <div className={styles.sceneTokenBadge} title={selected.name}>{selected.name}</div>
+                      <label className={styles.sceneLabel}>Size %</label>
+                      <input
+                        type="number"
+                        min={Math.round(TOKEN_SCALE_MIN * 100)}
+                        max={Math.round(TOKEN_SCALE_MAX * 100)}
+                        step="5"
+                        className={styles.toolbarNumberInput}
+                        value={selectedTokenScalePercent}
+                        onChange={(e) => setSelectedTokenScalePercent(e.target.value)}
+                        disabled={!selectedCanEdit}
+                      />
+                      <label className={styles.sceneLabel}>Rotate</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="359"
+                        step="5"
+                        className={styles.toolbarNumberInput}
+                        value={selectedTokenRotationDegrees}
+                        onChange={(e) => setSelectedTokenRotationDegrees(e.target.value)}
+                        disabled={!selectedCanEdit}
+                      />
+                    </>
+                  ) : (
+                    <div className={styles.sceneDockHint}>Select a token to resize it. Hover a token to grab the rotate handle.</div>
+                  )}
+                </div>
+              </div>
+            )}
+            <button
+              type="button"
+              className={btnClass('ghost', 'sm', styles.sceneDockToggle)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                setSceneDockOpen((open) => !open);
+              }}
+              aria-expanded={sceneDockOpen}
+            >
+              {sceneDockOpen ? 'Hide Scene' : 'Scene'}
+            </button>
           </div>
 
           <div
@@ -4932,14 +5163,17 @@ export default function CombatPanel({
                 battleBg={battleBg}
                 battlefield={battlefield}
                 battlefieldMediaUrl={battlefieldMediaUrl}
+                resetViewRequestToken={battlefieldResetRequestToken}
                 canMoveCombatant={canBoardMoveCombatant}
                 canQuickEditCombatant={canBoardQuickEditCombatant}
                 moveCombatantToCell={moveCombatantToCell}
+                setCombatantTokenRotation={setCombatantTokenRotation}
                 adjustCombatantHp={adjustCombatantHpViaBoard}
                 toggleCombatantDead={toggleCombatantDeadViaBoard}
                 toggleCombatantStatus={toggleCombatantStatusViaBoard}
                 clearCombatantStatuses={clearCombatantStatusesViaBoard}
                 removeCombatant={removeCombatantViaBoard}
+                openSheetFor={openSheetFor}
               />
 
               <div className={styles.initOverlay}>
