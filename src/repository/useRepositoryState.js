@@ -17,6 +17,7 @@ function cloneIfObject(value) {
 export default function useRepositoryState(key, initialValue) {
   const subscriberIdRef = useRef(nextSubscriberId());
   const suppressNextWriteRef = useRef(false);
+  const pendingHydrationRef = useRef(null);
 
   const resolveFallback = () => (typeof initialValue === 'function' ? initialValue() : initialValue);
 
@@ -26,7 +27,9 @@ export default function useRepositoryState(key, initialValue) {
 
   useEffect(() => {
     const fallback = resolveFallback();
-    setValue(repository.readJson(key, fallback));
+    const nextValue = repository.readJson(key, fallback);
+    pendingHydrationRef.current = { key, value: nextValue };
+    setValue(nextValue);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -44,6 +47,13 @@ export default function useRepositoryState(key, initialValue) {
   }, [key]);
 
   useEffect(() => {
+    const pendingHydration = pendingHydrationRef.current;
+    if (pendingHydration?.key === key) {
+      if (Object.is(value, pendingHydration.value)) {
+        pendingHydrationRef.current = null;
+      }
+      return;
+    }
     if (suppressNextWriteRef.current) {
       suppressNextWriteRef.current = false;
       return;

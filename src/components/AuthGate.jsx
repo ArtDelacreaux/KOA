@@ -212,6 +212,13 @@ export default function AuthGate({ children }) {
         return;
       }
 
+      const cloudStatus =
+        typeof repository?.getCloudStatus === 'function' ? repository.getCloudStatus() : null;
+      if (silent && phaseRef.current === 'ready' && cloudStatus?.ready) {
+        refreshCloudStatus();
+        return;
+      }
+
       if (!silent) setPhase('authorizing');
       const memberResult = await claimCampaignMembership(supabase, campaignId);
       if (sessionRunRef.current !== runId) return;
