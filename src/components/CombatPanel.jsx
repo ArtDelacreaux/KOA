@@ -1818,11 +1818,14 @@ function BattlefieldScene({
   removeCombatant,
 }) {
   const stageRef = useRef(null);
+  const contextMenuRef = useRef(null);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 0, panY: 0 });
+  const [fitZoom, setFitZoom] = useState(1);
   const [panState, setPanState] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
   const [dragState, setDragState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ left: 12, top: 12, ready: false });
   const boardWidth = Math.max(DEFAULT_BOARD_WIDTH, toInt(battlefield.mediaWidth, 0) || DEFAULT_BOARD_WIDTH);
   const boardHeight = Math.max(DEFAULT_BOARD_HEIGHT, toInt(battlefield.mediaHeight, 0) || DEFAULT_BOARD_HEIGHT);
   const cellSize = clamp(toInt(battlefield.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192);
@@ -1838,7 +1841,8 @@ function BattlefieldScene({
     if (!stage) return;
     const rect = stage.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
-    const zoom = clamp(Math.min((rect.width - 32) / boardWidth, (rect.height - 32) / boardHeight), 0.2, 1.4);
+    const zoom = clamp(Math.max(rect.width / boardWidth, rect.height / boardHeight), 0.2, 2.25);
+    setFitZoom(zoom);
     setViewState({
       zoom,
       panX: Math.round((rect.width - boardWidth * zoom) / 2),
@@ -1945,13 +1949,34 @@ function BattlefieldScene({
     };
   }, [contextMenu]);
 
+  useLayoutEffect(() => {
+    if (!contextMenu) {
+      setContextMenuPosition({ left: 12, top: 12, ready: false });
+      return;
+    }
+    const placeMenu = () => {
+      const menuEl = contextMenuRef.current;
+      if (!menuEl) return;
+      const menuRect = menuEl.getBoundingClientRect();
+      const gutter = 12;
+      const desiredLeft = contextMenu.clientX + 10;
+      const desiredTop = contextMenu.clientY + 10;
+      const left = clamp(desiredLeft, gutter, Math.max(gutter, window.innerWidth - menuRect.width - gutter));
+      const top = clamp(desiredTop, gutter, Math.max(gutter, window.innerHeight - menuRect.height - gutter));
+      setContextMenuPosition({ left, top, ready: true });
+    };
+    placeMenu();
+    window.addEventListener('resize', placeMenu);
+    return () => window.removeEventListener('resize', placeMenu);
+  }, [contextMenu]);
+
   const handleStageWheel = useCallback((event) => {
     event.preventDefault();
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
     const pointerX = event.clientX - rect.left;
     const pointerY = event.clientY - rect.top;
-    const nextZoom = clamp(viewState.zoom + (event.deltaY < 0 ? 0.1 : -0.1), 0.2, 2.25);
+    const nextZoom = clamp(viewState.zoom + (event.deltaY < 0 ? 0.1 : -0.1), fitZoom, 2.25);
     const boardX = (pointerX - viewState.panX) / viewState.zoom;
     const boardY = (pointerY - viewState.panY) / viewState.zoom;
     setViewState({
@@ -1959,7 +1984,7 @@ function BattlefieldScene({
       panX: pointerX - boardX * nextZoom,
       panY: pointerY - boardY * nextZoom,
     });
-  }, [viewState.panX, viewState.panY, viewState.zoom]);
+  }, [fitZoom, viewState.panX, viewState.panY, viewState.zoom]);
 
   const handleStagePointerDown = useCallback((event) => {
     if (event.button !== 0) return;
@@ -2046,16 +2071,136 @@ function BattlefieldScene({
   const menuCombatant = contextMenu?.type === 'token'
     ? combatants.find((combatant) => combatant.id === contextMenu.combatantId) || null
     : null;
-  const stageRect = stageRef.current?.getBoundingClientRect();
-  const menuLeft = contextMenu && stageRect
-    ? clamp(contextMenu.clientX - stageRect.left, 12, Math.max(12, stageRect.width - 220))
-    : 12;
-  const menuTop = contextMenu && stageRect
-    ? clamp(contextMenu.clientY - stageRect.top, 12, Math.max(12, stageRect.height - 320))
-    : 12;
   const selectedCombatant = selectedId
     ? combatants.find((combatant) => combatant.id === selectedId) || null
     : null;
+
+  const contextMenuNode = contextMenu ? createPortal(
+    <div
+      ref={contextMenuRef}
+      className={styles.boardContextMenu}
+      style={{
+        left: contextMenuPosition.left,
+        top: contextMenuPosition.top,
+        visibility: contextMenuPosition.ready ? 'visible' : 'hidden',
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {contextMenu.type === 'board' ? (
+        <>
+          <div className={styles.boardContextTitle}>Cell {contextMenu.cell.col}, {contextMenu.cell.row}</div>
+          {selectedCombatant && canMoveCombatant(selectedCombatant) ? (
+            <button
+              type="button"
+              className={styles.boardContextAction}
+              onClick={() => {
+                playNav();
+                moveCombatantToCell(selectedCombatant.id, contextMenu.cell.col, contextMenu.cell.row);
+                setContextMenu(null);
+              }}
+            >
+              Move selected here
+            </button>
+          ) : (
+            <div className={styles.boardContextHint}>Select a token to move it here.</div>
+          )}
+        </>
+      ) : menuCombatant ? (
+        <>
+          <div className={styles.boardContextTitle}>{menuCombatant.name}</div>
+          <button
+            type="button"
+            className={styles.boardContextAction}
+            onClick={() => {
+              playNav();
+              openEditorFor(menuCombatant.id);
+              setContextMenu(null);
+            }}
+          >
+            Open details
+          </button>
+          <div className={styles.boardContextRow}>
+            {[-5, -1, 1, 5].map((amount) => (
+              <button
+                key={`${menuCombatant.id}-${amount}`}
+                type="button"
+                className={styles.boardContextChip}
+                disabled={!canQuickEditCombatant(menuCombatant)}
+                onClick={() => {
+                  playNav();
+                  adjustCombatantHp(menuCombatant.id, amount);
+                  setContextMenu(null);
+                }}
+              >
+                HP {amount > 0 ? `+${amount}` : amount}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className={styles.boardContextAction}
+            disabled={!canQuickEditCombatant(menuCombatant)}
+            onClick={() => {
+              playNav();
+              toggleCombatantDead(menuCombatant.id);
+              setContextMenu(null);
+            }}
+          >
+            {menuCombatant.dead ? 'Mark alive' : 'Mark dead'}
+          </button>
+          <div className={styles.boardContextDivider} />
+          <div className={styles.boardContextSubtitle}>Conditions</div>
+          <div className={styles.boardContextRow}>
+            {BOARD_STATUS_PRESETS.map((statusLabel) => {
+              const active = Array.isArray(menuCombatant.status)
+                && menuCombatant.status.some((entry) => tokenKey(entry) === tokenKey(statusLabel));
+              return (
+                <button
+                  key={`${menuCombatant.id}-${statusLabel}`}
+                  type="button"
+                  className={`${styles.boardContextChip} ${active ? styles.boardContextChipActive : ''}`}
+                  disabled={!canQuickEditCombatant(menuCombatant)}
+                  onClick={() => {
+                    playNav();
+                    toggleCombatantStatus(menuCombatant.id, statusLabel);
+                    setContextMenu(null);
+                  }}
+                >
+                  {statusLabel}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className={styles.boardContextAction}
+            disabled={!canQuickEditCombatant(menuCombatant)}
+            onClick={() => {
+              playNav();
+              clearCombatantStatuses(menuCombatant.id);
+              setContextMenu(null);
+            }}
+          >
+            Clear conditions
+          </button>
+          <button
+            type="button"
+            className={`${styles.boardContextAction} ${styles.boardContextDanger}`}
+            disabled={!canQuickEditCombatant(menuCombatant)}
+            onClick={() => {
+              playNav();
+              removeCombatant(menuCombatant.id);
+              setContextMenu(null);
+            }}
+          >
+            Remove combatant
+          </button>
+        </>
+      ) : null}
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div className={styles.sceneRoot}>
@@ -2114,7 +2259,7 @@ function BattlefieldScene({
           <div className={styles.boardHudMeta}>
             {battlefieldMediaUrl ? 'Uploaded map' : 'Preset backdrop'} • {cellSize}px grid • Drag to move, wheel to zoom
           </div>
-          <div className={styles.boardHudMeta}>Double-click a token to open details. Right-click for quick actions.</div>
+          <div className={styles.boardHudMeta}>Right-click a token for details and quick actions.</div>
         </div>
 
         <button
@@ -2129,126 +2274,8 @@ function BattlefieldScene({
           Reset View
         </button>
 
-        {contextMenu && (
-          <div
-            className={styles.boardContextMenu}
-            style={{ left: menuLeft, top: menuTop }}
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            {contextMenu.type === 'board' ? (
-              <>
-                <div className={styles.boardContextTitle}>Cell {contextMenu.cell.col}, {contextMenu.cell.row}</div>
-                {selectedCombatant && canMoveCombatant(selectedCombatant) ? (
-                  <button
-                    type="button"
-                    className={styles.boardContextAction}
-                    onClick={() => {
-                      playNav();
-                      moveCombatantToCell(selectedCombatant.id, contextMenu.cell.col, contextMenu.cell.row);
-                      setContextMenu(null);
-                    }}
-                  >
-                    Move selected here
-                  </button>
-                ) : (
-                  <div className={styles.boardContextHint}>Select a token to move it here.</div>
-                )}
-              </>
-            ) : menuCombatant ? (
-              <>
-                <div className={styles.boardContextTitle}>{menuCombatant.name}</div>
-                <button
-                  type="button"
-                  className={styles.boardContextAction}
-                  onClick={() => {
-                    playNav();
-                    openEditorFor(menuCombatant.id);
-                    setContextMenu(null);
-                  }}
-                >
-                  Open details
-                </button>
-                <div className={styles.boardContextRow}>
-                  {[-5, -1, 1, 5].map((amount) => (
-                    <button
-                      key={`${menuCombatant.id}-${amount}`}
-                      type="button"
-                      className={styles.boardContextChip}
-                      disabled={!canQuickEditCombatant(menuCombatant)}
-                      onClick={() => {
-                        playNav();
-                        adjustCombatantHp(menuCombatant.id, amount);
-                        setContextMenu(null);
-                      }}
-                    >
-                      HP {amount > 0 ? `+${amount}` : amount}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className={styles.boardContextAction}
-                  disabled={!canQuickEditCombatant(menuCombatant)}
-                  onClick={() => {
-                    playNav();
-                    toggleCombatantDead(menuCombatant.id);
-                    setContextMenu(null);
-                  }}
-                >
-                  {menuCombatant.dead ? 'Mark alive' : 'Mark dead'}
-                </button>
-                <div className={styles.boardContextDivider} />
-                <div className={styles.boardContextSubtitle}>Conditions</div>
-                <div className={styles.boardContextRow}>
-                  {BOARD_STATUS_PRESETS.map((statusLabel) => {
-                    const active = Array.isArray(menuCombatant.status)
-                      && menuCombatant.status.some((entry) => tokenKey(entry) === tokenKey(statusLabel));
-                    return (
-                      <button
-                        key={`${menuCombatant.id}-${statusLabel}`}
-                        type="button"
-                        className={`${styles.boardContextChip} ${active ? styles.boardContextChipActive : ''}`}
-                        disabled={!canQuickEditCombatant(menuCombatant)}
-                        onClick={() => {
-                          playNav();
-                          toggleCombatantStatus(menuCombatant.id, statusLabel);
-                          setContextMenu(null);
-                        }}
-                      >
-                        {statusLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-                <button
-                  type="button"
-                  className={styles.boardContextAction}
-                  disabled={!canQuickEditCombatant(menuCombatant)}
-                  onClick={() => {
-                    playNav();
-                    clearCombatantStatuses(menuCombatant.id);
-                    setContextMenu(null);
-                  }}
-                >
-                  Clear conditions
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.boardContextAction} ${styles.boardContextDanger}`}
-                  disabled={!canQuickEditCombatant(menuCombatant)}
-                  onClick={() => {
-                    playNav();
-                    removeCombatant(menuCombatant.id);
-                    setContextMenu(null);
-                  }}
-                >
-                  Remove combatant
-                </button>
-              </>
-            ) : null}
-          </div>
-        )}
       </div>
+      {contextMenuNode}
     </div>
   );
 }
@@ -2541,44 +2568,6 @@ export default function CombatPanel({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [cropOpen, addModalOpen, restrictedModalOpen, sheetActionDetail, sheetInventoryModalOpen, editorOpen, listEditorMode, activeSpellDraftId, featureRawEditorOpen]);
-
-  // Header measurement (prevents overlap with content below)
-  const headerRef = useRef(null);
-  const [headerH, setHeaderH] = useState(108);
-  useLayoutEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-
-    let rafId = 0;
-    const measure = () => {
-      const h = Math.ceil(el.getBoundingClientRect().height || 0);
-      if (!h) return;
-      setHeaderH((prev) => (prev === h ? prev : h));
-    };
-    const scheduleMeasure = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(measure);
-    };
-
-    measure();
-    window.addEventListener('resize', scheduleMeasure);
-
-    let ro = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(scheduleMeasure);
-      ro.observe(el);
-    }
-
-    if (document.fonts?.ready) {
-      document.fonts.ready.then(scheduleMeasure).catch(() => {});
-    }
-
-    return () => {
-      window.removeEventListener('resize', scheduleMeasure);
-      if (ro) ro.disconnect();
-      if (rafId) cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   // ensure pick stays valid if roster changes
   useEffect(() => {
@@ -4739,10 +4728,7 @@ export default function CombatPanel({
   };
 
   // ── Dimensions ─────────────────────────────────────────────────────────────
-  const HUD_GAP = 10;
-  const WINDOW_BAR_H = 78;
-  const PAD    = 14;
-  const WINDOW_MAX_W = 1560;
+  const PAD    = 0;
 
   // ── Shared class helpers ────────────────────────────────────────────────────
   const btnClass = (variant = 'gold', size = 'md', extra = '') => {
@@ -4782,89 +4768,65 @@ export default function CombatPanel({
     >
       <div className={styles.root}>
 
-        {/* ── HEADER ── */}
-        <div ref={headerRef} className={styles.header}>
-          <div className={styles.headerRow}>
-            <button
-              onClick={() => { cinematicNav('menu'); }}
-              onMouseEnter={playHover}
-              className={styles.returnBtn}
-            >
-              ← RETURN
-            </button>
-
-            <div className={styles.titleWrap}>
-              <div className={styles.titleKicker}>
-                ✦ &nbsp; BATTLEFIELD COMMAND &nbsp; ✦
-              </div>
-              <div className={styles.titleMain}>
-                COMBAT TRACKER
-              </div>
-            </div>
-
-            <div className={styles.headerSpacer} />
-          </div>
+        <div className={styles.header}>
+          <button
+            onClick={() => { cinematicNav('menu'); }}
+            onMouseEnter={playHover}
+            className={styles.returnBtn}
+          >
+            ← RETURN
+          </button>
         </div>
 
-        {/* ── COMBAT WINDOW (separate from header) ── */}
         <div
           className={styles.combatWindow}
           style={{
-            width: `min(${WINDOW_MAX_W}px, calc(100% - ${PAD * 2}px))`,
-            top: headerH + HUD_GAP,
+            left: PAD,
+            right: PAD,
+            transform: 'none',
+            top: PAD,
             bottom: PAD,
           }}
         >
           {/* Vignette overlay */}
           <div className={styles.windowVignette} />
 
-          {/* ── WINDOW CONTROLS (moved out of top header) ── */}
-          <div
-            className={styles.windowControls}
-            style={{
-              left: PAD,
-              right: PAD,
-              top: PAD,
-              height: WINDOW_BAR_H,
-            }}
-          >
-            <div />
+          <div className={styles.floatingRoundBar}>
+            {canManageCombat && (
+              <button
+                className={btnClass('gold')}
+                onMouseEnter={playHover}
+                onClick={() => { playNav(); gotoPrev(); }}
+                disabled={!canWriteCombat}
+              >
+                ◀ Prev
+              </button>
+            )}
+            <div className={styles.roundBadge}>
+              <span className={styles.roundLabel}>Round</span>
+              <span className={styles.roundValue}>{encounter.round}</span>
+            </div>
+            {canManageCombat && (
+              <button
+                className={btnClass('gold')}
+                onMouseEnter={playHover}
+                onClick={() => { playNav(); gotoNext(); }}
+                disabled={!canWriteCombat}
+              >
+                Next ▶
+              </button>
+            )}
+          </div>
 
-            <div className={styles.windowControlsCenter}>
-                {canManageCombat && (
-                  <button
-                    className={btnClass('gold')}
-                    onMouseEnter={playHover}
-                    onClick={() => { playNav(); gotoPrev(); }}
-                    disabled={!canWriteCombat}
-                  >
-                    ◀ Prev
-                  </button>
-                )}
-                <div className={styles.roundBadge}>
-                  <span className={styles.roundLabel}>Round</span>
-                  <span className={styles.roundValue}>{encounter.round}</span>
-                </div>
-                {canManageCombat && (
-                  <button
-                    className={btnClass('gold')}
-                    onMouseEnter={playHover}
-                    onClick={() => { playNav(); gotoNext(); }}
-                    disabled={!canWriteCombat}
-                  >
-                    Next ▶
-                  </button>
-                )}
-              </div>
-
+          <div className={styles.floatingConfigDock}>
+            <input
+              ref={battlefieldFileInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className={styles.hiddenInput}
+              onChange={handleBattlefieldMediaUpload}
+            />
             <div className={styles.controlsRight}>
-              <input
-                ref={battlefieldFileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className={styles.hiddenInput}
-                onChange={handleBattlefieldMediaUpload}
-              />
               <label className={styles.sceneLabel}>Scene</label>
               <select
                 value={battleBg || ''}
@@ -4947,13 +4909,12 @@ export default function CombatPanel({
             </div>
           </div>
 
-        {/* ── MAIN LAYOUT ── */}
-        <div
+          <div
           className={styles.mainLayout}
           style={{
             left: PAD,
             right: PAD,
-            top: PAD + WINDOW_BAR_H + 8,
+            top: PAD,
             bottom: PAD,
           }}
         >
