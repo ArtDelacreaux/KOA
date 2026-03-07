@@ -229,10 +229,13 @@ const COMBAT_MEDIA_BUCKET = 'koa-combat-media';
 const BOARD_UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
 const BOARD_ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible'];
+const DRAW_TOOL_COLORS = ['#ffd86b', '#8bd3ff', '#ff7a7a', '#c7a2ff', '#f8fafc'];
+const DRAW_STROKE_SIZES = [4, 8, 14];
 const DEFAULT_BOARD_WIDTH = 2048;
 const DEFAULT_BOARD_HEIGHT = 1365;
 const TOKEN_SCALE_MIN = 0.35;
 const TOKEN_SCALE_MAX = 3;
+const TOKEN_CROP_OUTPUT_SIZE = 1024;
 const DEFAULT_BATTLEFIELD = Object.freeze({
   backgroundSrc: BATTLE_BACKGROUNDS[0]?.src || '',
   mediaStoragePath: '',
@@ -244,6 +247,7 @@ const DEFAULT_BATTLEFIELD = Object.freeze({
   gridCellSize: 72,
   gridOffsetX: 0,
   gridOffsetY: 0,
+  drawings: [],
 });
 const PROFILE_SYNC_FIELDS = new Set([
   'race',
@@ -452,7 +456,115 @@ function normalizeBattlefield(raw) {
     gridCellSize: clamp(toInt(source.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192),
     gridOffsetX: clamp(toInt(source.gridOffsetX, DEFAULT_BATTLEFIELD.gridOffsetX), -2048, 2048),
     gridOffsetY: clamp(toInt(source.gridOffsetY, DEFAULT_BATTLEFIELD.gridOffsetY), -2048, 2048),
+    drawings: normalizeBattlefieldDrawings(source.drawings),
   };
+}
+
+function roundBoardCoordinate(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
+function normalizeBattlefieldDrawingPoint(raw) {
+  const x = Array.isArray(raw) ? raw[0] : raw?.x;
+  const y = Array.isArray(raw) ? raw[1] : raw?.y;
+  const parsedX = Number(x);
+  const parsedY = Number(y);
+  if (!Number.isFinite(parsedX) || !Number.isFinite(parsedY)) return null;
+  return {
+    x: roundBoardCoordinate(parsedX),
+    y: roundBoardCoordinate(parsedY),
+  };
+}
+
+function normalizeBattlefieldDrawing(raw, index = 0) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const requestedColor = cleanText(source.color).toLowerCase();
+  const points = (Array.isArray(source.points) ? source.points : [])
+    .map((point) => normalizeBattlefieldDrawingPoint(point))
+    .filter(Boolean);
+  if (points.length === 1) {
+    points.push({ ...points[0] });
+  }
+  return {
+    id: cleanText(source.id) || `drawing-${index + 1}`,
+    color: DRAW_TOOL_COLORS.includes(requestedColor) ? requestedColor : DRAW_TOOL_COLORS[0],
+    size: clamp(toInt(source.size, DRAW_STROKE_SIZES[1]), 2, 24),
+    points,
+  };
+}
+
+function normalizeBattlefieldDrawings(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((entry, index) => normalizeBattlefieldDrawing(entry, index))
+    .filter((entry) => entry.points.length >= 2);
+}
+
+function battlefieldDrawingsEqual(a, b) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  if (left.length !== right.length) return false;
+  return left.every((drawing, index) => {
+    const other = right[index];
+    if (!other) return false;
+    if (drawing.id !== other.id || drawing.color !== other.color || drawing.size !== other.size) return false;
+    if (drawing.points.length !== other.points.length) return false;
+    return drawing.points.every((point, pointIndex) => {
+      const otherPoint = other.points[pointIndex];
+      return !!otherPoint && point.x === otherPoint.x && point.y === otherPoint.y;
+    });
+  });
+}
+
+function battlefieldStateEqual(a, b) {
+  if (!a || !b) return false;
+  return (
+    a.backgroundSrc === b.backgroundSrc
+    && a.mediaStoragePath === b.mediaStoragePath
+    && a.mediaMimeType === b.mediaMimeType
+    && a.mediaWidth === b.mediaWidth
+    && a.mediaHeight === b.mediaHeight
+    && a.mediaUpdatedAt === b.mediaUpdatedAt
+    && a.gridEnabled === b.gridEnabled
+    && a.gridCellSize === b.gridCellSize
+    && a.gridOffsetX === b.gridOffsetX
+    && a.gridOffsetY === b.gridOffsetY
+    && battlefieldDrawingsEqual(a.drawings, b.drawings)
+  );
+}
+
+function createBattlefieldSvgPath(points) {
+  if (!Array.isArray(points) || !points.length) return '';
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+    .join(' ');
+}
+
+function pointToSegmentDistance(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (!dx && !dy) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = clamp(
+    (((point.x - start.x) * dx) + ((point.y - start.y) * dy)) / ((dx * dx) + (dy * dy)),
+    0,
+    1
+  );
+  const projectedX = start.x + (dx * t);
+  const projectedY = start.y + (dy * t);
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+}
+
+function findDrawingIndexNearPoint(drawings, point, threshold = 14) {
+  const list = Array.isArray(drawings) ? drawings : [];
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const drawing = list[index];
+    const points = Array.isArray(drawing?.points) ? drawing.points : [];
+    for (let pointIndex = 0; pointIndex < points.length - 1; pointIndex += 1) {
+      if (pointToSegmentDistance(point, points[pointIndex], points[pointIndex + 1]) <= threshold) {
+        return index;
+      }
+    }
+  }
+  return -1;
 }
 
 function sanitizeUploadFileName(name) {
@@ -1888,6 +2000,12 @@ function BattlefieldScene({
   clearCombatantStatuses,
   removeCombatant,
   openSheetFor,
+  drawings,
+  canDraw,
+  commitDrawing,
+  removeDrawing,
+  undoDrawing,
+  clearDrawings,
 }) {
   const stageRef = useRef(null);
   const contextMenuRef = useRef(null);
@@ -1899,6 +2017,11 @@ function BattlefieldScene({
   const [rotateState, setRotateState] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ left: 12, top: 12, ready: false });
+  const [boardTool, setBoardTool] = useState('pan');
+  const [drawColor, setDrawColor] = useState(DRAW_TOOL_COLORS[0]);
+  const [drawSize, setDrawSize] = useState(DRAW_STROKE_SIZES[1]);
+  const [drawDraft, setDrawDraft] = useState(null);
+  const [eraseState, setEraseState] = useState(null);
   const boardWidth = Math.max(DEFAULT_BOARD_WIDTH, toInt(battlefield.mediaWidth, 0) || DEFAULT_BOARD_WIDTH);
   const boardHeight = Math.max(DEFAULT_BOARD_HEIGHT, toInt(battlefield.mediaHeight, 0) || DEFAULT_BOARD_HEIGHT);
   const cellSize = clamp(toInt(battlefield.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192);
@@ -1909,6 +2032,8 @@ function BattlefieldScene({
   const maxGridCol = Math.max(0, Math.floor((boardWidth - gridOffsetX - 1) / cellSize));
   const maxGridRow = Math.max(0, Math.floor((boardHeight - gridOffsetY - 1) / cellSize));
   const minZoom = Math.max(0.1, fitZoom * 0.25);
+  const normalizedDrawings = useMemo(() => normalizeBattlefieldDrawings(drawings), [drawings]);
+  const interactionMode = canDraw ? boardTool : 'pan';
 
   const fitBoardToStage = useCallback(() => {
     const stage = stageRef.current;
@@ -1963,6 +2088,92 @@ function BattlefieldScene({
     x: gridOffsetX + (clamp(toInt(col, 0), 0, maxGridCol) * cellSize) + cellSize / 2,
     y: gridOffsetY + (clamp(toInt(row, 0), 0, maxGridRow) * cellSize) + cellSize / 2,
   }), [cellSize, gridOffsetX, gridOffsetY, maxGridCol, maxGridRow]);
+
+  const clampBoardPoint = useCallback((point) => ({
+    x: clamp(roundBoardCoordinate(point?.x ?? 0), 0, boardWidth),
+    y: clamp(roundBoardCoordinate(point?.y ?? 0), 0, boardHeight),
+  }), [boardHeight, boardWidth]);
+
+  useEffect(() => {
+    if (canDraw) return;
+    setBoardTool('pan');
+    setDrawDraft(null);
+    setEraseState(null);
+  }, [canDraw]);
+
+  useEffect(() => {
+    setDrawDraft(null);
+    setEraseState(null);
+  }, [boardTool]);
+
+  useEffect(() => {
+    if (boardTool === 'erase' && normalizedDrawings.length === 0) {
+      setBoardTool('pan');
+    }
+  }, [boardTool, normalizedDrawings.length]);
+
+  const eraseDrawingAtClientPoint = useCallback((clientX, clientY) => {
+    if (!canDraw || normalizedDrawings.length === 0) return false;
+    const boardPoint = clampBoardPoint(clientToBoardPoint(clientX, clientY));
+    const hitIndex = findDrawingIndexNearPoint(
+      normalizedDrawings,
+      boardPoint,
+      Math.max(drawSize * 1.4, 12)
+    );
+    if (hitIndex < 0) return false;
+    removeDrawing(normalizedDrawings[hitIndex].id);
+    return true;
+  }, [canDraw, clampBoardPoint, clientToBoardPoint, drawSize, normalizedDrawings, removeDrawing]);
+
+  useEffect(() => {
+    if (!drawDraft) return undefined;
+    const onPointerMove = (event) => {
+      const nextPoint = clampBoardPoint(clientToBoardPoint(event.clientX, event.clientY));
+      setDrawDraft((prev) => {
+        if (!prev) return prev;
+        const lastPoint = prev.points[prev.points.length - 1];
+        if (lastPoint && Math.hypot(nextPoint.x - lastPoint.x, nextPoint.y - lastPoint.y) < 2) {
+          return prev;
+        }
+        const nextPoints = [...prev.points, nextPoint];
+        return { ...prev, points: nextPoints.slice(-600) };
+      });
+    };
+    const onPointerUp = () => {
+      setDrawDraft((prev) => {
+        if (!prev || prev.points.length === 0) return null;
+        const points = prev.points.length >= 2 ? prev.points : [...prev.points, { ...prev.points[0] }];
+        commitDrawing({ ...prev, points });
+        return null;
+      });
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [clampBoardPoint, clientToBoardPoint, commitDrawing, drawDraft]);
+
+  useEffect(() => {
+    if (!eraseState?.active) return undefined;
+    const onPointerMove = (event) => {
+      eraseDrawingAtClientPoint(event.clientX, event.clientY);
+    };
+    const onPointerUp = () => {
+      setEraseState(null);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp, { once: true });
+    window.addEventListener('pointercancel', onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [eraseDrawingAtClientPoint, eraseState]);
 
   useEffect(() => {
     if (!panState?.active) return undefined;
@@ -2112,6 +2323,29 @@ function BattlefieldScene({
   const handleStagePointerDown = useCallback((event) => {
     if (event.button !== 0) return;
     setContextMenu(null);
+    if (interactionMode === 'draw') {
+      event.preventDefault();
+      setPanState(null);
+      setDragState(null);
+      setRotateState(null);
+      const startPoint = clampBoardPoint(clientToBoardPoint(event.clientX, event.clientY));
+      setDrawDraft({
+        id: createId('battle-draw'),
+        color: drawColor,
+        size: drawSize,
+        points: [startPoint],
+      });
+      return;
+    }
+    if (interactionMode === 'erase') {
+      event.preventDefault();
+      setPanState(null);
+      setDragState(null);
+      setRotateState(null);
+      eraseDrawingAtClientPoint(event.clientX, event.clientY);
+      setEraseState({ active: true });
+      return;
+    }
     setPanState({
       active: true,
       startX: event.clientX,
@@ -2119,10 +2353,20 @@ function BattlefieldScene({
       originX: viewState.panX,
       originY: viewState.panY,
     });
-  }, [viewState.panX, viewState.panY]);
+  }, [
+    clampBoardPoint,
+    clientToBoardPoint,
+    drawColor,
+    drawSize,
+    eraseDrawingAtClientPoint,
+    interactionMode,
+    viewState.panX,
+    viewState.panY,
+  ]);
 
   const handleStageContextMenu = useCallback((event) => {
     event.preventDefault();
+    if (interactionMode !== 'pan') return;
     const point = clientToBoardPoint(event.clientX, event.clientY);
     const cell = boardPointToCell(point);
     setContextMenu({
@@ -2131,7 +2375,7 @@ function BattlefieldScene({
       clientY: event.clientY,
       cell,
     });
-  }, [boardPointToCell, clientToBoardPoint]);
+  }, [boardPointToCell, clientToBoardPoint, interactionMode]);
 
   const renderTokenAt = (combatant) => {
     const dragging = dragState?.combatantId === combatant.id;
@@ -2139,91 +2383,98 @@ function BattlefieldScene({
     const center = dragging
       ? { x: dragState.previewX, y: dragState.previewY }
       : cellCenter(combatant.gridCol, combatant.gridRow);
+    const stageX = viewState.panX + center.x * viewState.zoom;
+    const stageY = viewState.panY + center.y * viewState.zoom;
     return (
       <div
         key={combatant.id}
         className={`${styles.boardTokenAnchor} ${dragging ? styles.boardTokenDragging : ''}`}
         style={{
-          left: `${center.x}px`,
-          top: `${center.y}px`,
+          left: `${stageX}px`,
+          top: `${stageY}px`,
           zIndex: dragging ? 30 : (combatant.id === selectedId ? 20 : combatant.id === activeCombatantId ? 16 : 12),
         }}
       >
-        <BattlefieldToken
-          c={combatant}
-          isActive={combatant.id === activeCombatantId}
-          isSelected={combatant.id === selectedId}
-          canRotate={canMoveCombatant(combatant)}
-          isRotating={rotating}
-          size={tokenSize}
-          flipped={(combatant.side || 'Enemy') !== 'Enemy'}
-          onHover={playHover}
-          onRotateHandlePointerDown={(event) => {
-            if (event.button !== 0) return;
-            event.preventDefault();
-            event.stopPropagation();
-            const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
-            const centerClientPoint = boardPointToClientPoint(centerPoint);
-            const startRotation = normalizeTokenRotation(combatant.tokenRotation, 0);
-            setContextMenu(null);
-            setPanState(null);
-            setDragState(null);
-            setSelectedId(combatant.id);
-            if (!canMoveCombatant(combatant)) return;
-            setRotateState({
-              active: true,
-              combatantId: combatant.id,
-              centerClientX: centerClientPoint.x,
-              centerClientY: centerClientPoint.y,
-              startPointerAngle: pointerAngleFromCenter(
-                centerClientPoint.x,
-                centerClientPoint.y,
-                event.clientX,
-                event.clientY
-              ),
-              startRotation,
-              previewRotation: startRotation,
-            });
-          }}
-          rotationOverride={rotating ? rotateState.previewRotation : null}
-          title={`${combatant.name} — drag to move, hover for rotate handle, double-click to open sheet`}
-          onPointerDown={(event) => {
-            if (event.button !== 0) return;
-            event.stopPropagation();
-            const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
-            setContextMenu(null);
-            setRotateState(null);
-            setSelectedId(combatant.id);
-            if (!canMoveCombatant(combatant)) return;
-            setDragState({
-              active: true,
-              combatantId: combatant.id,
-              startClientX: event.clientX,
-              startClientY: event.clientY,
-              originX: centerPoint.x,
-              originY: centerPoint.y,
-              previewX: centerPoint.x,
-              previewY: centerPoint.y,
-              moved: false,
-            });
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setSelectedId(combatant.id);
-            setContextMenu({
-              type: 'token',
-              clientX: event.clientX,
-              clientY: event.clientY,
-              combatantId: combatant.id,
-            });
-          }}
-          onDoubleClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            openSheetFor(combatant.id);
-          }}
-        />
+        <div
+          className={styles.boardTokenScale}
+          style={{ transform: `scale(${viewState.zoom})` }}
+        >
+          <BattlefieldToken
+            c={combatant}
+            isActive={combatant.id === activeCombatantId}
+            isSelected={combatant.id === selectedId}
+            canRotate={canMoveCombatant(combatant)}
+            isRotating={rotating}
+            size={tokenSize}
+            flipped={(combatant.side || 'Enemy') !== 'Enemy'}
+            onHover={playHover}
+            onRotateHandlePointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              event.stopPropagation();
+              const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
+              const centerClientPoint = boardPointToClientPoint(centerPoint);
+              const startRotation = normalizeTokenRotation(combatant.tokenRotation, 0);
+              setContextMenu(null);
+              setPanState(null);
+              setDragState(null);
+              setSelectedId(combatant.id);
+              if (!canMoveCombatant(combatant)) return;
+              setRotateState({
+                active: true,
+                combatantId: combatant.id,
+                centerClientX: centerClientPoint.x,
+                centerClientY: centerClientPoint.y,
+                startPointerAngle: pointerAngleFromCenter(
+                  centerClientPoint.x,
+                  centerClientPoint.y,
+                  event.clientX,
+                  event.clientY
+                ),
+                startRotation,
+                previewRotation: startRotation,
+              });
+            }}
+            rotationOverride={rotating ? rotateState.previewRotation : null}
+            title={`${combatant.name} — drag to move, hover for rotate handle, double-click to open sheet`}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.stopPropagation();
+              const centerPoint = cellCenter(combatant.gridCol, combatant.gridRow);
+              setContextMenu(null);
+              setRotateState(null);
+              setSelectedId(combatant.id);
+              if (!canMoveCombatant(combatant)) return;
+              setDragState({
+                active: true,
+                combatantId: combatant.id,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                originX: centerPoint.x,
+                originY: centerPoint.y,
+                previewX: centerPoint.x,
+                previewY: centerPoint.y,
+                moved: false,
+              });
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedId(combatant.id);
+              setContextMenu({
+                type: 'token',
+                clientX: event.clientX,
+                clientY: event.clientY,
+                combatantId: combatant.id,
+              });
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openSheetFor(combatant.id);
+            }}
+          />
+        </div>
       </div>
     );
   };
@@ -2370,7 +2621,14 @@ function BattlefieldScene({
         onWheel={handleStageWheel}
         onPointerDown={handleStagePointerDown}
         onContextMenu={handleStageContextMenu}
-        style={{ cursor: dragState ? 'grabbing' : isPanning ? 'grabbing' : 'grab' }}
+        style={{
+          cursor:
+            drawDraft || eraseState?.active || interactionMode === 'draw' || interactionMode === 'erase'
+              ? 'crosshair'
+              : dragState || isPanning
+                ? 'grabbing'
+                : 'grab',
+        }}
       >
         <div
           className={styles.boardLayer}
@@ -2402,15 +2660,164 @@ function BattlefieldScene({
               }}
             />
           )}
-          <div className={styles.boardTokenLayer}>
-            {combatants.map((combatant) => renderTokenAt(combatant))}
-          </div>
+          {(normalizedDrawings.length > 0 || drawDraft) && (
+            <svg
+              className={styles.boardDrawingLayer}
+              viewBox={`0 0 ${boardWidth} ${boardHeight}`}
+              style={{ width: boardWidth, height: boardHeight }}
+              aria-hidden="true"
+            >
+              {normalizedDrawings.map((drawing) => (
+                <path
+                  key={drawing.id}
+                  d={createBattlefieldSvgPath(drawing.points)}
+                  stroke={drawing.color}
+                  strokeWidth={drawing.size}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              ))}
+              {drawDraft && (
+                <path
+                  d={createBattlefieldSvgPath(drawDraft.points)}
+                  stroke={drawDraft.color}
+                  strokeWidth={drawDraft.size}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  fill="none"
+                />
+              )}
+            </svg>
+          )}
+        </div>
+        <div
+          className={styles.boardTokenLayer}
+          style={{ pointerEvents: interactionMode === 'pan' ? 'auto' : 'none' }}
+        >
+          {combatants.map((combatant) => renderTokenAt(combatant))}
         </div>
 
         {combatants.length === 0 && (
           <div className={styles.sceneEmpty}>
             <div className={styles.sceneEmptyIcon}>Grid</div>
             <div className={styles.sceneEmptyText}>Add combatants to place tokens on the battle map.</div>
+          </div>
+        )}
+      </div>
+      <div className={styles.boardToolDock}>
+        <div className={styles.boardToolRail}>
+          <button
+            type="button"
+            className={`${styles.boardToolButton} ${interactionMode === 'pan' ? styles.boardToolButtonActive : ''}`}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              setBoardTool('pan');
+            }}
+            title="Pan and move tokens"
+            aria-pressed={interactionMode === 'pan'}
+          >
+            ✋
+          </button>
+          <button
+            type="button"
+            className={`${styles.boardToolButton} ${interactionMode === 'draw' ? styles.boardToolButtonActive : ''}`}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              if (!canDraw) return;
+              setBoardTool('draw');
+            }}
+            title="Draw on the map"
+            aria-pressed={interactionMode === 'draw'}
+            disabled={!canDraw}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className={`${styles.boardToolButton} ${interactionMode === 'erase' ? styles.boardToolButtonActive : ''}`}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              if (!canDraw || normalizedDrawings.length === 0) return;
+              setBoardTool('erase');
+            }}
+            title="Erase drawn lines"
+            aria-pressed={interactionMode === 'erase'}
+            disabled={!canDraw || normalizedDrawings.length === 0}
+          >
+            ⌫
+          </button>
+          <div className={styles.boardToolDivider} />
+          <button
+            type="button"
+            className={styles.boardToolButton}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              undoDrawing();
+              setBoardTool('pan');
+            }}
+            title="Undo last line"
+            disabled={!canDraw || normalizedDrawings.length === 0}
+          >
+            ↶
+          </button>
+          <button
+            type="button"
+            className={`${styles.boardToolButton} ${styles.boardToolButtonDanger}`}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              clearDrawings();
+              setBoardTool('pan');
+            }}
+            title="Clear all drawings"
+            disabled={!canDraw || normalizedDrawings.length === 0}
+          >
+            ✕
+          </button>
+        </div>
+        {interactionMode === 'draw' && canDraw && (
+          <div className={styles.boardToolSettings}>
+            <div className={styles.boardToolGroupLabel}>Ink</div>
+            <div className={styles.boardToolSwatchRow}>
+              {DRAW_TOOL_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={`${styles.boardColorSwatch} ${drawColor === color ? styles.boardColorSwatchActive : ''}`}
+                  style={{ '--board-swatch': color }}
+                  onMouseEnter={playHover}
+                  onClick={() => {
+                    playNav();
+                    setDrawColor(color);
+                  }}
+                  title={`Use ${color} ink`}
+                  aria-label={`Use ${color} ink`}
+                />
+              ))}
+            </div>
+            <div className={styles.boardToolGroupLabel}>Size</div>
+            <div className={styles.boardToolSizeRow}>
+              {DRAW_STROKE_SIZES.map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  className={`${styles.boardSizeChip} ${drawSize === size ? styles.boardSizeChipActive : ''}`}
+                  onMouseEnter={playHover}
+                  onClick={() => {
+                    playNav();
+                    setDrawSize(size);
+                  }}
+                  aria-pressed={drawSize === size}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -2634,6 +3041,7 @@ export default function CombatPanel({
   const [battlefieldUploadBusy, setBattlefieldUploadBusy] = useState(false);
   const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
   const [sceneDockOpen, setSceneDockOpen] = useState(false);
+  const [initiativeDockOpen, setInitiativeDockOpen] = useState(false);
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
 
   useEffect(() => {
@@ -2787,6 +3195,10 @@ export default function CombatPanel({
   const battlefield = useMemo(
     () => normalizeBattlefield(encounter?.battlefield),
     [encounter?.battlefield]
+  );
+  const battlefieldDrawings = useMemo(
+    () => normalizeBattlefieldDrawings(battlefield?.drawings),
+    [battlefield?.drawings]
   );
   const battleBg = battlefield.backgroundSrc || DEFAULT_BATTLEFIELD.backgroundSrc;
   const canConfigureBattlefield = canManageCombat;
@@ -2956,7 +3368,8 @@ export default function CombatPanel({
   const castorWilliamSyncSwitchTitle = castorWilliamResourceSyncAvailable
     ? 'Mirror HP, spell slots, and feature charges between Castor and William Spicer'
     : 'Add both Castor and William Spicer to enable sync';
-  const activeCombatantId = combatants[encounter.activeIndex]?.id || null;
+  const activeCombatant = combatants[encounter.activeIndex] || null;
+  const activeCombatantId = activeCombatant?.id || null;
   const selectedSavingThrowRows = useMemo(
     () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
     [selected?.savingThrows, selected?.abilities, selected?.level]
@@ -3149,16 +3562,10 @@ export default function CombatPanel({
     () => allFeatureCharges.filter((feature) => Number(feature.max) > 0),
     [allFeatureCharges]
   );
-  const initiativeSlots = useMemo(() => {
-    if (!combatants.length) return [null, null, null];
+  const initiativeDisplayList = useMemo(() => {
+    if (!combatants.length) return [];
     const safeActive = clamp(encounter.activeIndex, 0, combatants.length - 1);
-    const getByOffset = (offset) => {
-      const idx = (safeActive + offset + combatants.length) % combatants.length;
-      return combatants[idx];
-    };
-    if (combatants.length === 1) return [null, getByOffset(0), null];
-    if (combatants.length === 2) return [getByOffset(-1), getByOffset(0), null];
-    return [getByOffset(-1), getByOffset(0), getByOffset(1)];
+    return [...combatants.slice(safeActive), ...combatants.slice(0, safeActive)];
   }, [combatants, encounter.activeIndex]);
 
   useEffect(() => {
@@ -3733,12 +4140,75 @@ export default function CombatPanel({
       const patch = typeof patchOrBuilder === 'function' ? patchOrBuilder(current) : patchOrBuilder;
       if (!patch || typeof patch !== 'object') return prev;
       const merged = normalizeBattlefield({ ...current, ...patch });
-      const changed = Object.keys(merged).some((key) => !Object.is(current[key], merged[key]));
+      const changed = !battlefieldStateEqual(current, merged);
       if (!changed) return prev;
       next.battlefield = merged;
       return next;
     });
   }, [canConfigureBattlefield]);
+
+  const commitBattlefieldDrawing = useCallback((drawing) => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentBattlefield = normalizeBattlefield(next.battlefield);
+      const currentDrawings = normalizeBattlefieldDrawings(currentBattlefield.drawings);
+      const normalizedDrawing = normalizeBattlefieldDrawing(drawing, currentDrawings.length);
+      if (normalizedDrawing.points.length < 2) return prev;
+      next.battlefield = {
+        ...currentBattlefield,
+        drawings: [...currentDrawings, normalizedDrawing],
+      };
+      return next;
+    });
+  }, [canWriteCombat]);
+
+  const removeBattlefieldDrawing = useCallback((drawingId) => {
+    const id = cleanText(drawingId);
+    if (!canWriteCombat || !id) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentBattlefield = normalizeBattlefield(next.battlefield);
+      const currentDrawings = normalizeBattlefieldDrawings(currentBattlefield.drawings);
+      const nextDrawings = currentDrawings.filter((drawing) => drawing.id !== id);
+      if (nextDrawings.length === currentDrawings.length) return prev;
+      next.battlefield = {
+        ...currentBattlefield,
+        drawings: nextDrawings,
+      };
+      return next;
+    });
+  }, [canWriteCombat]);
+
+  const undoBattlefieldDrawing = useCallback(() => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentBattlefield = normalizeBattlefield(next.battlefield);
+      const currentDrawings = normalizeBattlefieldDrawings(currentBattlefield.drawings);
+      if (currentDrawings.length === 0) return prev;
+      next.battlefield = {
+        ...currentBattlefield,
+        drawings: currentDrawings.slice(0, -1),
+      };
+      return next;
+    });
+  }, [canWriteCombat]);
+
+  const clearBattlefieldDrawings = useCallback(() => {
+    if (!canWriteCombat) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentBattlefield = normalizeBattlefield(next.battlefield);
+      const currentDrawings = normalizeBattlefieldDrawings(currentBattlefield.drawings);
+      if (currentDrawings.length === 0) return prev;
+      next.battlefield = {
+        ...currentBattlefield,
+        drawings: [],
+      };
+      return next;
+    });
+  }, [canWriteCombat]);
 
   const moveCombatantToCell = useCallback((combatantId, nextCol, nextRow) => {
     if (!canWriteCombat) return;
@@ -4894,7 +5364,7 @@ export default function CombatPanel({
     const sh = CROP_BOX / scale;
     sx = clamp(sx, 0, Math.max(0, iw - sw));
     sy = clamp(sy, 0, Math.max(0, ih - sh));
-    const out = 256;
+    const out = TOKEN_CROP_OUTPUT_SIZE;
     const canvas = document.createElement('canvas');
     canvas.width = out; canvas.height = out;
     const ctx = canvas.getContext('2d');
@@ -4969,33 +5439,6 @@ export default function CombatPanel({
         >
           {/* Vignette overlay */}
           <div className={styles.windowVignette} />
-
-          <div className={styles.floatingRoundBar}>
-            {canManageCombat && (
-              <button
-                className={btnClass('gold')}
-                onMouseEnter={playHover}
-                onClick={() => { playNav(); gotoPrev(); }}
-                disabled={!canWriteCombat}
-              >
-                ◀ Prev
-              </button>
-            )}
-            <div className={styles.roundBadge}>
-              <span className={styles.roundLabel}>Round</span>
-              <span className={styles.roundValue}>{encounter.round}</span>
-            </div>
-            {canManageCombat && (
-              <button
-                className={btnClass('gold')}
-                onMouseEnter={playHover}
-                onClick={() => { playNav(); gotoNext(); }}
-                disabled={!canWriteCombat}
-              >
-                Next ▶
-              </button>
-            )}
-          </div>
 
           <div className={styles.sceneDockWrap}>
             {sceneDockOpen && (
@@ -5141,6 +5584,25 @@ export default function CombatPanel({
             </button>
           </div>
 
+          <div className={styles.initDockToggleWrap}>
+            <button
+              type="button"
+              className={`${styles.initDockToggle} ${initiativeDockOpen ? styles.initDockToggleActive : ''}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                setInitiativeDockOpen((open) => !open);
+              }}
+              aria-expanded={initiativeDockOpen}
+              aria-controls="initiative-rail"
+            >
+              <span className={styles.initDockToggleLabel}>Init</span>
+              <span className={styles.initDockToggleMeta}>
+                {combatants.length > 0 ? `Round ${encounter.round}` : 'No turns'}
+              </span>
+            </button>
+          </div>
+
           <div
           className={styles.mainLayout}
           style={{
@@ -5174,114 +5636,147 @@ export default function CombatPanel({
                 clearCombatantStatuses={clearCombatantStatusesViaBoard}
                 removeCombatant={removeCombatantViaBoard}
                 openSheetFor={openSheetFor}
+                drawings={battlefieldDrawings}
+                canDraw={canWriteCombat}
+                commitDrawing={commitBattlefieldDrawing}
+                removeDrawing={removeBattlefieldDrawing}
+                undoDrawing={undoBattlefieldDrawing}
+                clearDrawings={clearBattlefieldDrawings}
               />
 
-              <div className={styles.initOverlay}>
-                <div className={styles.initStrip}>
-                  <div className={styles.initHeaderGrid}>
-                    <div />
-                    <div className={styles.initHeaderCenter}>
-                      <div className={styles.initHeading}>Initiative</div>
-                      <div className={styles.initButtons}>
-                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canWriteCombat}>+ Add</button>
-                        <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }} disabled={!canManageCombat}>Reset</button>
-                        <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }} disabled={!canManageCombat}>Clear</button>
-                      </div>
-                    </div>
-                    <div />
-                  </div>
-
-                  <div className={styles.initScroll}>
-                    {combatants.length === 0 ? (
-                      <div className={styles.initEmpty}>
-                        Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
-                      </div>
-                    ) : (
-                      <div className={styles.initCardsViewport}>
-                        <div
-                          key={`${activeCombatantId || 'none'}-${initSlideTick}`}
-                          className={`${styles.initCardsRow} ${
-                            initSlideDirection === 'next' ? styles.initCardsRowNext : styles.initCardsRowPrev
-                          }`}
-                        >
-                          {initiativeSlots.map((c, slotIndex) => {
-                            if (!c) {
-                              return <div key={`slot-empty-${slotIndex}`} className={styles.initCardGhost} />;
-                            }
-                            const isActive = c.id === activeCombatantId;
-                            const isSelected = c.id === selectedId;
-                            const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
-                            const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
-                            const pct = max > 0 ? (hp / max) * 100 : 100;
-                            const hpColor =
-                              pct > 50
-                                ? 'rgba(80,200,120,0.80)'
-                                : pct > 20
-                                  ? 'rgba(230,170,40,0.80)'
-                                  : 'rgba(220,70,70,0.80)';
-                            const cardClass = [
-                              styles.initCard,
-                              isActive ? styles.initCardActive : '',
-                              !isActive && isSelected ? styles.initCardSelected : '',
-                              c.dead ? styles.initCardDead : '',
-                            ].filter(Boolean).join(' ');
-                            const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
-
-                            return (
-                              <div
-                                key={c.id}
-                                onClick={() => openEditorFor(c.id)}
-                                onMouseEnter={playHover}
-                                className={cardClass}
-                              >
-                                <div className={styles.initCardTop}>
-                                  <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
-                                  <div className={initClass}>{toInt(c.init, 0)}</div>
-                                  <div className={styles.initNameWrap}>
-                                    <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
-                                      {c.name}
-                                    </div>
-                                    {c.role && <div className={styles.initRole}>{c.role}</div>}
-                                  </div>
-                                  <div className={styles.initHp} style={{ color: hpColor }}>
-                                    {c.hp === '' ? '—' : c.hp}
-                                  </div>
-                                  <div className={styles.initActions}>
-                                    <button
-                                      title={c.dead ? 'Revive' : 'Mark dead'}
-                                      onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                                      onMouseEnter={playHover}
-                                      className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
-                                      disabled={!canControlCombatant(c)}
-                                    >
-                                      ☠
-                                    </button>
-                                    <button
-                                      title="Remove"
-                                      onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                                      onMouseEnter={playHover}
-                                      className={iconMiniBtnClass('danger')}
-                                      disabled={!canRemoveCombatant(c)}
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className={styles.initHpTrack}>
-                                  <div className={styles.initHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
-                                </div>
-
-                                {isActive && <div className={styles.activeTurnTag}>▶ ACTIVE TURN</div>}
-                              </div>
-                            );
-                          })}
+              {initiativeDockOpen && (
+                <div className={styles.initOverlay}>
+                  <div id="initiative-rail" className={styles.initStrip}>
+                    <div className={styles.initHeaderGrid}>
+                      <div className={styles.initHeaderCenter}>
+                        <div className={styles.initHeading}>Initiative</div>
+                        <div className={styles.initRoundControls}>
+                          {canManageCombat && (
+                            <button
+                              className={btnClass('gold')}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); gotoPrev(); }}
+                              disabled={!canWriteCombat}
+                            >
+                              ◀ Prev
+                            </button>
+                          )}
+                          <div className={styles.roundBadge}>
+                            <span className={styles.roundLabel}>Round</span>
+                            <span className={styles.roundValue}>{encounter.round}</span>
+                          </div>
+                          {canManageCombat && (
+                            <button
+                              className={btnClass('gold')}
+                              onMouseEnter={playHover}
+                              onClick={() => { playNav(); gotoNext(); }}
+                              disabled={!canWriteCombat}
+                            >
+                              Next ▶
+                            </button>
+                          )}
+                        </div>
+                        <div className={styles.initSubheading}>
+                          {activeCombatant ? `${activeCombatant.name} is active` : 'No combatants are in initiative yet.'}
                         </div>
                       </div>
-                    )}
+                    </div>
+
+                    <div className={`${styles.initScroll} koa-scrollbar-thin`}>
+                      {combatants.length === 0 ? (
+                        <div className={styles.initEmpty}>
+                          Click <b className={styles.initEmptyAdd}>+ Add</b> to begin.
+                        </div>
+                      ) : (
+                        <div className={styles.initCardsViewport}>
+                          <div
+                            key={`${activeCombatantId || 'none'}-${initSlideTick}`}
+                            className={`${styles.initCardsRow} ${
+                              initSlideDirection === 'next' ? styles.initCardsRowNext : styles.initCardsRowPrev
+                            }`}
+                          >
+                            {initiativeDisplayList.map((c, slotIndex) => {
+                              const isActive = c.id === activeCombatantId;
+                              const isSelected = c.id === selectedId;
+                              const hp = c.hp === '' ? 0 : toInt(c.hp, 0);
+                              const max = c.maxHP === '' ? 0 : toInt(c.maxHP, 0);
+                              const pct = max > 0 ? (hp / max) * 100 : 100;
+                              const hpColor =
+                                pct > 50
+                                  ? 'rgba(80,200,120,0.80)'
+                                  : pct > 20
+                                    ? 'rgba(230,170,40,0.80)'
+                                    : 'rgba(220,70,70,0.80)';
+                              const cardClass = [
+                                styles.initCard,
+                                isActive ? styles.initCardActive : '',
+                                !isActive && isSelected ? styles.initCardSelected : '',
+                                c.dead ? styles.initCardDead : '',
+                              ].filter(Boolean).join(' ');
+                              const initClass = [styles.initValue, isActive ? styles.initValueActive : ''].filter(Boolean).join(' ');
+
+                              return (
+                                <div
+                                  key={c.id}
+                                  onClick={() => openEditorFor(c.id)}
+                                  onMouseEnter={playHover}
+                                  className={cardClass}
+                                >
+                                  <div className={styles.initCardTop}>
+                                    <div className={styles.initOrderBadge}>{slotIndex === 0 ? 'NOW' : slotIndex + 1}</div>
+                                    <div className={styles.sideDot} style={{ background: sideAccent(c.side), boxShadow: `0 0 6px ${sideAccent(c.side)}` }} />
+                                    <div className={initClass}>{toInt(c.init, 0)}</div>
+                                    <div className={styles.initNameWrap}>
+                                      <div className={styles.initName} style={{ textDecoration: c.dead ? 'line-through' : 'none' }}>
+                                        {c.name}
+                                      </div>
+                                      {c.role && <div className={styles.initRole}>{c.role}</div>}
+                                    </div>
+                                    <div className={styles.initHp} style={{ color: hpColor }}>
+                                      {c.hp === '' ? '—' : c.hp}
+                                    </div>
+                                    <div className={styles.initActions}>
+                                      <button
+                                        title={c.dead ? 'Revive' : 'Mark dead'}
+                                        onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
+                                        onMouseEnter={playHover}
+                                        className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
+                                        disabled={!canControlCombatant(c)}
+                                      >
+                                        ☠
+                                      </button>
+                                      <button
+                                        title="Remove"
+                                        onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
+                                        onMouseEnter={playHover}
+                                        className={iconMiniBtnClass('danger')}
+                                        disabled={!canRemoveCombatant(c)}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <div className={styles.initHpTrack}>
+                                    <div className={styles.initHpFill} style={{ width: `${clamp(pct, 0, 100)}%`, background: hpGradient(pct) }} />
+                                  </div>
+
+                                  {isActive && <div className={styles.activeTurnTag}>▶ ACTIVE TURN</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className={styles.initButtons}>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canWriteCombat}>+ Add</button>
+                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }} disabled={!canManageCombat}>Reset</button>
+                      <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }} disabled={!canManageCombat}>Clear</button>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

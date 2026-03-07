@@ -153,10 +153,17 @@ export default function TavernMenu() {
   const [musicVol, setMusicVol] = useState(0.06);
   const [fireVol, setFireVol] = useState(0.07);
   const [showMix, setShowMix] = useState(false);
+  const showAudioHud = panelType !== 'combat';
 
   useEffect(() => {
     writeJson(STORAGE_KEYS.musicOn, !!musicOn);
   }, [musicOn]);
+
+  useEffect(() => {
+    if (panelType === 'combat') {
+      setShowMix(false);
+    }
+  }, [panelType]);
 
   const currentUserId = String(session?.user?.id || '');
   const currentUserEmail = String(session?.user?.email || '').trim().toLowerCase();
@@ -609,21 +616,23 @@ export default function TavernMenu() {
       {/* HUD (always above panels; only HUD captures clicks) */}
       <div className={styles.hudLayer}>
         <div className={styles.hudDock}>
-          <AudioHUD
-            musicOn={musicOn}
-            toggleAudio={toggleAudio}
-            showMix={showMix}
-            setShowMix={setShowMix}
-            musicVol={musicVol}
-            setMusicVol={setMusicVol}
-            fireVol={fireVol}
-            setFireVol={setFireVol}
-            nightMode={nightMode}
-            toggleNightMode={toggleNightMode}
-            playHover={playHover}
-            // HUD is NOT navigation; keep it silent
-            playButton={silentClick}
-          />
+          {showAudioHud && (
+            <AudioHUD
+              musicOn={musicOn}
+              toggleAudio={toggleAudio}
+              showMix={showMix}
+              setShowMix={setShowMix}
+              musicVol={musicVol}
+              setMusicVol={setMusicVol}
+              fireVol={fireVol}
+              setFireVol={setFireVol}
+              nightMode={nightMode}
+              toggleNightMode={toggleNightMode}
+              playHover={playHover}
+              // HUD is NOT navigation; keep it silent
+              playButton={silentClick}
+            />
+          )}
         </div>
       </div>
 
