@@ -127,6 +127,14 @@ export function appendDiceLogEntry(log, entry) {
   return [...normalizeDiceLog(log), entry].slice(-DICE_LOG_LIMIT);
 }
 
+export function getDiceOutcomeKind(entry) {
+  const results = sanitizeDiceResults(entry?.results);
+  const d20Results = results.filter((die) => toFiniteInt(die.sides, 0) === 20);
+  if (d20Results.some((die) => toFiniteInt(die.value, 0) === 20)) return 'nat20';
+  if (d20Results.some((die) => toFiniteInt(die.value, 0) === 1)) return 'nat1';
+  return '';
+}
+
 export function formatDiceBreakdown(entry) {
   const results = sanitizeDiceResults(entry?.results);
   if (results.length === 0) return '';

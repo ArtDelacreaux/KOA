@@ -17,6 +17,7 @@ import {
   DICE_BOX_VIEWPORT_ID,
   DICE_QUICK_NOTATIONS,
   formatDiceBreakdown,
+  getDiceOutcomeKind,
   normalizeDiceLog,
   normalizeDiceNotation,
 } from '../lib/combatDice';
@@ -248,6 +249,17 @@ const TOKEN_SCALE_MAX = 3;
 const TOKEN_CROP_OUTPUT_SIZE = 1024;
 const DEFAULT_DICE_NOTATION = 'd20';
 const DICE_THEME_COLOR = '#d7ae5f';
+const DICE_AUTO_HIDE_MS = 5000;
+const DICE_OUTCOME_EFFECT_MS = 3200;
+const DICE_CELEBRATION_SPARKS = Object.freeze(
+  Array.from({ length: 12 }, (_, idx) => ({
+    id: idx,
+    left: `${8 + (idx * 7)}%`,
+    delayMs: idx * 90,
+    durationMs: 1040 + ((idx % 4) * 140),
+    rotationDeg: -18 + (idx * 7),
+  }))
+);
 const DEFAULT_BATTLEFIELD = Object.freeze({
   backgroundSrc: BATTLE_BACKGROUNDS[0]?.src || '',
   mediaStoragePath: '',
@@ -2856,6 +2868,7 @@ export default function CombatPanel({
   characterControllers = {},
   canManageCombat = true,
   canWriteCombat = true,
+  audioEnabled = true,
   viewerIdentity = null,
   canControlCharacter = () => true,
   playNav = () => {},
@@ -3070,11 +3083,18 @@ export default function CombatPanel({
   const [diceRolling, setDiceRolling] = useState(false);
   const [diceEngineReady, setDiceEngineReady] = useState(false);
   const [diceActiveEntryId, setDiceActiveEntryId] = useState('');
+  const [diceBannerEntry, setDiceBannerEntry] = useState(null);
+  const [diceOutcomeEffect, setDiceOutcomeEffect] = useState(null);
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
   const diceViewportRef = useRef(null);
   const diceBoxRef = useRef(null);
   const diceBoxInitPromiseRef = useRef(null);
   const diceRollQueueRef = useRef(Promise.resolve());
+  const diceAutoHideTimerRef = useRef(null);
+  const diceBannerTimerRef = useRef(null);
+  const diceOutcomeTimerRef = useRef(null);
+  const diceOutcomeAudioContextRef = useRef(null);
+  const diceOutcomeAudioCleanupRef = useRef(null);
   const diceHydratedLogRef = useRef(false);
   const seenDiceLogIdsRef = useRef(new Set());
   const localDiceLogIdsRef = useRef(new Set());
@@ -3429,6 +3449,156 @@ export default function CombatPanel({
       updatedAt: Date.now(),
     }));
   }, []);
+  const stopDiceOutcomeAudio = useCallback(() => {
+    const cleanup = diceOutcomeAudioCleanupRef.current;
+    diceOutcomeAudioCleanupRef.current = null;
+    if (typeof cleanup === 'function') {
+      try {
+        cleanup();
+      } catch {}
+    }
+  }, []);
+  const clearDiceOutcomeEffect = useCallback(() => {
+    if (diceOutcomeTimerRef.current) {
+      clearTimeout(diceOutcomeTimerRef.current);
+      diceOutcomeTimerRef.current = null;
+    }
+    stopDiceOutcomeAudio();
+    setDiceOutcomeEffect(null);
+  }, [stopDiceOutcomeAudio]);
+  const showDiceBanner = useCallback((entry) => {
+    if (!entry) return;
+    if (diceBannerTimerRef.current) {
+      clearTimeout(diceBannerTimerRef.current);
+      diceBannerTimerRef.current = null;
+    }
+    setDiceBannerEntry(entry);
+    diceBannerTimerRef.current = setTimeout(() => {
+      setDiceBannerEntry(null);
+      diceBannerTimerRef.current = null;
+    }, DICE_AUTO_HIDE_MS);
+  }, []);
+  const playDiceOutcomeAudio = useCallback((kind) => {
+    if (!audioEnabled || kind !== 'nat1' || typeof window === 'undefined') return;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    let audioContext = diceOutcomeAudioContextRef.current;
+    if (!audioContext || audioContext.state === 'closed') {
+      try {
+        audioContext = new AudioContextCtor();
+        diceOutcomeAudioContextRef.current = audioContext;
+      } catch {
+        return;
+      }
+    }
+
+    const playTone = () => {
+      stopDiceOutcomeAudio();
+
+      try {
+        const now = audioContext.currentTime + 0.01;
+        const master = audioContext.createGain();
+        const filter = audioContext.createBiquadFilter();
+        const bass = audioContext.createOscillator();
+        const undertone = audioContext.createOscillator();
+
+        master.gain.setValueAtTime(0.0001, now);
+        master.gain.linearRampToValueAtTime(0.08, now + 0.24);
+        master.gain.exponentialRampToValueAtTime(0.028, now + 1.4);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 2.5);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(760, now);
+        filter.frequency.exponentialRampToValueAtTime(150, now + 2.35);
+        filter.Q.setValueAtTime(4.5, now);
+
+        bass.type = 'sawtooth';
+        bass.frequency.setValueAtTime(118, now);
+        bass.frequency.exponentialRampToValueAtTime(44, now + 2.45);
+
+        undertone.type = 'triangle';
+        undertone.frequency.setValueAtTime(61, now);
+        undertone.frequency.exponentialRampToValueAtTime(27, now + 2.55);
+        undertone.detune.setValueAtTime(-6, now);
+
+        bass.connect(filter);
+        undertone.connect(filter);
+        filter.connect(master);
+        master.connect(audioContext.destination);
+
+        bass.start(now);
+        undertone.start(now);
+        bass.stop(now + 2.65);
+        undertone.stop(now + 2.65);
+
+        const cleanup = () => {
+          [bass, undertone].forEach((oscillator) => {
+            try {
+              oscillator.stop();
+            } catch {}
+            try {
+              oscillator.disconnect();
+            } catch {}
+          });
+          [filter, master].forEach((node) => {
+            try {
+              node.disconnect();
+            } catch {}
+          });
+        };
+        diceOutcomeAudioCleanupRef.current = cleanup;
+
+        window.setTimeout(() => {
+          if (diceOutcomeAudioCleanupRef.current === cleanup) {
+            stopDiceOutcomeAudio();
+          }
+        }, 2900);
+      } catch {
+        stopDiceOutcomeAudio();
+      }
+    };
+
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().then(playTone).catch(() => {});
+      return;
+    }
+
+    playTone();
+  }, [audioEnabled, stopDiceOutcomeAudio]);
+  useEffect(() => {
+    if (!audioEnabled) {
+      stopDiceOutcomeAudio();
+    }
+  }, [audioEnabled, stopDiceOutcomeAudio]);
+  const triggerDiceOutcomeEffect = useCallback((entry) => {
+    const kind = getDiceOutcomeKind(entry);
+    if (!kind) return;
+
+    if (diceOutcomeTimerRef.current) {
+      clearTimeout(diceOutcomeTimerRef.current);
+      diceOutcomeTimerRef.current = null;
+    }
+
+    setDiceOutcomeEffect({
+      key: `${entry.id}-${Date.now()}`,
+      kind,
+      rolledByName: entry.rolledByName || 'Player',
+      total: entry.total,
+    });
+
+    if (kind === 'nat1') {
+      playDiceOutcomeAudio(kind);
+    } else {
+      stopDiceOutcomeAudio();
+    }
+
+    diceOutcomeTimerRef.current = setTimeout(() => {
+      diceOutcomeTimerRef.current = null;
+      stopDiceOutcomeAudio();
+      setDiceOutcomeEffect(null);
+    }, DICE_OUTCOME_EFFECT_MS);
+  }, [playDiceOutcomeAudio, stopDiceOutcomeAudio]);
   const ensureDiceBox = useCallback(async () => {
     if (diceBoxRef.current) return diceBoxRef.current;
     if (diceBoxInitPromiseRef.current) return diceBoxInitPromiseRef.current;
@@ -3447,6 +3617,7 @@ export default function CombatPanel({
           scale: 5,
         });
         await box.init();
+        box.hide();
         diceBoxRef.current = box;
         setDiceEngineReady(true);
         return box;
@@ -3465,12 +3636,27 @@ export default function CombatPanel({
       let box;
       try {
         box = await ensureDiceBox();
+        if (diceAutoHideTimerRef.current) {
+          clearTimeout(diceAutoHideTimerRef.current);
+          diceAutoHideTimerRef.current = null;
+        }
+        clearDiceOutcomeEffect();
+        box.show();
+        setDiceBannerEntry(null);
         setDiceRolling(true);
         setDiceActiveEntryId(entryId);
         const payload = Array.isArray(replayResults) && replayResults.length > 0
           ? replayResults.map((result) => ({ ...result }))
           : notation;
-        return await box.roll(payload, { themeColor: DICE_THEME_COLOR, newStartPoint: true });
+        const result = await box.roll(payload, { themeColor: DICE_THEME_COLOR, newStartPoint: true });
+        diceAutoHideTimerRef.current = setTimeout(() => {
+          try {
+            box.clear();
+            box.hide();
+          } catch {}
+          diceAutoHideTimerRef.current = null;
+        }, DICE_AUTO_HIDE_MS);
+        return result;
       } catch (error) {
         console.error('[CombatPanel] Dice roll failed.', error);
         setDiceError('Dice roll failed. Try again.');
@@ -3509,8 +3695,10 @@ export default function CombatPanel({
       seenDiceLogIdsRef.current.add(logEntry.id);
       localDiceLogIdsRef.current.add(logEntry.id);
       appendEncounterDiceLog(logEntry);
+      showDiceBanner(logEntry);
+      triggerDiceOutcomeEffect(logEntry);
     } catch {}
-  }, [appendEncounterDiceLog, diceRollerName, diceRollerUserId, queueDiceAnimation]);
+  }, [appendEncounterDiceLog, diceRollerName, diceRollerUserId, queueDiceAnimation, showDiceBanner, triggerDiceOutcomeEffect]);
   useEffect(() => {
     if (!active || !diceDockOpen) return;
     ensureDiceBox().catch((error) => {
@@ -3534,17 +3722,40 @@ export default function CombatPanel({
         localDiceLogIdsRef.current.delete(entry.id);
         return;
       }
-      queueDiceAnimation({ entryId: entry.id, replayResults: entry.results }).catch(() => {});
+      queueDiceAnimation({ entryId: entry.id, replayResults: entry.results })
+        .then(() => {
+          showDiceBanner(entry);
+          triggerDiceOutcomeEffect(entry);
+        })
+        .catch(() => {});
     });
-  }, [active, diceLog, queueDiceAnimation]);
+  }, [active, diceLog, queueDiceAnimation, showDiceBanner, triggerDiceOutcomeEffect]);
   useEffect(() => () => {
+    if (diceAutoHideTimerRef.current) {
+      clearTimeout(diceAutoHideTimerRef.current);
+      diceAutoHideTimerRef.current = null;
+    }
+    if (diceBannerTimerRef.current) {
+      clearTimeout(diceBannerTimerRef.current);
+      diceBannerTimerRef.current = null;
+    }
+    if (diceOutcomeTimerRef.current) {
+      clearTimeout(diceOutcomeTimerRef.current);
+      diceOutcomeTimerRef.current = null;
+    }
+    stopDiceOutcomeAudio();
+    if (diceOutcomeAudioContextRef.current && typeof diceOutcomeAudioContextRef.current.close === 'function') {
+      diceOutcomeAudioContextRef.current.close().catch(() => {});
+      diceOutcomeAudioContextRef.current = null;
+    }
     diceBoxRef.current?.clear?.();
+    diceBoxRef.current?.hide?.();
     diceBoxRef.current = null;
     diceBoxInitPromiseRef.current = null;
     if (diceViewportRef.current) {
       diceViewportRef.current.innerHTML = '';
     }
-  }, []);
+  }, [stopDiceOutcomeAudio]);
   const selectedSavingThrowRows = useMemo(
     () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
     [selected?.savingThrows, selected?.abilities, selected?.level]
@@ -5614,6 +5825,61 @@ export default function CombatPanel({
         >
           {/* Vignette overlay */}
           <div className={styles.windowVignette} />
+
+          {diceOutcomeEffect && (
+            <div
+              key={diceOutcomeEffect.key}
+              className={`${styles.diceOutcomeOverlay} ${diceOutcomeEffect.kind === 'nat20' ? styles.diceOutcomeOverlayCelebration : styles.diceOutcomeOverlayOminous}`}
+              aria-hidden="true"
+            >
+              <div className={styles.diceOutcomeVeil} />
+              {diceOutcomeEffect.kind === 'nat20' ? (
+                <div className={styles.diceOutcomeSparkField}>
+                  {DICE_CELEBRATION_SPARKS.map((spark) => (
+                    <span
+                      key={spark.id}
+                      className={styles.diceOutcomeSpark}
+                      style={{
+                        left: spark.left,
+                        animationDelay: `${spark.delayMs}ms`,
+                        animationDuration: `${spark.durationMs}ms`,
+                        '--dice-spark-rotate': `${spark.rotationDeg}deg`,
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className={styles.diceOutcomeRuneField}>
+                  <span className={styles.diceOutcomeRune} />
+                  <span className={styles.diceOutcomeRune} />
+                  <span className={styles.diceOutcomeRune} />
+                </div>
+              )}
+              <div className={styles.diceOutcomeBanner}>
+                <div className={styles.diceOutcomeKicker}>
+                  {diceOutcomeEffect.kind === 'nat20' ? 'Critical Success' : 'Ominous Omen'}
+                </div>
+                <div className={styles.diceOutcomeHeadline}>
+                  {diceOutcomeEffect.kind === 'nat20' ? 'Natural 20' : 'Natural 1'}
+                </div>
+                <div className={styles.diceOutcomeMeta}>
+                  {diceOutcomeEffect.rolledByName} · Total {diceOutcomeEffect.total}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {diceBannerEntry && (
+            <div className={styles.diceResultBannerWrap} aria-live="polite">
+              <div className={styles.diceResultBanner}>
+                <div className={styles.diceResultLabel}>Total</div>
+                <div className={styles.diceResultValue}>{diceBannerEntry.total}</div>
+                <div className={styles.diceResultMeta}>
+                  {diceBannerEntry.rolledByName} · {diceBannerEntry.notation}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={styles.sceneDockWrap}>
             {sceneDockOpen && (

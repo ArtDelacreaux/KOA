@@ -688,6 +688,7 @@ export default function TavernMenu() {
             characterControllers={characterAccess}
             canManageCombat={canManageCharacterAccess}
             canWriteCombat={canEditCampaignData}
+            audioEnabled={musicOn}
             viewerIdentity={viewerIdentity}
             canControlCharacter={canControlCharacter}
             playNav={playNavClick}
