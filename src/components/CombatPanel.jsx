@@ -11,6 +11,16 @@ import { parseCharacterSheetFile } from '../lib/sheetParser';
 import { getCharacterAccessEntry } from '../lib/characterAccess';
 import useLocalStorageState from '../lib/useLocalStorageState';
 import {
+  appendDiceLogEntry,
+  createDiceLogEntry,
+  DICE_BOX_ASSET_PATH,
+  DICE_BOX_VIEWPORT_ID,
+  DICE_QUICK_NOTATIONS,
+  formatDiceBreakdown,
+  normalizeDiceLog,
+  normalizeDiceNotation,
+} from '../lib/combatDice';
+import {
   DEFAULT_ATTUNEMENT_LIMIT,
   INVENTORY_CATEGORIES,
   INVENTORY_RARITIES,
@@ -236,6 +246,8 @@ const DEFAULT_BOARD_HEIGHT = 1365;
 const TOKEN_SCALE_MIN = 0.35;
 const TOKEN_SCALE_MAX = 3;
 const TOKEN_CROP_OUTPUT_SIZE = 1024;
+const DEFAULT_DICE_NOTATION = 'd20';
+const DICE_THEME_COLOR = '#d7ae5f';
 const DEFAULT_BATTLEFIELD = Object.freeze({
   backgroundSrc: BATTLE_BACKGROUNDS[0]?.src || '',
   mediaStoragePath: '',
@@ -1121,6 +1133,14 @@ function formatSigned(value, empty = '—') {
   return n >= 0 ? `+${n}` : `${n}`;
 }
 
+function formatDiceTimestamp(value) {
+  const stamp = cleanText(value);
+  if (!stamp) return '';
+  const date = new Date(stamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 function formatWeaponHitDc(value, attackModifier) {
   const text = cleanText(value);
   if (!text) return '--';
@@ -1658,6 +1678,7 @@ function defaultEncounter() {
     round: 1,
     activeIndex: 0,
     combatants: [],
+    diceLog: [],
     battlefield: normalizeBattlefield(null),
     castorWilliamResourceSync: false,
     sheetProfiles: {},
@@ -1669,6 +1690,7 @@ function normalize(enc) {
   const base = defaultEncounter();
   const e = { ...base, ...(enc || {}) };
   if (!Array.isArray(e.combatants)) e.combatants = [];
+  e.diceLog = normalizeDiceLog(e.diceLog);
   e.battlefield = normalizeBattlefield(e.battlefield);
   const rawProfiles = e.sheetProfiles && typeof e.sheetProfiles === 'object' ? e.sheetProfiles : {};
   e.sheetProfiles = Object.entries(rawProfiles).reduce((acc, [key, value]) => {
@@ -3042,7 +3064,20 @@ export default function CombatPanel({
   const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
   const [sceneDockOpen, setSceneDockOpen] = useState(false);
   const [initiativeDockOpen, setInitiativeDockOpen] = useState(false);
+  const [diceDockOpen, setDiceDockOpen] = useState(false);
+  const [diceNotationDraft, setDiceNotationDraft] = useState(DEFAULT_DICE_NOTATION);
+  const [diceError, setDiceError] = useState('');
+  const [diceRolling, setDiceRolling] = useState(false);
+  const [diceEngineReady, setDiceEngineReady] = useState(false);
+  const [diceActiveEntryId, setDiceActiveEntryId] = useState('');
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
+  const diceViewportRef = useRef(null);
+  const diceBoxRef = useRef(null);
+  const diceBoxInitPromiseRef = useRef(null);
+  const diceRollQueueRef = useRef(Promise.resolve());
+  const diceHydratedLogRef = useRef(false);
+  const seenDiceLogIdsRef = useRef(new Set());
+  const localDiceLogIdsRef = useRef(new Set());
 
   useEffect(() => {
     setBagInventoryState((prev) => normalizeBagInventoryState(prev));
@@ -3370,6 +3405,146 @@ export default function CombatPanel({
     : 'Add both Castor and William Spicer to enable sync';
   const activeCombatant = combatants[encounter.activeIndex] || null;
   const activeCombatantId = activeCombatant?.id || null;
+  const diceLog = useMemo(
+    () => normalizeDiceLog(encounter?.diceLog),
+    [encounter?.diceLog]
+  );
+  const diceLogEntries = useMemo(
+    () => [...diceLog].reverse(),
+    [diceLog]
+  );
+  const diceRollerUserId = useMemo(
+    () => cleanText(viewerIdentity?.userId) || cleanText(viewerIdentity?.email).toLowerCase() || cleanText(viewerIdentity?.username).toLowerCase(),
+    [viewerIdentity]
+  );
+  const diceRollerName = useMemo(
+    () => cleanText(viewerIdentity?.username) || cleanText(viewerIdentity?.email) || 'Player',
+    [viewerIdentity]
+  );
+  const appendEncounterDiceLog = useCallback((entry) => {
+    if (!entry) return;
+    setEncounter((prev) => ({
+      ...prev,
+      diceLog: appendDiceLogEntry(prev?.diceLog, entry),
+      updatedAt: Date.now(),
+    }));
+  }, []);
+  const ensureDiceBox = useCallback(async () => {
+    if (diceBoxRef.current) return diceBoxRef.current;
+    if (diceBoxInitPromiseRef.current) return diceBoxInitPromiseRef.current;
+    if (!diceViewportRef.current) {
+      throw new Error('Dice viewport is not ready yet.');
+    }
+
+    setDiceError('');
+    diceBoxInitPromiseRef.current = import('@3d-dice/dice-box')
+      .then(async ({ default: DiceBox }) => {
+        const box = new DiceBox({
+          container: `#${DICE_BOX_VIEWPORT_ID}`,
+          assetPath: DICE_BOX_ASSET_PATH,
+          theme: 'default',
+          themeColor: DICE_THEME_COLOR,
+          scale: 5,
+        });
+        await box.init();
+        diceBoxRef.current = box;
+        setDiceEngineReady(true);
+        return box;
+      })
+      .catch((error) => {
+        diceBoxInitPromiseRef.current = null;
+        diceBoxRef.current = null;
+        setDiceEngineReady(false);
+        throw error;
+      });
+
+    return diceBoxInitPromiseRef.current;
+  }, []);
+  const queueDiceAnimation = useCallback(async ({ entryId = '', notation = '', replayResults = null }) => {
+    const run = async () => {
+      let box;
+      try {
+        box = await ensureDiceBox();
+        setDiceRolling(true);
+        setDiceActiveEntryId(entryId);
+        const payload = Array.isArray(replayResults) && replayResults.length > 0
+          ? replayResults.map((result) => ({ ...result }))
+          : notation;
+        return await box.roll(payload, { themeColor: DICE_THEME_COLOR, newStartPoint: true });
+      } catch (error) {
+        console.error('[CombatPanel] Dice roll failed.', error);
+        setDiceError('Dice roll failed. Try again.');
+        throw error;
+      } finally {
+        setDiceRolling(false);
+        setDiceActiveEntryId('');
+      }
+    };
+
+    const queued = diceRollQueueRef.current
+      .catch(() => {})
+      .then(run);
+    diceRollQueueRef.current = queued.catch(() => {});
+    return queued;
+  }, [ensureDiceBox]);
+  const handleDiceRollRequest = useCallback(async (rawNotation) => {
+    const normalized = normalizeDiceNotation(rawNotation);
+    if (!normalized.ok) {
+      setDiceError(normalized.error);
+      return;
+    }
+
+    const { parsed } = normalized;
+    setDiceError('');
+    setDiceNotationDraft(parsed.displayNotation);
+    try {
+      const results = await queueDiceAnimation({ notation: parsed.engineNotation });
+      const logEntry = createDiceLogEntry({
+        notation: parsed.displayNotation,
+        modifier: parsed.modifier,
+        results,
+        rolledByUserId: diceRollerUserId,
+        rolledByName: diceRollerName,
+      });
+      seenDiceLogIdsRef.current.add(logEntry.id);
+      localDiceLogIdsRef.current.add(logEntry.id);
+      appendEncounterDiceLog(logEntry);
+    } catch {}
+  }, [appendEncounterDiceLog, diceRollerName, diceRollerUserId, queueDiceAnimation]);
+  useEffect(() => {
+    if (!active || !diceDockOpen) return;
+    ensureDiceBox().catch((error) => {
+      console.error('[CombatPanel] Unable to initialize Dice Box.', error);
+      setDiceError('Unable to load the 3D dice renderer.');
+    });
+  }, [active, diceDockOpen, ensureDiceBox]);
+  useEffect(() => {
+    if (!active) return;
+    const currentIds = new Set(diceLog.map((entry) => entry.id));
+    if (!diceHydratedLogRef.current) {
+      seenDiceLogIdsRef.current = currentIds;
+      diceHydratedLogRef.current = true;
+      return;
+    }
+
+    diceLog.forEach((entry) => {
+      if (seenDiceLogIdsRef.current.has(entry.id)) return;
+      seenDiceLogIdsRef.current.add(entry.id);
+      if (localDiceLogIdsRef.current.has(entry.id)) {
+        localDiceLogIdsRef.current.delete(entry.id);
+        return;
+      }
+      queueDiceAnimation({ entryId: entry.id, replayResults: entry.results }).catch(() => {});
+    });
+  }, [active, diceLog, queueDiceAnimation]);
+  useEffect(() => () => {
+    diceBoxRef.current?.clear?.();
+    diceBoxRef.current = null;
+    diceBoxInitPromiseRef.current = null;
+    if (diceViewportRef.current) {
+      diceViewportRef.current.innerHTML = '';
+    }
+  }, []);
   const selectedSavingThrowRows = useMemo(
     () => normalizeSavingThrowRows(selected?.savingThrows, selected?.abilities, selected?.level),
     [selected?.savingThrows, selected?.abilities, selected?.level]
@@ -5585,22 +5760,133 @@ export default function CombatPanel({
           </div>
 
           <div className={styles.initDockToggleWrap}>
-            <button
-              type="button"
-              className={`${styles.initDockToggle} ${initiativeDockOpen ? styles.initDockToggleActive : ''}`}
-              onMouseEnter={playHover}
-              onClick={() => {
-                playNav();
-                setInitiativeDockOpen((open) => !open);
-              }}
-              aria-expanded={initiativeDockOpen}
-              aria-controls="initiative-rail"
-            >
-              <span className={styles.initDockToggleLabel}>Init</span>
-              <span className={styles.initDockToggleMeta}>
-                {combatants.length > 0 ? `Round ${encounter.round}` : 'No turns'}
-              </span>
-            </button>
+            <div className={styles.topRightToggleRow}>
+              <button
+                type="button"
+                className={`${styles.initDockToggle} ${diceDockOpen ? styles.initDockToggleActive : ''}`}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  setDiceDockOpen((open) => !open);
+                }}
+                aria-expanded={diceDockOpen}
+                aria-controls="combat-dice-dock"
+              >
+                <span className={styles.initDockToggleLabel}>Dice</span>
+                <span className={styles.initDockToggleMeta}>
+                  {diceRolling ? 'Rolling…' : diceLogEntries[0] ? `${diceLogEntries[0].total} total` : (diceEngineReady ? 'Shared log' : 'Ready')}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.initDockToggle} ${initiativeDockOpen ? styles.initDockToggleActive : ''}`}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  setInitiativeDockOpen((open) => !open);
+                }}
+                aria-expanded={initiativeDockOpen}
+                aria-controls="initiative-rail"
+              >
+                <span className={styles.initDockToggleLabel}>Init</span>
+                <span className={styles.initDockToggleMeta}>
+                  {combatants.length > 0 ? `Round ${encounter.round}` : 'No turns'}
+                </span>
+              </button>
+            </div>
+            {diceDockOpen && (
+              <div id="combat-dice-dock" className={styles.diceDockPanel}>
+                <div className={styles.diceDockHeader}>
+                  <div className={styles.diceDockHeading}>3D Dice</div>
+                  <div className={styles.diceDockStatus}>
+                    {diceRolling ? 'Rolling on the battlefield' : 'Shared to everyone in combat'}
+                  </div>
+                </div>
+                <form
+                  className={styles.diceDockForm}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    playNav();
+                    handleDiceRollRequest(diceNotationDraft);
+                  }}
+                >
+                  <div className={styles.diceInputRow}>
+                    <input
+                      type="text"
+                      inputMode="text"
+                      className={styles.diceNotationInput}
+                      value={diceNotationDraft}
+                      onChange={(event) => {
+                        setDiceNotationDraft(event.target.value);
+                        if (diceError) setDiceError('');
+                      }}
+                      placeholder="d20 or 2d6+3"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="submit"
+                      className={btnClass('gold', 'sm', styles.diceRollAction)}
+                      onMouseEnter={playHover}
+                    >
+                      Roll
+                    </button>
+                  </div>
+                  {diceError ? (
+                    <div className={styles.diceError}>{diceError}</div>
+                  ) : (
+                    <div className={styles.diceHint}>Simple rolls only: d20, 2d6, 2d6+3, 4d8-1.</div>
+                  )}
+                  <div className={styles.diceQuickGrid}>
+                    {DICE_QUICK_NOTATIONS.map((notation) => (
+                      <button
+                        key={notation}
+                        type="button"
+                        className={styles.diceQuickButton}
+                        onMouseEnter={playHover}
+                        onClick={() => {
+                          playNav();
+                          setDiceNotationDraft(notation);
+                          handleDiceRollRequest(notation);
+                        }}
+                      >
+                        {notation}
+                      </button>
+                    ))}
+                  </div>
+                </form>
+                <div className={styles.diceHistoryLabel}>Recent Rolls</div>
+                <div className={`${styles.diceHistoryList} koa-scrollbar-thin`}>
+                  {diceLogEntries.length === 0 ? (
+                    <div className={styles.diceHistoryEmpty}>Roll a die to start the shared log.</div>
+                  ) : (
+                    diceLogEntries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className={`${styles.diceHistoryEntry} ${entry.id === diceActiveEntryId ? styles.diceHistoryEntryActive : ''}`}
+                        onMouseEnter={playHover}
+                        onClick={() => {
+                          setDiceNotationDraft(entry.notation);
+                          if (diceError) setDiceError('');
+                        }}
+                        title={`${entry.rolledByName} rolled ${entry.notation}`}
+                      >
+                        <div className={styles.diceHistoryTop}>
+                          <span className={styles.diceHistoryActor}>{entry.rolledByName}</span>
+                          <span className={styles.diceHistoryTime}>{formatDiceTimestamp(entry.rolledAt)}</span>
+                        </div>
+                        <div className={styles.diceHistoryMain}>
+                          <span className={styles.diceHistoryNotation}>{entry.notation}</span>
+                          <span className={styles.diceHistoryTotal}>{entry.total}</span>
+                        </div>
+                        <div className={styles.diceHistoryBreakdown}>{formatDiceBreakdown(entry)}</div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div
@@ -5643,6 +5929,13 @@ export default function CombatPanel({
                 undoDrawing={undoBattlefieldDrawing}
                 clearDrawings={clearBattlefieldDrawings}
               />
+              <div className={styles.diceCanvasOverlay} aria-hidden="true">
+                <div
+                  id={DICE_BOX_VIEWPORT_ID}
+                  ref={diceViewportRef}
+                  className={styles.diceCanvasHost}
+                />
+              </div>
 
               {initiativeDockOpen && (
                 <div className={styles.initOverlay}>
