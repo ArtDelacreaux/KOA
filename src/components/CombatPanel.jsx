@@ -1835,6 +1835,7 @@ function BattlefieldScene({
   const tokenSize = clamp(Math.round(cellSize * 0.8), 48, 96);
   const maxGridCol = Math.max(0, Math.floor((boardWidth - gridOffsetX - 1) / cellSize));
   const maxGridRow = Math.max(0, Math.floor((boardHeight - gridOffsetY - 1) / cellSize));
+  const minZoom = Math.max(0.1, fitZoom * 0.25);
 
   const fitBoardToStage = useCallback(() => {
     const stage = stageRef.current;
@@ -1976,7 +1977,7 @@ function BattlefieldScene({
     if (!rect) return;
     const pointerX = event.clientX - rect.left;
     const pointerY = event.clientY - rect.top;
-    const nextZoom = clamp(viewState.zoom + (event.deltaY < 0 ? 0.1 : -0.1), fitZoom, 2.25);
+    const nextZoom = clamp(viewState.zoom + (event.deltaY < 0 ? 0.1 : -0.1), minZoom, 2.25);
     const boardX = (pointerX - viewState.panX) / viewState.zoom;
     const boardY = (pointerY - viewState.panY) / viewState.zoom;
     setViewState({
@@ -1984,7 +1985,7 @@ function BattlefieldScene({
       panX: pointerX - boardX * nextZoom,
       panY: pointerY - boardY * nextZoom,
     });
-  }, [fitZoom, viewState.panX, viewState.panY, viewState.zoom]);
+  }, [minZoom, viewState.panX, viewState.panY, viewState.zoom]);
 
   const handleStagePointerDown = useCallback((event) => {
     if (event.button !== 0) return;
