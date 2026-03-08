@@ -61,6 +61,7 @@ const BATTLE_BACKGROUNDS = [
 ];
 
 const LS_KEY = STORAGE_KEYS.combat;
+const POINTERS_KEY = STORAGE_KEYS.combatPointers;
 const uid = () => createId('combat');
 const toInt = (v, fb = 0) => { const n = parseInt(String(v ?? ''), 10); return Number.isFinite(n) ? n : fb; };
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -2152,10 +2153,10 @@ function BattlefieldScene({
     ? Math.max(cellSize * UPLOADED_MAP_DRAW_MARGIN_CELLS, UPLOADED_MAP_DRAW_MARGIN_MIN)
     : 0;
   const boardWidth = hasUploadedMapCanvasOverflow
-    ? Math.max(DEFAULT_BOARD_WIDTH, uploadedMapWidth + boardPaddingX)
+    ? uploadedMapWidth + boardPaddingX
     : Math.max(DEFAULT_BOARD_WIDTH, uploadedMapWidth || DEFAULT_BOARD_WIDTH);
   const boardHeight = hasUploadedMapCanvasOverflow
-    ? Math.max(DEFAULT_BOARD_HEIGHT, uploadedMapHeight + boardPaddingY)
+    ? uploadedMapHeight + boardPaddingY
     : Math.max(DEFAULT_BOARD_HEIGHT, uploadedMapHeight || DEFAULT_BOARD_HEIGHT);
   const gridOffsetX = toInt(battlefield.gridOffsetX, 0);
   const gridOffsetY = toInt(battlefield.gridOffsetY, 0);
@@ -3304,6 +3305,7 @@ export default function CombatPanel({
 
   const active = panelType === 'combat';
   const repositorySourceIdRef = useRef(createId('combat-sync'));
+  const pointerRepositorySourceIdRef = useRef(createId('combat-pointer-sync'));
   const suppressNextPersistRef = useRef(false);
   const persistTimerRef = useRef(null);
   const pendingPersistEncounterRef = useRef(null);
@@ -3320,6 +3322,7 @@ export default function CombatPanel({
   );
 
   const [encounter, setEncounter] = useState(() => normalize(loadState()) || defaultEncounter());
+  const [sharedPointerState, setSharedPointerState] = useState(() => normalizeBattlefieldPointers(repository.readJson(POINTERS_KEY, [])));
   const [selectedId, setSelectedId] = useState(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState('edit');
@@ -3366,6 +3369,7 @@ export default function CombatPanel({
   const [diceOutcomeEffect, setDiceOutcomeEffect] = useState(null);
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
   const [battlefieldPointerTick, setBattlefieldPointerTick] = useState(0);
+  const sharedPointerStateRef = useRef(sharedPointerState);
   const diceViewportRef = useRef(null);
   const diceBoxRef = useRef(null);
   const diceBoxInitPromiseRef = useRef(null);
@@ -3479,6 +3483,21 @@ export default function CombatPanel({
   }, []);
 
   useEffect(() => {
+    sharedPointerStateRef.current = sharedPointerState;
+  }, [sharedPointerState]);
+
+  useEffect(() => {
+    const unsubscribe = repository.subscribe(POINTERS_KEY, (event) => {
+      if (event?.meta?.sourceId === pointerRepositorySourceIdRef.current) return;
+      if (event?.meta?.type && event.meta.type !== 'json' && event.meta.type !== 'remove') return;
+      const incoming = normalizeBattlefieldPointers(event?.value);
+      sharedPointerStateRef.current = incoming;
+      setSharedPointerState(incoming);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     if (!hydrated.current) { hydrated.current = true; return; }
     if (suppressNextPersistRef.current) {
       suppressNextPersistRef.current = false;
@@ -3535,10 +3554,7 @@ export default function CombatPanel({
     () => normalizeBattlefieldDrawings(battlefield?.drawings),
     [battlefield?.drawings]
   );
-  const battlefieldPointers = useMemo(
-    () => normalizeBattlefieldPointers(battlefield?.pointers),
-    [battlefield?.pointers]
-  );
+  const battlefieldPointers = sharedPointerState;
   const battleBg = battlefield.backgroundSrc || DEFAULT_BATTLEFIELD.backgroundSrc;
   const canConfigureBattlefield = canManageCombat;
   const battlefieldPointerId = useMemo(
@@ -3549,7 +3565,7 @@ export default function CombatPanel({
     () => viewerUsername || viewerEmail || 'Player',
     [viewerEmail, viewerUsername]
   );
-  const canShareBattlefieldPointer = !!(active && canWriteCombat && battlefieldPointerId);
+  const canShareBattlefieldPointer = !!(active && battlefieldPointerId);
   const visibleBattlefieldPointers = useMemo(() => {
     const now = Date.now();
     return battlefieldPointers.filter((pointer) => now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS);
@@ -3603,20 +3619,17 @@ export default function CombatPanel({
   }, [battlefieldPointers.length]);
 
   const setBattlefieldPointersState = useCallback((builder) => {
-    setEncounter((prev) => {
-      const next = normalize(prev);
-      const currentBattlefield = normalizeBattlefield(next.battlefield);
-      const currentPointers = normalizeBattlefieldPointers(currentBattlefield.pointers);
-      const builtPointers = typeof builder === 'function' ? builder(currentPointers) : builder;
-      if (!Array.isArray(builtPointers)) return prev;
-      const nextPointers = normalizeBattlefieldPointers(builtPointers);
-      if (battlefieldPointersEqual(currentPointers, nextPointers)) return prev;
-      next.battlefield = {
-        ...currentBattlefield,
-        pointers: nextPointers,
-      };
-      return next;
-    });
+    const repositoryPointers = normalizeBattlefieldPointers(
+      repository.readJson(POINTERS_KEY, sharedPointerStateRef.current)
+    );
+    const currentPointers = repositoryPointers.length ? repositoryPointers : sharedPointerStateRef.current;
+    const builtPointers = typeof builder === 'function' ? builder(currentPointers) : builder;
+    if (!Array.isArray(builtPointers)) return;
+    const nextPointers = normalizeBattlefieldPointers(builtPointers);
+    if (battlefieldPointersEqual(currentPointers, nextPointers)) return;
+    sharedPointerStateRef.current = nextPointers;
+    setSharedPointerState(nextPointers);
+    repository.writeJson(POINTERS_KEY, nextPointers, { sourceId: pointerRepositorySourceIdRef.current });
   }, []);
 
   const clearLocalBattlefieldPointer = useCallback(() => {
@@ -3652,13 +3665,13 @@ export default function CombatPanel({
   }, [canShareBattlefieldPointer, clearLocalBattlefieldPointer]);
 
   useEffect(() => {
-    if (!battlefieldPointers.length || !canWriteCombat) return;
+    if (!battlefieldPointers.length) return;
     const now = Date.now();
     if (!battlefieldPointers.some((pointer) => now - pointer.updatedAt > SHARED_POINTER_VISIBLE_MS)) return;
     setBattlefieldPointersState((currentPointers) => currentPointers.filter((pointer) => (
       now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
     )));
-  }, [battlefieldPointerTick, battlefieldPointers, canWriteCombat, setBattlefieldPointersState]);
+  }, [battlefieldPointerTick, battlefieldPointers, setBattlefieldPointersState]);
 
   const resolveCombatantInventoryAssignment = useCallback(
     (combatant) => {

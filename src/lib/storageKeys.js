@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
   worldNpcDeepLink: 'koa:worldnpcs:deeplink:v1',
   charNpcs: 'koa:char:npcs:v1',
   combat: 'koa:combat:v4',
+  combatPointers: 'koa:combat:pointers:v1',
   // persisted world lore gallery (maps/scenes/locations/factions)
   worldLore: 'koa:worldlore:v1',
   menuCampaignBrief: 'koa:menu:campaignBrief:v2',
