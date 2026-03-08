@@ -244,6 +244,8 @@ const DRAW_TOOL_COLORS = ['#ffd86b', '#8bd3ff', '#ff7a7a', '#c7a2ff', '#f8fafc']
 const DRAW_STROKE_SIZES = [4, 8, 14];
 const DEFAULT_BOARD_WIDTH = 2048;
 const DEFAULT_BOARD_HEIGHT = 1365;
+const UPLOADED_MAP_DRAW_MARGIN_CELLS = 4;
+const UPLOADED_MAP_DRAW_MARGIN_MIN = 240;
 const TOKEN_SCALE_MIN = 0.35;
 const TOKEN_SCALE_MAX = 3;
 const TOKEN_CROP_OUTPUT_SIZE = 1024;
@@ -251,6 +253,11 @@ const DEFAULT_DICE_NOTATION = 'd20';
 const DICE_THEME_COLOR = '#d7ae5f';
 const DICE_AUTO_HIDE_MS = 5000;
 const DICE_OUTCOME_EFFECT_MS = 3200;
+const SHARED_POINTER_HOLD_DELAY_MS = 150;
+const SHARED_POINTER_UPDATE_THROTTLE_MS = 70;
+const SHARED_POINTER_VISIBLE_MS = 900;
+const SHARED_POINTER_CLEANUP_INTERVAL_MS = 400;
+const SHARED_POINTER_COLORS = ['#ffd86b', '#8bd3ff', '#ff8fb1', '#97f1a8', '#c7a2ff', '#ffbb70'];
 const DICE_CELEBRATION_SPARKS = Object.freeze(
   Array.from({ length: 12 }, (_, idx) => ({
     id: idx,
@@ -272,6 +279,7 @@ const DEFAULT_BATTLEFIELD = Object.freeze({
   gridOffsetX: 0,
   gridOffsetY: 0,
   drawings: [],
+  pointers: [],
 });
 const PROFILE_SYNC_FIELDS = new Set([
   'race',
@@ -399,6 +407,20 @@ function tokenKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function hashString(value) {
+  const text = String(value || '');
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(index);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function sharedPointerColor(pointerId) {
+  return SHARED_POINTER_COLORS[hashString(pointerId) % SHARED_POINTER_COLORS.length];
+}
+
 function normalizeGridCoordinate(value, fallback = null) {
   if (value == null || value === '') return fallback;
   const parsed = Number(value);
@@ -481,6 +503,7 @@ function normalizeBattlefield(raw) {
     gridOffsetX: clamp(toInt(source.gridOffsetX, DEFAULT_BATTLEFIELD.gridOffsetX), -2048, 2048),
     gridOffsetY: clamp(toInt(source.gridOffsetY, DEFAULT_BATTLEFIELD.gridOffsetY), -2048, 2048),
     drawings: normalizeBattlefieldDrawings(source.drawings),
+    pointers: normalizeBattlefieldPointers(source.pointers),
   };
 }
 
@@ -498,6 +521,38 @@ function normalizeBattlefieldDrawingPoint(raw) {
     x: roundBoardCoordinate(parsedX),
     y: roundBoardCoordinate(parsedY),
   };
+}
+
+function normalizeBattlefieldPointer(raw, index = 0) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  return {
+    id: cleanText(source.id) || `pointer-${index + 1}`,
+    label: cleanText(source.label) || 'Player',
+    x: roundBoardCoordinate(source.x ?? 0),
+    y: roundBoardCoordinate(source.y ?? 0),
+    updatedAt: Math.max(0, toInt(source.updatedAt, 0)),
+  };
+}
+
+function normalizeBattlefieldPointers(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((entry, index) => normalizeBattlefieldPointer(entry, index))
+    .filter((entry) => entry.id);
+}
+
+function battlefieldPointersEqual(a, b) {
+  const left = Array.isArray(a) ? a : [];
+  const right = Array.isArray(b) ? b : [];
+  if (left.length !== right.length) return false;
+  return left.every((pointer, index) => {
+    const other = right[index];
+    return !!other
+      && pointer.id === other.id
+      && pointer.label === other.label
+      && pointer.x === other.x
+      && pointer.y === other.y
+      && pointer.updatedAt === other.updatedAt;
+  });
 }
 
 function normalizeBattlefieldDrawing(raw, index = 0) {
@@ -553,6 +608,7 @@ function battlefieldStateEqual(a, b) {
     && a.gridOffsetX === b.gridOffsetX
     && a.gridOffsetY === b.gridOffsetY
     && battlefieldDrawingsEqual(a.drawings, b.drawings)
+    && battlefieldPointersEqual(a.pointers, b.pointers)
   );
 }
 
@@ -2050,9 +2106,26 @@ function BattlefieldScene({
   removeDrawing,
   undoDrawing,
   clearDrawings,
+  rightRailButtons = null,
+  rightRailPanel = null,
+  sharedPointers = [],
+  canSharePointer = false,
+  localSharedPointerId = '',
+  localSharedPointerLabel = 'Player',
+  setSharedPointer = () => {},
+  clearSharedPointer = () => {},
 }) {
   const stageRef = useRef(null);
   const contextMenuRef = useRef(null);
+  const sharedPointerHoldRef = useRef({
+    active: false,
+    pointerId: null,
+    timerId: null,
+    clientX: 0,
+    clientY: 0,
+    lastBroadcastAt: 0,
+  });
+  const suppressSharedPointerContextMenuUntilRef = useRef(0);
   const [viewState, setViewState] = useState({ zoom: 1, panX: 0, panY: 0 });
   const [fitZoom, setFitZoom] = useState(1);
   const [panState, setPanState] = useState(null);
@@ -2066,12 +2139,33 @@ function BattlefieldScene({
   const [drawSize, setDrawSize] = useState(DRAW_STROKE_SIZES[1]);
   const [drawDraft, setDrawDraft] = useState(null);
   const [eraseState, setEraseState] = useState(null);
-  const boardWidth = Math.max(DEFAULT_BOARD_WIDTH, toInt(battlefield.mediaWidth, 0) || DEFAULT_BOARD_WIDTH);
-  const boardHeight = Math.max(DEFAULT_BOARD_HEIGHT, toInt(battlefield.mediaHeight, 0) || DEFAULT_BOARD_HEIGHT);
+  const [sharedPointerTracking, setSharedPointerTracking] = useState(false);
+  const [sharedPointerPreview, setSharedPointerPreview] = useState(null);
   const cellSize = clamp(toInt(battlefield.gridCellSize, DEFAULT_BATTLEFIELD.gridCellSize), 32, 192);
+  const uploadedMapWidth = Math.max(0, toInt(battlefield.mediaWidth, 0));
+  const uploadedMapHeight = Math.max(0, toInt(battlefield.mediaHeight, 0));
+  const hasUploadedMapCanvasOverflow = !!cleanText(battlefield.mediaStoragePath) && uploadedMapWidth > 0 && uploadedMapHeight > 0;
+  const boardPaddingX = hasUploadedMapCanvasOverflow
+    ? Math.max(cellSize * UPLOADED_MAP_DRAW_MARGIN_CELLS, UPLOADED_MAP_DRAW_MARGIN_MIN)
+    : 0;
+  const boardPaddingY = hasUploadedMapCanvasOverflow
+    ? Math.max(cellSize * UPLOADED_MAP_DRAW_MARGIN_CELLS, UPLOADED_MAP_DRAW_MARGIN_MIN)
+    : 0;
+  const boardWidth = hasUploadedMapCanvasOverflow
+    ? Math.max(DEFAULT_BOARD_WIDTH, uploadedMapWidth + boardPaddingX)
+    : Math.max(DEFAULT_BOARD_WIDTH, uploadedMapWidth || DEFAULT_BOARD_WIDTH);
+  const boardHeight = hasUploadedMapCanvasOverflow
+    ? Math.max(DEFAULT_BOARD_HEIGHT, uploadedMapHeight + boardPaddingY)
+    : Math.max(DEFAULT_BOARD_HEIGHT, uploadedMapHeight || DEFAULT_BOARD_HEIGHT);
   const gridOffsetX = toInt(battlefield.gridOffsetX, 0);
   const gridOffsetY = toInt(battlefield.gridOffsetY, 0);
   const backgroundUrl = battlefieldMediaUrl || battleBg || '';
+  const boardBackdropFallback = 'radial-gradient(circle at 20% 18%, rgba(255, 225, 150, 0.22), rgba(18, 12, 8, 0.92) 58%), linear-gradient(180deg, rgba(56, 32, 18, 0.94), rgba(10, 7, 5, 0.98))';
+  const boardBackdropBackground = backgroundUrl
+    ? hasUploadedMapCanvasOverflow
+      ? `url(${backgroundUrl}) left top / ${uploadedMapWidth}px ${uploadedMapHeight}px no-repeat, ${boardBackdropFallback}`
+      : `url(${backgroundUrl}) center/cover no-repeat`
+    : boardBackdropFallback;
   const tokenSize = clamp(Math.round(cellSize * 0.8), 48, 96);
   const maxGridCol = Math.max(0, Math.floor((boardWidth - gridOffsetX - 1) / cellSize));
   const maxGridRow = Math.max(0, Math.floor((boardHeight - gridOffsetY - 1) / cellSize));
@@ -2085,13 +2179,15 @@ function BattlefieldScene({
     const rect = stage.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const zoom = clamp(Math.max(rect.width / boardWidth, rect.height / boardHeight), 0.2, 2.25);
+    const focusShiftX = hasUploadedMapCanvasOverflow ? (boardPaddingX * zoom) / 2 : 0;
+    const focusShiftY = hasUploadedMapCanvasOverflow ? (boardPaddingY * zoom) / 2 : 0;
     setFitZoom(zoom);
     setViewState({
       zoom,
-      panX: Math.round((rect.width - boardWidth * zoom) / 2),
-      panY: Math.round((rect.height - boardHeight * zoom) / 2),
+      panX: Math.round((rect.width - boardWidth * zoom) / 2 + focusShiftX),
+      panY: Math.round((rect.height - boardHeight * zoom) / 2 + focusShiftY),
     });
-  }, [boardHeight, boardWidth]);
+  }, [boardHeight, boardPaddingX, boardPaddingY, boardWidth, hasUploadedMapCanvasOverflow]);
 
   useLayoutEffect(() => {
     fitBoardToStage();
@@ -2138,12 +2234,78 @@ function BattlefieldScene({
     y: clamp(roundBoardCoordinate(point?.y ?? 0), 0, boardHeight),
   }), [boardHeight, boardWidth]);
 
+  const clearSharedPointerHoldTimer = useCallback(() => {
+    const holdState = sharedPointerHoldRef.current;
+    if (holdState.timerId) {
+      window.clearTimeout(holdState.timerId);
+      holdState.timerId = null;
+    }
+  }, []);
+
+  const resolveSharedPointerPoint = useCallback((clientX, clientY) => (
+    clampBoardPoint(clientToBoardPoint(clientX, clientY))
+  ), [clampBoardPoint, clientToBoardPoint]);
+
+  const updateSharedPointerPreview = useCallback((clientX, clientY) => {
+    if (!localSharedPointerId) return null;
+    const nextPoint = resolveSharedPointerPoint(clientX, clientY);
+    setSharedPointerPreview((prev) => {
+      if (
+        prev
+        && prev.id === localSharedPointerId
+        && prev.label === localSharedPointerLabel
+        && prev.x === nextPoint.x
+        && prev.y === nextPoint.y
+      ) {
+        return prev;
+      }
+      return {
+        id: localSharedPointerId,
+        label: localSharedPointerLabel,
+        x: nextPoint.x,
+        y: nextPoint.y,
+      };
+    });
+    return nextPoint;
+  }, [localSharedPointerId, localSharedPointerLabel, resolveSharedPointerPoint]);
+
+  const pushSharedPointerUpdate = useCallback((clientX, clientY, force = false, resolvedPoint = null) => {
+    if (!canSharePointer) return;
+    const holdState = sharedPointerHoldRef.current;
+    const now = performance.now();
+    if (!force && now - holdState.lastBroadcastAt < SHARED_POINTER_UPDATE_THROTTLE_MS) return;
+    holdState.lastBroadcastAt = now;
+    setSharedPointer(resolvedPoint || resolveSharedPointerPoint(clientX, clientY));
+  }, [canSharePointer, resolveSharedPointerPoint, setSharedPointer]);
+
+  const stopSharedPointerTracking = useCallback(({ suppressContextMenu = false } = {}) => {
+    const holdState = sharedPointerHoldRef.current;
+    const wasActive = holdState.active;
+    clearSharedPointerHoldTimer();
+    holdState.active = false;
+    holdState.pointerId = null;
+    holdState.lastBroadcastAt = 0;
+    setSharedPointerTracking(false);
+    setSharedPointerPreview(null);
+    if (wasActive) {
+      clearSharedPointer();
+      if (suppressContextMenu) {
+        suppressSharedPointerContextMenuUntilRef.current = Date.now() + 220;
+      }
+    }
+  }, [clearSharedPointer, clearSharedPointerHoldTimer]);
+
   useEffect(() => {
     if (canDraw) return;
     setBoardTool('pan');
     setDrawDraft(null);
     setEraseState(null);
   }, [canDraw]);
+
+  useEffect(() => {
+    if (canSharePointer) return;
+    stopSharedPointerTracking();
+  }, [canSharePointer, stopSharedPointerTracking]);
 
   useEffect(() => {
     setDrawDraft(null);
@@ -2155,6 +2317,58 @@ function BattlefieldScene({
       setBoardTool('pan');
     }
   }, [boardTool, normalizedDrawings.length]);
+
+  useEffect(() => {
+    if (!sharedPointerTracking) return undefined;
+    const onPointerMove = (event) => {
+      const holdState = sharedPointerHoldRef.current;
+      if (holdState.pointerId !== event.pointerId) return;
+      holdState.clientX = event.clientX;
+      holdState.clientY = event.clientY;
+      if (holdState.active) {
+        const resolvedPoint = updateSharedPointerPreview(event.clientX, event.clientY);
+        pushSharedPointerUpdate(event.clientX, event.clientY, false, resolvedPoint);
+      }
+    };
+    const finishTracking = (event) => {
+      const holdState = sharedPointerHoldRef.current;
+      if (holdState.pointerId !== event.pointerId) return;
+      stopSharedPointerTracking({ suppressContextMenu: holdState.active });
+    };
+    const cancelTracking = () => stopSharedPointerTracking();
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', finishTracking);
+    window.addEventListener('pointercancel', finishTracking);
+    window.addEventListener('blur', cancelTracking);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', finishTracking);
+      window.removeEventListener('pointercancel', finishTracking);
+      window.removeEventListener('blur', cancelTracking);
+    };
+  }, [pushSharedPointerUpdate, sharedPointerTracking, stopSharedPointerTracking, updateSharedPointerPreview]);
+
+  useEffect(() => {
+    if (!sharedPointerTracking) return undefined;
+    const rootStyle = document.documentElement?.style;
+    const bodyStyle = document.body?.style;
+    const previousRootCursor = rootStyle?.cursor ?? '';
+    const previousBodyCursor = bodyStyle?.cursor ?? '';
+    if (rootStyle) rootStyle.cursor = 'none';
+    if (bodyStyle) bodyStyle.cursor = 'none';
+    return () => {
+      if (rootStyle) rootStyle.cursor = previousRootCursor;
+      if (bodyStyle) bodyStyle.cursor = previousBodyCursor;
+    };
+  }, [sharedPointerTracking]);
+
+  useEffect(() => () => {
+    const holdState = sharedPointerHoldRef.current;
+    clearSharedPointerHoldTimer();
+    if (holdState.active) {
+      clearSharedPointer();
+    }
+  }, [clearSharedPointer, clearSharedPointerHoldTimer]);
 
   const eraseDrawingAtClientPoint = useCallback((clientX, clientY) => {
     if (!canDraw || normalizedDrawings.length === 0) return false;
@@ -2365,6 +2579,29 @@ function BattlefieldScene({
   }, [minZoom, viewState.panX, viewState.panY, viewState.zoom]);
 
   const handleStagePointerDown = useCallback((event) => {
+    if (event.button === 2) {
+      if (!canSharePointer) return;
+      setContextMenu(null);
+      setPanState(null);
+      setDragState(null);
+      setRotateState(null);
+      clearSharedPointerHoldTimer();
+      sharedPointerHoldRef.current.active = false;
+      sharedPointerHoldRef.current.pointerId = event.pointerId;
+      sharedPointerHoldRef.current.clientX = event.clientX;
+      sharedPointerHoldRef.current.clientY = event.clientY;
+      sharedPointerHoldRef.current.lastBroadcastAt = 0;
+      sharedPointerHoldRef.current.timerId = window.setTimeout(() => {
+        const holdState = sharedPointerHoldRef.current;
+        if (holdState.pointerId !== event.pointerId) return;
+        holdState.active = true;
+        holdState.timerId = null;
+        const resolvedPoint = updateSharedPointerPreview(holdState.clientX, holdState.clientY);
+        pushSharedPointerUpdate(holdState.clientX, holdState.clientY, true, resolvedPoint);
+      }, SHARED_POINTER_HOLD_DELAY_MS);
+      setSharedPointerTracking(true);
+      return;
+    }
     if (event.button !== 0) return;
     setContextMenu(null);
     if (interactionMode === 'draw') {
@@ -2406,10 +2643,18 @@ function BattlefieldScene({
     interactionMode,
     viewState.panX,
     viewState.panY,
+    canSharePointer,
+    clearSharedPointerHoldTimer,
+    pushSharedPointerUpdate,
+    updateSharedPointerPreview,
   ]);
 
   const handleStageContextMenu = useCallback((event) => {
     event.preventDefault();
+    if (
+      sharedPointerHoldRef.current.active
+      || Date.now() < suppressSharedPointerContextMenuUntilRef.current
+    ) return;
     if (interactionMode !== 'pan') return;
     const point = clientToBoardPoint(event.clientX, event.clientY);
     const cell = boardPointToCell(point);
@@ -2420,6 +2665,36 @@ function BattlefieldScene({
       cell,
     });
   }, [boardPointToCell, clientToBoardPoint, interactionMode]);
+
+  const renderSharedPointerAt = useCallback((pointer) => {
+    const stageX = viewState.panX + pointer.x * viewState.zoom;
+    const stageY = viewState.panY + pointer.y * viewState.zoom;
+    return (
+      <div
+        key={pointer.id}
+        className={styles.sharedCursorAnchor}
+        style={{
+          left: `${stageX}px`,
+          top: `${stageY}px`,
+          '--shared-cursor-color': sharedPointerColor(pointer.id),
+        }}
+      >
+        <div className={styles.sharedCursor}>
+          <div className={styles.sharedCursorPulse} />
+          <div className={styles.sharedCursorIcon} />
+          <div className={styles.sharedCursorLabel}>{pointer.label}</div>
+        </div>
+      </div>
+    );
+  }, [viewState.panX, viewState.panY, viewState.zoom]);
+
+  const renderedSharedPointers = useMemo(() => {
+    if (!sharedPointerPreview) return sharedPointers;
+    return [
+      ...sharedPointers.filter((pointer) => pointer.id !== sharedPointerPreview.id),
+      sharedPointerPreview,
+    ];
+  }, [sharedPointerPreview, sharedPointers]);
 
   const renderTokenAt = (combatant) => {
     const dragging = dragState?.combatantId === combatant.id;
@@ -2504,6 +2779,10 @@ function BattlefieldScene({
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (
+                sharedPointerHoldRef.current.active
+                || Date.now() < suppressSharedPointerContextMenuUntilRef.current
+              ) return;
               setSelectedId(combatant.id);
               setContextMenu({
                 type: 'token',
@@ -2646,11 +2925,13 @@ function BattlefieldScene({
         onContextMenu={handleStageContextMenu}
         style={{
           cursor:
-            drawDraft || eraseState?.active || interactionMode === 'draw' || interactionMode === 'erase'
-              ? 'crosshair'
-              : dragState || isPanning
-                ? 'grabbing'
-                : 'grab',
+            sharedPointerTracking
+              ? 'none'
+              : drawDraft || eraseState?.active || interactionMode === 'draw' || interactionMode === 'erase'
+                ? 'crosshair'
+                : dragState || isPanning
+                  ? 'grabbing'
+                  : 'grab',
         }}
       >
         <div
@@ -2661,16 +2942,14 @@ function BattlefieldScene({
             transform: `translate(${viewState.panX}px, ${viewState.panY}px) scale(${viewState.zoom})`,
           }}
         >
-          <div
-            className={styles.boardBackdrop}
-            style={{
-              width: boardWidth,
-              height: boardHeight,
-              background: backgroundUrl
-                ? `url(${backgroundUrl}) center/cover no-repeat`
-                : 'radial-gradient(circle at 20% 18%, rgba(255, 225, 150, 0.22), rgba(18, 12, 8, 0.92) 58%), linear-gradient(180deg, rgba(56, 32, 18, 0.94), rgba(10, 7, 5, 0.98))',
-            }}
-          />
+            <div
+              className={styles.boardBackdrop}
+              style={{
+                width: boardWidth,
+                height: boardHeight,
+                background: boardBackdropBackground,
+              }}
+            />
           <div className={styles.boardShade} />
           {battlefield.gridEnabled && (
             <div
@@ -2718,6 +2997,9 @@ function BattlefieldScene({
           className={styles.boardTokenLayer}
           style={{ pointerEvents: interactionMode === 'pan' ? 'auto' : 'none' }}
         >
+          <div className={styles.sharedCursorLayer} aria-hidden="true">
+            {renderedSharedPointers.map((pointer) => renderSharedPointerAt(pointer))}
+          </div>
           {combatants.map((combatant) => renderTokenAt(combatant))}
         </div>
 
@@ -2729,79 +3011,88 @@ function BattlefieldScene({
         )}
       </div>
       <div className={styles.boardToolDock}>
-        <div className={styles.boardToolRail}>
-          <button
-            type="button"
-            className={`${styles.boardToolButton} ${interactionMode === 'pan' ? styles.boardToolButtonActive : ''}`}
-            onMouseEnter={playHover}
-            onClick={() => {
-              playNav();
-              setBoardTool('pan');
-            }}
-            title="Pan and move tokens"
-            aria-pressed={interactionMode === 'pan'}
-          >
-            ✋
-          </button>
-          <button
-            type="button"
-            className={`${styles.boardToolButton} ${interactionMode === 'draw' ? styles.boardToolButtonActive : ''}`}
-            onMouseEnter={playHover}
-            onClick={() => {
-              playNav();
-              if (!canDraw) return;
-              setBoardTool('draw');
-            }}
-            title="Draw on the map"
-            aria-pressed={interactionMode === 'draw'}
-            disabled={!canDraw}
-          >
-            ✎
-          </button>
-          <button
-            type="button"
-            className={`${styles.boardToolButton} ${interactionMode === 'erase' ? styles.boardToolButtonActive : ''}`}
-            onMouseEnter={playHover}
-            onClick={() => {
-              playNav();
-              if (!canDraw || normalizedDrawings.length === 0) return;
-              setBoardTool('erase');
-            }}
-            title="Erase drawn lines"
-            aria-pressed={interactionMode === 'erase'}
-            disabled={!canDraw || normalizedDrawings.length === 0}
-          >
-            ⌫
-          </button>
-          <div className={styles.boardToolDivider} />
-          <button
-            type="button"
-            className={styles.boardToolButton}
-            onMouseEnter={playHover}
-            onClick={() => {
-              playNav();
-              undoDrawing();
-              setBoardTool('pan');
-            }}
-            title="Undo last line"
-            disabled={!canDraw || normalizedDrawings.length === 0}
-          >
-            ↶
-          </button>
-          <button
-            type="button"
-            className={`${styles.boardToolButton} ${styles.boardToolButtonDanger}`}
-            onMouseEnter={playHover}
-            onClick={() => {
-              playNav();
-              clearDrawings();
-              setBoardTool('pan');
-            }}
-            title="Clear all drawings"
-            disabled={!canDraw || normalizedDrawings.length === 0}
-          >
-            ✕
-          </button>
+        <div className={styles.boardToolTop}>
+          {rightRailPanel}
+          <div className={styles.boardToolRail}>
+            {rightRailButtons ? (
+              <>
+                {rightRailButtons}
+                <div className={styles.boardToolDivider} />
+              </>
+            ) : null}
+            <button
+              type="button"
+              className={`${styles.boardToolButton} ${interactionMode === 'pan' ? styles.boardToolButtonActive : ''}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                setBoardTool('pan');
+              }}
+              title="Pan and move tokens"
+              aria-pressed={interactionMode === 'pan'}
+            >
+              ✋
+            </button>
+            <button
+              type="button"
+              className={`${styles.boardToolButton} ${interactionMode === 'draw' ? styles.boardToolButtonActive : ''}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                if (!canDraw) return;
+                setBoardTool('draw');
+              }}
+              title="Draw on the map"
+              aria-pressed={interactionMode === 'draw'}
+              disabled={!canDraw}
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              className={`${styles.boardToolButton} ${interactionMode === 'erase' ? styles.boardToolButtonActive : ''}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                if (!canDraw || normalizedDrawings.length === 0) return;
+                setBoardTool('erase');
+              }}
+              title="Erase drawn lines"
+              aria-pressed={interactionMode === 'erase'}
+              disabled={!canDraw || normalizedDrawings.length === 0}
+            >
+              ⌫
+            </button>
+            <div className={styles.boardToolDivider} />
+            <button
+              type="button"
+              className={styles.boardToolButton}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                undoDrawing();
+                setBoardTool('pan');
+              }}
+              title="Undo last line"
+              disabled={!canDraw || normalizedDrawings.length === 0}
+            >
+              ↶
+            </button>
+            <button
+              type="button"
+              className={`${styles.boardToolButton} ${styles.boardToolButtonDanger}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                clearDrawings();
+                setBoardTool('pan');
+              }}
+              title="Clear all drawings"
+              disabled={!canDraw || normalizedDrawings.length === 0}
+            >
+              ✕
+            </button>
+          </div>
         </div>
         {interactionMode === 'draw' && canDraw && (
           <div className={styles.boardToolSettings}>
@@ -3070,11 +3361,11 @@ export default function CombatPanel({
   const [diceNotationDraft, setDiceNotationDraft] = useState(DEFAULT_DICE_NOTATION);
   const [diceError, setDiceError] = useState('');
   const [diceRolling, setDiceRolling] = useState(false);
-  const [diceEngineReady, setDiceEngineReady] = useState(false);
   const [diceActiveEntryId, setDiceActiveEntryId] = useState('');
   const [diceBannerEntry, setDiceBannerEntry] = useState(null);
   const [diceOutcomeEffect, setDiceOutcomeEffect] = useState(null);
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
+  const [battlefieldPointerTick, setBattlefieldPointerTick] = useState(0);
   const diceViewportRef = useRef(null);
   const diceBoxRef = useRef(null);
   const diceBoxInitPromiseRef = useRef(null);
@@ -3244,8 +3535,25 @@ export default function CombatPanel({
     () => normalizeBattlefieldDrawings(battlefield?.drawings),
     [battlefield?.drawings]
   );
+  const battlefieldPointers = useMemo(
+    () => normalizeBattlefieldPointers(battlefield?.pointers),
+    [battlefield?.pointers]
+  );
   const battleBg = battlefield.backgroundSrc || DEFAULT_BATTLEFIELD.backgroundSrc;
   const canConfigureBattlefield = canManageCombat;
+  const battlefieldPointerId = useMemo(
+    () => viewerUserId || viewerEmail || viewerUsernameKey || repositorySourceIdRef.current,
+    [viewerEmail, viewerUserId, viewerUsernameKey]
+  );
+  const battlefieldPointerLabel = useMemo(
+    () => viewerUsername || viewerEmail || 'Player',
+    [viewerEmail, viewerUsername]
+  );
+  const canShareBattlefieldPointer = !!(active && canWriteCombat && battlefieldPointerId);
+  const visibleBattlefieldPointers = useMemo(() => {
+    const now = Date.now();
+    return battlefieldPointers.filter((pointer) => now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS);
+  }, [battlefieldPointerTick, battlefieldPointers]);
   const canBoardMoveCombatant = useCallback(
     (combatant) => !!combatant && canWriteCombat,
     [canWriteCombat]
@@ -3285,6 +3593,72 @@ export default function CombatPanel({
     resolveSignedUrl();
     return () => { cancelled = true; };
   }, [battlefield.mediaStoragePath, battlefield.mediaUpdatedAt]);
+
+  useEffect(() => {
+    if (!battlefieldPointers.length) return undefined;
+    const timerId = window.setInterval(() => {
+      setBattlefieldPointerTick((tick) => tick + 1);
+    }, SHARED_POINTER_CLEANUP_INTERVAL_MS);
+    return () => window.clearInterval(timerId);
+  }, [battlefieldPointers.length]);
+
+  const setBattlefieldPointersState = useCallback((builder) => {
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentBattlefield = normalizeBattlefield(next.battlefield);
+      const currentPointers = normalizeBattlefieldPointers(currentBattlefield.pointers);
+      const builtPointers = typeof builder === 'function' ? builder(currentPointers) : builder;
+      if (!Array.isArray(builtPointers)) return prev;
+      const nextPointers = normalizeBattlefieldPointers(builtPointers);
+      if (battlefieldPointersEqual(currentPointers, nextPointers)) return prev;
+      next.battlefield = {
+        ...currentBattlefield,
+        pointers: nextPointers,
+      };
+      return next;
+    });
+  }, []);
+
+  const clearLocalBattlefieldPointer = useCallback(() => {
+    if (!battlefieldPointerId) return;
+    const now = Date.now();
+    setBattlefieldPointersState((currentPointers) => currentPointers.filter((pointer) => (
+      pointer.id !== battlefieldPointerId && now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
+    )));
+  }, [battlefieldPointerId, setBattlefieldPointersState]);
+
+  const setLocalBattlefieldPointer = useCallback((point) => {
+    if (!canShareBattlefieldPointer || !battlefieldPointerId) return;
+    const now = Date.now();
+    const nextPointer = normalizeBattlefieldPointer({
+      id: battlefieldPointerId,
+      label: battlefieldPointerLabel,
+      x: point?.x ?? 0,
+      y: point?.y ?? 0,
+      updatedAt: now,
+    });
+    setBattlefieldPointersState((currentPointers) => {
+      const retainedPointers = currentPointers.filter((pointer) => (
+        pointer.id !== battlefieldPointerId && now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
+      ));
+      return [...retainedPointers, nextPointer];
+    });
+  }, [battlefieldPointerId, battlefieldPointerLabel, canShareBattlefieldPointer, setBattlefieldPointersState]);
+
+  useEffect(() => {
+    if (!canShareBattlefieldPointer) {
+      clearLocalBattlefieldPointer();
+    }
+  }, [canShareBattlefieldPointer, clearLocalBattlefieldPointer]);
+
+  useEffect(() => {
+    if (!battlefieldPointers.length || !canWriteCombat) return;
+    const now = Date.now();
+    if (!battlefieldPointers.some((pointer) => now - pointer.updatedAt > SHARED_POINTER_VISIBLE_MS)) return;
+    setBattlefieldPointersState((currentPointers) => currentPointers.filter((pointer) => (
+      now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
+    )));
+  }, [battlefieldPointerTick, battlefieldPointers, canWriteCombat, setBattlefieldPointersState]);
 
   const resolveCombatantInventoryAssignment = useCallback(
     (combatant) => {
@@ -3608,13 +3982,11 @@ export default function CombatPanel({
         await box.init();
         box.hide();
         diceBoxRef.current = box;
-        setDiceEngineReady(true);
         return box;
       })
       .catch((error) => {
         diceBoxInitPromiseRef.current = null;
         diceBoxRef.current = null;
-        setDiceEngineReady(false);
         throw error;
       });
 
@@ -5772,6 +6144,132 @@ export default function CombatPanel({
   );
   const sheetPortalHost = isSheetPopoutActive ? sheetPopoutRootRef.current : null;
   const shouldRenderEditorInline = !!(editorOpen && selected && !isSheetPopoutActive);
+  const rightRailButtons = (
+    <>
+      <button
+        type="button"
+        className={`${styles.boardToolButton} ${initiativeDockOpen ? styles.boardToolButtonActive : ''}`}
+        onMouseEnter={playHover}
+        onClick={() => {
+          playNav();
+          setInitiativeDockOpen((open) => !open);
+        }}
+        title={combatants.length > 0 ? `Initiative order, round ${encounter.round}` : 'Initiative order'}
+        aria-label={combatants.length > 0 ? `Toggle initiative order, round ${encounter.round}` : 'Toggle initiative order'}
+        aria-expanded={initiativeDockOpen}
+        aria-controls="initiative-rail"
+      >
+        ☰
+      </button>
+      <button
+        type="button"
+        className={`${styles.boardToolButton} ${diceDockOpen || diceRolling ? styles.boardToolButtonActive : ''}`}
+        onMouseEnter={playHover}
+        onClick={() => {
+          playNav();
+          setDiceDockOpen((open) => !open);
+        }}
+        title={diceRolling ? 'Dice rolling on the battlefield' : 'Open 3D dice'}
+        aria-label={diceRolling ? 'Dice rolling on the battlefield' : 'Toggle 3D dice'}
+        aria-expanded={diceDockOpen}
+        aria-controls="combat-dice-dock"
+      >
+        ⚅
+      </button>
+    </>
+  );
+  const rightRailPanel = diceDockOpen ? (
+    <div id="combat-dice-dock" className={styles.diceDockPanel}>
+      <div className={styles.diceDockHeader}>
+        <div className={styles.diceDockHeading}>3D Dice</div>
+        <div className={styles.diceDockStatus}>
+          {diceRolling ? 'Rolling on the battlefield' : 'Shared to everyone in combat'}
+        </div>
+      </div>
+      <form
+        className={styles.diceDockForm}
+        onSubmit={(event) => {
+          event.preventDefault();
+          playNav();
+          handleDiceRollRequest(diceNotationDraft);
+        }}
+      >
+        <div className={styles.diceInputRow}>
+          <input
+            type="text"
+            inputMode="text"
+            className={styles.diceNotationInput}
+            value={diceNotationDraft}
+            onChange={(event) => {
+              setDiceNotationDraft(event.target.value);
+              if (diceError) setDiceError('');
+            }}
+            placeholder="d20 or 2d6+3"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <button
+            type="submit"
+            className={btnClass('gold', 'sm', styles.diceRollAction)}
+            onMouseEnter={playHover}
+          >
+            Roll
+          </button>
+        </div>
+        {diceError ? (
+          <div className={styles.diceError}>{diceError}</div>
+        ) : (
+          <div className={styles.diceHint}>Simple rolls only: d20, 2d6, 2d6+3, 4d8-1.</div>
+        )}
+        <div className={styles.diceQuickGrid}>
+          {DICE_QUICK_NOTATIONS.map((notation) => (
+            <button
+              key={notation}
+              type="button"
+              className={styles.diceQuickButton}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                setDiceNotationDraft(notation);
+                handleDiceRollRequest(notation);
+              }}
+            >
+              {notation}
+            </button>
+          ))}
+        </div>
+      </form>
+      <div className={styles.diceHistoryLabel}>Recent Rolls</div>
+      <div className={`${styles.diceHistoryList} koa-scrollbar-thin`}>
+        {diceLogEntries.length === 0 ? (
+          <div className={styles.diceHistoryEmpty}>Roll a die to start the shared log.</div>
+        ) : (
+          diceLogEntries.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className={`${styles.diceHistoryEntry} ${entry.id === diceActiveEntryId ? styles.diceHistoryEntryActive : ''}`}
+              onMouseEnter={playHover}
+              onClick={() => {
+                setDiceNotationDraft(entry.notation);
+                if (diceError) setDiceError('');
+              }}
+            >
+              <div className={styles.diceHistoryTop}>
+                <span className={styles.diceHistoryNotation}>{entry.notation}</span>
+                <span className={styles.diceHistoryTotal}>{entry.total}</span>
+              </div>
+              <div className={styles.diceHistoryMain}>
+                <span className={styles.diceHistoryMeta}>{entry.rolledByName}</span>
+                <span className={styles.diceHistoryMeta}>{formatDiceTimestamp(entry.rolledAt)}</span>
+              </div>
+              <div className={styles.diceHistoryBreakdown}>{formatDiceBreakdown(entry)}</div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  ) : null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -6003,136 +6501,6 @@ export default function CombatPanel({
             </button>
           </div>
 
-          <div className={styles.initDockToggleWrap}>
-            <div className={styles.topRightToggleRow}>
-              <button
-                type="button"
-                className={`${styles.initDockToggle} ${diceDockOpen ? styles.initDockToggleActive : ''}`}
-                onMouseEnter={playHover}
-                onClick={() => {
-                  playNav();
-                  setDiceDockOpen((open) => !open);
-                }}
-                aria-expanded={diceDockOpen}
-                aria-controls="combat-dice-dock"
-              >
-                <span className={styles.initDockToggleLabel}>Dice</span>
-                <span className={styles.initDockToggleMeta}>
-                  {diceRolling ? 'Rolling…' : diceLogEntries[0] ? `${diceLogEntries[0].total} total` : (diceEngineReady ? 'Shared log' : 'Ready')}
-                </span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.initDockToggle} ${initiativeDockOpen ? styles.initDockToggleActive : ''}`}
-                onMouseEnter={playHover}
-                onClick={() => {
-                  playNav();
-                  setInitiativeDockOpen((open) => !open);
-                }}
-                aria-expanded={initiativeDockOpen}
-                aria-controls="initiative-rail"
-              >
-                <span className={styles.initDockToggleLabel}>Init</span>
-                <span className={styles.initDockToggleMeta}>
-                  {combatants.length > 0 ? `Round ${encounter.round}` : 'No turns'}
-                </span>
-              </button>
-            </div>
-            {diceDockOpen && (
-              <div id="combat-dice-dock" className={styles.diceDockPanel}>
-                <div className={styles.diceDockHeader}>
-                  <div className={styles.diceDockHeading}>3D Dice</div>
-                  <div className={styles.diceDockStatus}>
-                    {diceRolling ? 'Rolling on the battlefield' : 'Shared to everyone in combat'}
-                  </div>
-                </div>
-                <form
-                  className={styles.diceDockForm}
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    playNav();
-                    handleDiceRollRequest(diceNotationDraft);
-                  }}
-                >
-                  <div className={styles.diceInputRow}>
-                    <input
-                      type="text"
-                      inputMode="text"
-                      className={styles.diceNotationInput}
-                      value={diceNotationDraft}
-                      onChange={(event) => {
-                        setDiceNotationDraft(event.target.value);
-                        if (diceError) setDiceError('');
-                      }}
-                      placeholder="d20 or 2d6+3"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <button
-                      type="submit"
-                      className={btnClass('gold', 'sm', styles.diceRollAction)}
-                      onMouseEnter={playHover}
-                    >
-                      Roll
-                    </button>
-                  </div>
-                  {diceError ? (
-                    <div className={styles.diceError}>{diceError}</div>
-                  ) : (
-                    <div className={styles.diceHint}>Simple rolls only: d20, 2d6, 2d6+3, 4d8-1.</div>
-                  )}
-                  <div className={styles.diceQuickGrid}>
-                    {DICE_QUICK_NOTATIONS.map((notation) => (
-                      <button
-                        key={notation}
-                        type="button"
-                        className={styles.diceQuickButton}
-                        onMouseEnter={playHover}
-                        onClick={() => {
-                          playNav();
-                          setDiceNotationDraft(notation);
-                          handleDiceRollRequest(notation);
-                        }}
-                      >
-                        {notation}
-                      </button>
-                    ))}
-                  </div>
-                </form>
-                <div className={styles.diceHistoryLabel}>Recent Rolls</div>
-                <div className={`${styles.diceHistoryList} koa-scrollbar-thin`}>
-                  {diceLogEntries.length === 0 ? (
-                    <div className={styles.diceHistoryEmpty}>Roll a die to start the shared log.</div>
-                  ) : (
-                    diceLogEntries.map((entry) => (
-                      <button
-                        key={entry.id}
-                        type="button"
-                        className={`${styles.diceHistoryEntry} ${entry.id === diceActiveEntryId ? styles.diceHistoryEntryActive : ''}`}
-                        onMouseEnter={playHover}
-                        onClick={() => {
-                          setDiceNotationDraft(entry.notation);
-                          if (diceError) setDiceError('');
-                        }}
-                        title={`${entry.rolledByName} rolled ${entry.notation}`}
-                      >
-                        <div className={styles.diceHistoryTop}>
-                          <span className={styles.diceHistoryActor}>{entry.rolledByName}</span>
-                          <span className={styles.diceHistoryTime}>{formatDiceTimestamp(entry.rolledAt)}</span>
-                        </div>
-                        <div className={styles.diceHistoryMain}>
-                          <span className={styles.diceHistoryNotation}>{entry.notation}</span>
-                          <span className={styles.diceHistoryTotal}>{entry.total}</span>
-                        </div>
-                        <div className={styles.diceHistoryBreakdown}>{formatDiceBreakdown(entry)}</div>
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           <div
           className={styles.mainLayout}
           style={{
@@ -6170,6 +6538,14 @@ export default function CombatPanel({
                 removeDrawing={removeBattlefieldDrawing}
                 undoDrawing={undoBattlefieldDrawing}
                 clearDrawings={clearBattlefieldDrawings}
+                rightRailButtons={rightRailButtons}
+                rightRailPanel={rightRailPanel}
+                sharedPointers={visibleBattlefieldPointers}
+                canSharePointer={canShareBattlefieldPointer}
+                localSharedPointerId={battlefieldPointerId}
+                localSharedPointerLabel={battlefieldPointerLabel}
+                setSharedPointer={setLocalBattlefieldPointer}
+                clearSharedPointer={clearLocalBattlefieldPointer}
               />
               <div className={styles.diceCanvasOverlay} aria-hidden="true">
                 <div
