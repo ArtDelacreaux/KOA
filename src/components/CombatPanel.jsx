@@ -239,7 +239,7 @@ const ENCOUNTER_PERSIST_DEBOUNCE_MS = 120;
 const COMBAT_MEDIA_BUCKET = 'koa-combat-media';
 const BOARD_UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
 const BOARD_ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible'];
+const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible', 'Hidden'];
 const DRAW_TOOL_COLORS = ['#ffd86b', '#8bd3ff', '#ff7a7a', '#c7a2ff', '#f8fafc'];
 const DRAW_STROKE_SIZES = [4, 8, 14];
 const DEFAULT_BOARD_WIDTH = 2048;
@@ -1145,6 +1145,14 @@ function formatSigned(value, empty = '—') {
   return n >= 0 ? `+${n}` : `${n}`;
 }
 
+function buildD20CheckNotation(modifier) {
+  const value = toInt(modifier, null);
+  if (value == null) return '';
+  if (value > 0) return `d20+${value}`;
+  if (value < 0) return `d20${value}`;
+  return 'd20';
+}
+
 function formatDiceTimestamp(value) {
   const stamp = cleanText(value);
   if (!stamp) return '';
@@ -1876,6 +1884,10 @@ function BattlefieldToken({
   const tokenRotation = normalizeTokenRotation(rotationOverride == null ? c.tokenRotation : rotationOverride, 0);
   const displaySize = clamp(Math.round(size * tokenScale), 32, 256);
   const rotateHandleOffset = Math.round(displaySize / 2 + 18);
+  const isHidden = Array.isArray(c.status) && c.status.some((entry) => {
+    const key = tokenKey(entry);
+    return key === tokenKey('Hidden') || key === tokenKey('Invisible');
+  });
 
   const EnemyRender = ENEMY_TYPES.find(e => e.key === c.enemyType)?.Render || GoblinSVG;
   const pcColor = PC_COLORS[c.pcColorIndex % PC_COLORS.length];
@@ -1919,7 +1931,7 @@ function BattlefieldToken({
       className={rootClass}
       style={{ width: displaySize, height: displaySize }}
     >
-      <div className={styles.tokenVisual}>
+      <div className={`${styles.tokenVisual} ${isHidden ? styles.tokenVisualHidden : ''}`}>
         {/* Active turn glow ring */}
         {isActive && (
           <div
@@ -2017,7 +2029,6 @@ function BattlefieldScene({
   activeCombatantId,
   selectedId,
   setSelectedId,
-  openEditorFor,
   playHover,
   playNav,
   battleBg,
@@ -2028,7 +2039,6 @@ function BattlefieldScene({
   canQuickEditCombatant,
   moveCombatantToCell,
   setCombatantTokenRotation,
-  adjustCombatantHp,
   toggleCombatantDead,
   toggleCombatantStatus,
   clearCombatantStatuses,
@@ -2516,6 +2526,9 @@ function BattlefieldScene({
   const menuCombatant = contextMenu?.type === 'token'
     ? combatants.find((combatant) => combatant.id === contextMenu.combatantId) || null
     : null;
+  const menuCombatantStatuses = Array.isArray(menuCombatant?.status)
+    ? menuCombatant.status.filter((entry) => cleanText(entry))
+    : [];
   const selectedCombatant = selectedId
     ? combatants.find((combatant) => combatant.id === selectedId) || null
     : null;
@@ -2557,34 +2570,6 @@ function BattlefieldScene({
           <button
             type="button"
             className={styles.boardContextAction}
-            onClick={() => {
-              playNav();
-              openEditorFor(menuCombatant.id);
-              setContextMenu(null);
-            }}
-          >
-            Open details
-          </button>
-          <div className={styles.boardContextRow}>
-            {[-5, -1, 1, 5].map((amount) => (
-              <button
-                key={`${menuCombatant.id}-${amount}`}
-                type="button"
-                className={styles.boardContextChip}
-                disabled={!canQuickEditCombatant(menuCombatant)}
-                onClick={() => {
-                  playNav();
-                  adjustCombatantHp(menuCombatant.id, amount);
-                  setContextMenu(null);
-                }}
-              >
-                HP {amount > 0 ? `+${amount}` : amount}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={styles.boardContextAction}
             disabled={!canQuickEditCombatant(menuCombatant)}
             onClick={() => {
               playNav();
@@ -2596,27 +2581,31 @@ function BattlefieldScene({
           </button>
           <div className={styles.boardContextDivider} />
           <div className={styles.boardContextSubtitle}>Conditions</div>
-          <div className={styles.boardContextRow}>
+          <div className={styles.boardContextHint}>
+            {menuCombatantStatuses.length ? `Active: ${menuCombatantStatuses.join(', ')}` : 'No active conditions.'}
+          </div>
+          <select
+            className={`${styles.input} ${styles.compactInput} ${styles.selectInput} ${styles.boardContextSelect}`}
+            defaultValue=""
+            disabled={!canQuickEditCombatant(menuCombatant)}
+            onChange={(event) => {
+              const statusLabel = cleanText(event.target.value);
+              if (!statusLabel) return;
+              playNav();
+              toggleCombatantStatus(menuCombatant.id, statusLabel);
+              setContextMenu(null);
+            }}
+          >
+            <option value="">Toggle a condition...</option>
             {BOARD_STATUS_PRESETS.map((statusLabel) => {
-              const active = Array.isArray(menuCombatant.status)
-                && menuCombatant.status.some((entry) => tokenKey(entry) === tokenKey(statusLabel));
+              const active = menuCombatantStatuses.some((entry) => tokenKey(entry) === tokenKey(statusLabel));
               return (
-                <button
-                  key={`${menuCombatant.id}-${statusLabel}`}
-                  type="button"
-                  className={`${styles.boardContextChip} ${active ? styles.boardContextChipActive : ''}`}
-                  disabled={!canQuickEditCombatant(menuCombatant)}
-                  onClick={() => {
-                    playNav();
-                    toggleCombatantStatus(menuCombatant.id, statusLabel);
-                    setContextMenu(null);
-                  }}
-                >
-                  {statusLabel}
-                </button>
+                <option key={`${menuCombatant.id}-${statusLabel}`} value={statusLabel}>
+                  {active ? `${statusLabel} (active)` : statusLabel}
+                </option>
               );
             })}
-          </div>
+          </select>
           <button
             type="button"
             className={styles.boardContextAction}
@@ -3699,6 +3688,15 @@ export default function CombatPanel({
       triggerDiceOutcomeEffect(logEntry);
     } catch {}
   }, [appendEncounterDiceLog, diceRollerName, diceRollerUserId, queueDiceAnimation, showDiceBanner, triggerDiceOutcomeEffect]);
+  const handleSheetStatRoll = useCallback((modifier) => {
+    const notation = buildD20CheckNotation(modifier);
+    if (!notation) return;
+    playNav();
+    if (!sheetPopoutOpen) {
+      setEditorOpen(false);
+    }
+    handleDiceRollRequest(notation);
+  }, [handleDiceRollRequest, playNav, sheetPopoutOpen]);
   useEffect(() => {
     if (!active || !diceDockOpen) return;
     ensureDiceBox().catch((error) => {
@@ -4614,26 +4612,6 @@ export default function CombatPanel({
     });
     setSelectedId(combatantId);
   }, [canBoardMoveCombatant, canWriteCombat]);
-
-  const adjustCombatantHpViaBoard = useCallback((combatantId, amount) => {
-    if (!canWriteCombat) return;
-    const delta = toInt(amount, 0);
-    if (!delta) return;
-    setEncounter((prev) => {
-      const next = normalize(prev);
-      let changed = false;
-      next.combatants = next.combatants.map((combatant) => {
-        if (combatant.id !== combatantId) return combatant;
-        if (!canBoardQuickEditCombatant(combatant)) return combatant;
-        const currentHp = combatant.hp === '' ? 0 : toInt(combatant.hp, 0);
-        const updatedHp = Math.max(0, currentHp + delta);
-        if (updatedHp === currentHp) return combatant;
-        changed = true;
-        return { ...combatant, hp: updatedHp };
-      });
-      return changed ? next : prev;
-    });
-  }, [canBoardQuickEditCombatant, canWriteCombat]);
 
   const toggleCombatantDeadViaBoard = useCallback((combatantId) => {
     if (!canWriteCombat) return;
@@ -6171,7 +6149,6 @@ export default function CombatPanel({
                 activeCombatantId={activeCombatantId}
                 selectedId={selectedId}
                 setSelectedId={setSelectedId}
-                openEditorFor={openEditorFor}
                 playHover={playHover}
                 playNav={playNav}
                 battleBg={battleBg}
@@ -6182,7 +6159,6 @@ export default function CombatPanel({
                 canQuickEditCombatant={canBoardQuickEditCombatant}
                 moveCombatantToCell={moveCombatantToCell}
                 setCombatantTokenRotation={setCombatantTokenRotation}
-                adjustCombatantHp={adjustCombatantHpViaBoard}
                 toggleCombatantDead={toggleCombatantDeadViaBoard}
                 toggleCombatantStatus={toggleCombatantStatusViaBoard}
                 clearCombatantStatuses={clearCombatantStatusesViaBoard}
@@ -7061,26 +7037,39 @@ export default function CombatPanel({
                     <div className={`${styles.sheetCard} ${styles.sheetCardSecondary}`}>
                       <div className={`${styles.sheetCardTitle} ${styles.sheetCardTitleCentered}`}>Skills</div>
                       <div className={styles.sheetStatRows}>
-                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => (
-                          <div
-                            key={skillRow.id}
-                            className={`${styles.sheetStatRow} ${
-                              skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
-                            }`}
-                          >
-                            <div className={styles.sheetStatMain}>
-                              <span
-                                className={`${styles.sheetStatTag} ${
-                                  skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
-                                }`}
+                        {selectedSkillRows.length ? selectedSkillRows.map((skillRow) => {
+                          const rollNotation = buildD20CheckNotation(skillRow.bonus);
+                          return (
+                            <div
+                              key={skillRow.id}
+                              className={`${styles.sheetStatRow} ${
+                                skillRow.proficiencyTier === 2 ? styles.sheetStatRowExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                              }`}
+                            >
+                              <div className={styles.sheetStatMain}>
+                                <span
+                                  className={`${styles.sheetStatTag} ${
+                                    skillRow.proficiencyTier === 2 ? styles.sheetStatTagExpert : skillRow.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                  }`}
+                                >
+                                  {skillRow.ability}
+                                </span>
+                                <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
+                              </div>
+                              <button
+                                type="button"
+                                className={`${styles.sheetStatValue} ${styles.sheetStatValueBtn}`}
+                                onMouseEnter={playHover}
+                                onClick={() => handleSheetStatRoll(skillRow.bonus)}
+                                disabled={!rollNotation}
+                                title={rollNotation ? `Roll ${skillRow.skill}: ${rollNotation}` : 'Unable to roll this modifier'}
+                                aria-label={rollNotation ? `Roll ${skillRow.skill} check: ${rollNotation}` : `Unable to roll ${skillRow.skill}`}
                               >
-                                {skillRow.ability}
-                              </span>
-                              <span className={styles.sheetStatLabel}>{skillRow.skill}</span>
+                                {formatSigned(skillRow.bonus)}
+                              </button>
                             </div>
-                            <span className={styles.sheetStatValue}>{formatSigned(skillRow.bonus)}</span>
-                          </div>
-                        )) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
+                          );
+                        }) : <div className={styles.sheetListFallback}>No skills parsed.</div>}
                       </div>
                     </div>
 
@@ -7089,25 +7078,38 @@ export default function CombatPanel({
                       <div className={styles.sheetSaveSenseGrid}>
                         <div className={styles.sheetSaveSenseBlock}>
                           <div className={styles.sheetSavingThrowGrid}>
-                            {selectedSavingThrowRows.map((row) => (
-                              <div
-                                key={row.tag}
-                                className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow} ${
-                                  row.proficiencyTier === 2 ? styles.sheetStatRowExpert : row.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
-                                }`}
-                              >
-                                <div className={styles.sheetStatMain}>
-                                  <span
-                                    className={`${styles.sheetStatTag} ${
-                                      row.proficiencyTier === 2 ? styles.sheetStatTagExpert : row.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
-                                    }`}
+                            {selectedSavingThrowRows.map((row) => {
+                              const rollNotation = buildD20CheckNotation(row.value);
+                              return (
+                                <div
+                                  key={row.tag}
+                                  className={`${styles.sheetStatRow} ${styles.sheetSavingThrowRow} ${
+                                    row.proficiencyTier === 2 ? styles.sheetStatRowExpert : row.proficiencyTier === 1 ? styles.sheetStatRowProficient : ''
+                                  }`}
+                                >
+                                  <div className={styles.sheetStatMain}>
+                                    <span
+                                      className={`${styles.sheetStatTag} ${
+                                        row.proficiencyTier === 2 ? styles.sheetStatTagExpert : row.proficiencyTier === 1 ? styles.sheetStatTagProficient : ''
+                                      }`}
+                                    >
+                                      {row.tag}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className={`${styles.sheetStatValue} ${styles.sheetStatValueBtn}`}
+                                    onMouseEnter={playHover}
+                                    onClick={() => handleSheetStatRoll(row.value)}
+                                    disabled={!rollNotation}
+                                    title={rollNotation ? `Roll ${row.tag} saving throw: ${rollNotation}` : 'Unable to roll this modifier'}
+                                    aria-label={rollNotation ? `Roll ${row.tag} saving throw: ${rollNotation}` : `Unable to roll ${row.tag} saving throw`}
                                   >
-                                    {row.tag}
-                                  </span>
+                                    {formatSigned(row.value)}
+                                  </button>
                                 </div>
-                                <span className={styles.sheetStatValue}>{formatSigned(row.value)}</span>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                         <div className={styles.sheetSaveSenseBlock}>

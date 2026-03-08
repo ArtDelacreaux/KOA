@@ -1560,6 +1560,10 @@
   border-radius: 999px;
 }
 
+.boardContextSelect {
+  margin-top: 8px;
+}
+
 .boardContextChipActive {
   border-color: rgba(255, 220, 160, 0.44);
   background: linear-gradient(180deg, rgba(128, 86, 28, 0.92), rgba(76, 48, 14, 0.82));
@@ -1607,6 +1611,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 220ms ease, filter 220ms ease;
+}
+
+.tokenVisualHidden {
+  opacity: 0.34;
+  filter: saturate(0.78);
 }
 
 .tokenRotateHandle {
@@ -3908,6 +3918,36 @@
   font-weight: 950;
   text-align: center;
   white-space: nowrap;
+}
+
+.sheetStatValueBtn {
+  appearance: none;
+  font-family: var(--koa-font-display);
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.sheetStatValueBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 220, 160, 0.42);
+  background: linear-gradient(180deg, rgba(255, 220, 160, 0.12), rgba(0, 0, 0, 0.38));
+  color: rgba(255, 248, 232, 0.98);
+}
+
+.sheetStatValueBtn:focus-visible {
+  outline: none;
+  border-color: rgba(255, 220, 160, 0.5);
+  box-shadow: 0 0 0 2px rgba(215, 174, 95, 0.22);
+}
+
+.sheetStatValueBtn:disabled {
+  cursor: default;
+  opacity: 0.72;
 }
 
 .sheetStatRowProficient {
