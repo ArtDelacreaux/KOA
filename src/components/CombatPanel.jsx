@@ -241,7 +241,16 @@ const COMBAT_MEDIA_BUCKET = 'koa-combat-media';
 const BOARD_UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
 const BOARD_ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const BOARD_STATUS_PRESETS = ['Prone', 'Poisoned', 'Restrained', 'Stunned', 'Invisible', 'Hidden'];
-const DRAW_TOOL_COLORS = ['#ffd86b', '#8bd3ff', '#ff7a7a', '#c7a2ff', '#f8fafc'];
+const DRAW_TOOL_PRESETS = [
+  { label: 'Black', value: '#000000' },
+  { label: 'Gold', value: '#ffd86b' },
+  { label: 'Sky', value: '#8bd3ff' },
+  { label: 'Coral', value: '#ff7a7a' },
+  { label: 'Violet', value: '#c7a2ff' },
+  { label: 'White', value: '#ffffff' },
+];
+const DRAW_TOOL_COLORS = DRAW_TOOL_PRESETS.map(({ value }) => value);
+const DEFAULT_DRAW_TOOL_COLOR = DRAW_TOOL_PRESETS[0]?.value || '#000000';
 const DRAW_STROKE_SIZES = [4, 8, 14];
 const DEFAULT_BOARD_WIDTH = 2048;
 const DEFAULT_BOARD_HEIGHT = 1365;
@@ -560,7 +569,6 @@ function battlefieldPointersEqual(a, b) {
 
 function normalizeBattlefieldDrawing(raw, index = 0) {
   const source = raw && typeof raw === 'object' ? raw : {};
-  const requestedColor = cleanText(source.color).toLowerCase();
   const points = (Array.isArray(source.points) ? source.points : [])
     .map((point) => normalizeBattlefieldDrawingPoint(point))
     .filter(Boolean);
@@ -569,7 +577,7 @@ function normalizeBattlefieldDrawing(raw, index = 0) {
   }
   return {
     id: cleanText(source.id) || `drawing-${index + 1}`,
-    color: DRAW_TOOL_COLORS.includes(requestedColor) ? requestedColor : DRAW_TOOL_COLORS[0],
+    color: normalizeDrawColor(source.color),
     size: clamp(toInt(source.size, DRAW_STROKE_SIZES[1]), 2, 24),
     points,
   };
@@ -1126,6 +1134,11 @@ function normalizeEquippedItems(raw, equipableItems) {
 
 function cleanText(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeDrawColor(value, fallback = DEFAULT_DRAW_TOOL_COLOR) {
+  const normalized = cleanText(value).toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(normalized) ? normalized : fallback;
 }
 
 function normalizeInventoryCategory(value) {
@@ -2120,6 +2133,7 @@ function BattlefieldScene({
 }) {
   const stageRef = useRef(null);
   const contextMenuRef = useRef(null);
+  const customDrawColorInputRef = useRef(null);
   const sharedPointerHoldRef = useRef({
     active: false,
     pointerId: null,
@@ -2138,7 +2152,7 @@ function BattlefieldScene({
   const [contextMenu, setContextMenu] = useState(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ left: 12, top: 12, ready: false });
   const [boardTool, setBoardTool] = useState('pan');
-  const [drawColor, setDrawColor] = useState(DRAW_TOOL_COLORS[0]);
+  const [drawColor, setDrawColor] = useState(DEFAULT_DRAW_TOOL_COLOR);
   const [drawSize, setDrawSize] = useState(DRAW_STROKE_SIZES[1]);
   const [drawDraft, setDrawDraft] = useState(null);
   const [eraseState, setEraseState] = useState(null);
@@ -2174,6 +2188,8 @@ function BattlefieldScene({
   const maxGridRow = Math.max(0, Math.floor((boardHeight - gridOffsetY - 1) / cellSize));
   const minZoom = Math.max(0.1, fitZoom * 0.25);
   const normalizedDrawings = useMemo(() => normalizeBattlefieldDrawings(drawings), [drawings]);
+  const activeDrawColor = normalizeDrawColor(drawColor);
+  const usingCustomDrawColor = !DRAW_TOOL_COLORS.includes(activeDrawColor);
   const interactionMode = canDraw ? boardTool : 'pan';
 
   const fitBoardToStage = useCallback(() => {
@@ -2385,6 +2401,21 @@ function BattlefieldScene({
     removeDrawing(normalizedDrawings[hitIndex].id);
     return true;
   }, [canDraw, clampBoardPoint, clientToBoardPoint, drawSize, normalizedDrawings, removeDrawing]);
+
+  const openCustomDrawColorPicker = useCallback(() => {
+    const input = customDrawColorInputRef.current;
+    if (!input) return;
+    input.value = activeDrawColor;
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+        return;
+      } catch {
+        // Fall back to click() for browsers without showPicker support.
+      }
+    }
+    input.click();
+  }, [activeDrawColor]);
 
   useEffect(() => {
     if (!drawDraft) return undefined;
@@ -2615,7 +2646,7 @@ function BattlefieldScene({
       const startPoint = clampBoardPoint(clientToBoardPoint(event.clientX, event.clientY));
       setDrawDraft({
         id: createId('battle-draw'),
-        color: drawColor,
+        color: activeDrawColor,
         size: drawSize,
         points: [startPoint],
       });
@@ -2638,9 +2669,9 @@ function BattlefieldScene({
       originY: viewState.panY,
     });
   }, [
+    activeDrawColor,
     clampBoardPoint,
     clientToBoardPoint,
-    drawColor,
     drawSize,
     eraseDrawingAtClientPoint,
     interactionMode,
@@ -3101,21 +3132,46 @@ function BattlefieldScene({
           <div className={styles.boardToolSettings}>
             <div className={styles.boardToolGroupLabel}>Ink</div>
             <div className={styles.boardToolSwatchRow}>
-              {DRAW_TOOL_COLORS.map((color) => (
+              {DRAW_TOOL_PRESETS.map(({ label, value }) => (
                 <button
-                  key={color}
+                  key={value}
                   type="button"
-                  className={`${styles.boardColorSwatch} ${drawColor === color ? styles.boardColorSwatchActive : ''}`}
-                  style={{ '--board-swatch': color }}
+                  className={`${styles.boardColorSwatch} ${activeDrawColor === value ? styles.boardColorSwatchActive : ''}`}
+                  style={{ '--board-swatch': value }}
                   onMouseEnter={playHover}
                   onClick={() => {
                     playNav();
-                    setDrawColor(color);
+                    setDrawColor(value);
                   }}
-                  title={`Use ${color} ink`}
-                  aria-label={`Use ${color} ink`}
+                  title={`Use ${label} ink`}
+                  aria-label={`Use ${label} ink`}
+                  aria-pressed={activeDrawColor === value}
                 />
               ))}
+              <input
+                ref={customDrawColorInputRef}
+                type="color"
+                className={styles.boardColorInput}
+                value={activeDrawColor}
+                aria-hidden="true"
+                tabIndex={-1}
+                onChange={(event) => {
+                  setDrawColor(normalizeDrawColor(event.target.value));
+                }}
+              />
+              <button
+                type="button"
+                className={`${styles.boardColorSwatch} ${styles.boardColorSwatchCustom} ${usingCustomDrawColor ? styles.boardColorSwatchActive : ''}`}
+                style={{ '--board-custom-preview': activeDrawColor }}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  openCustomDrawColorPicker();
+                }}
+                title="Pick custom ink"
+                aria-label="Pick custom ink"
+                aria-pressed={usingCustomDrawColor}
+              />
             </div>
             <div className={styles.boardToolGroupLabel}>Size</div>
             <div className={styles.boardToolSizeRow}>

@@ -1518,10 +1518,28 @@
   gap: 6px;
 }
 
+.boardColorInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .boardColorSwatch {
   width: 22px;
   height: 22px;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.14);
   background: var(--board-swatch);
@@ -1537,6 +1555,29 @@
 .boardColorSwatchActive {
   border-color: rgba(255, 245, 220, 0.96);
   box-shadow: 0 0 0 2px rgba(255, 220, 160, 0.24);
+}
+
+.boardColorSwatchCustom {
+  background:
+    conic-gradient(
+      from 180deg,
+      #ff6b6b,
+      #ffd86b,
+      #97f1a8,
+      #8bd3ff,
+      #c7a2ff,
+      #ff89c6,
+      #ff6b6b
+    );
+}
+
+.boardColorSwatchCustom::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  background: var(--board-custom-preview, #000000);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
 .boardSizeChip {
