@@ -250,7 +250,7 @@ export default function TavernMenu() {
   );
 
   // ✅ SFX volumes
-  const [hoverVol] = useState(0.14);
+  const [hoverVol] = useState(0.03);
   const [uiNavVol] = useState(0.28);
 
   const [isFading, setIsFading] = useState(false);
