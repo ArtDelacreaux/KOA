@@ -255,10 +255,12 @@ const DICE_THEME_COLOR = '#d7ae5f';
 const DICE_AUTO_HIDE_MS = 5000;
 const DICE_OUTCOME_EFFECT_MS = 3200;
 const SHARED_POINTER_HOLD_DELAY_MS = 150;
-const SHARED_POINTER_UPDATE_THROTTLE_MS = 70;
+const SHARED_POINTER_UPDATE_THROTTLE_MS = 32;
 const SHARED_POINTER_VISIBLE_MS = 900;
 const SHARED_POINTER_CLEANUP_INTERVAL_MS = 400;
 const SHARED_POINTER_COLORS = ['#ffd86b', '#8bd3ff', '#ff8fb1', '#97f1a8', '#c7a2ff', '#ffbb70'];
+const SHARED_POINTER_BROADCAST_EVENT = 'pointer:update';
+const SHARED_POINTER_CLEAR_EVENT = 'pointer:clear';
 const DICE_CELEBRATION_SPARKS = Object.freeze(
   Array.from({ length: 12 }, (_, idx) => ({
     id: idx,
@@ -3306,6 +3308,8 @@ export default function CombatPanel({
   const active = panelType === 'combat';
   const repositorySourceIdRef = useRef(createId('combat-sync'));
   const pointerRepositorySourceIdRef = useRef(createId('combat-pointer-sync'));
+  const pointerBroadcastChannelRef = useRef(null);
+  const pointerBroadcastConnectedRef = useRef(false);
   const suppressNextPersistRef = useRef(false);
   const persistTimerRef = useRef(null);
   const pendingPersistEncounterRef = useRef(null);
@@ -3370,6 +3374,7 @@ export default function CombatPanel({
   const [battlefieldResetRequestToken, setBattlefieldResetRequestToken] = useState(0);
   const [battlefieldPointerTick, setBattlefieldPointerTick] = useState(0);
   const sharedPointerStateRef = useRef(sharedPointerState);
+  const pointerRealtimeEnabled = useMemo(() => !!(getSupabaseClient() && getCampaignId()), []);
   const diceViewportRef = useRef(null);
   const diceBoxRef = useRef(null);
   const diceBoxInitPromiseRef = useRef(null);
@@ -3485,6 +3490,80 @@ export default function CombatPanel({
   useEffect(() => {
     sharedPointerStateRef.current = sharedPointerState;
   }, [sharedPointerState]);
+
+  useEffect(() => {
+    if (!active || !pointerRealtimeEnabled) {
+      pointerBroadcastConnectedRef.current = false;
+      pointerBroadcastChannelRef.current = null;
+      return undefined;
+    }
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      pointerBroadcastConnectedRef.current = false;
+      pointerBroadcastChannelRef.current = null;
+      return undefined;
+    }
+
+    let effectActive = true;
+    const channel = supabase.channel(`koa-combat-pointers:${campaignId}`, {
+      config: {
+        broadcast: {
+          self: false,
+          ack: false,
+        },
+      },
+    });
+
+    const applyIncomingPointer = (payload) => {
+      const incomingPointer = normalizeBattlefieldPointer(payload?.pointer ?? payload);
+      if (!incomingPointer.id) return;
+      sharedPointerStateRef.current = normalizeBattlefieldPointers([
+        ...sharedPointerStateRef.current.filter((pointer) => (
+          pointer.id !== incomingPointer.id
+          && incomingPointer.updatedAt - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
+        )),
+        incomingPointer,
+      ]);
+      setSharedPointerState(sharedPointerStateRef.current);
+    };
+
+    const applyIncomingPointerClear = (payload) => {
+      const pointerId = cleanText(payload?.id);
+      if (!pointerId) return;
+      const clearedAt = Math.max(Date.now(), toInt(payload?.updatedAt, 0));
+      sharedPointerStateRef.current = sharedPointerStateRef.current.filter((pointer) => (
+        pointer.id !== pointerId && clearedAt - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
+      ));
+      setSharedPointerState(sharedPointerStateRef.current);
+    };
+
+    pointerBroadcastChannelRef.current = channel;
+
+    channel
+      .on('broadcast', { event: SHARED_POINTER_BROADCAST_EVENT }, ({ payload }) => {
+        if (!effectActive) return;
+        applyIncomingPointer(payload);
+      })
+      .on('broadcast', { event: SHARED_POINTER_CLEAR_EVENT }, ({ payload }) => {
+        if (!effectActive) return;
+        applyIncomingPointerClear(payload);
+      })
+      .subscribe((status) => {
+        if (!effectActive) return;
+        pointerBroadcastConnectedRef.current = status === 'SUBSCRIBED';
+      });
+
+    return () => {
+      effectActive = false;
+      pointerBroadcastConnectedRef.current = false;
+      if (pointerBroadcastChannelRef.current === channel) {
+        pointerBroadcastChannelRef.current = null;
+      }
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [active, pointerRealtimeEnabled]);
 
   useEffect(() => {
     const unsubscribe = repository.subscribe(POINTERS_KEY, (event) => {
@@ -3618,19 +3697,30 @@ export default function CombatPanel({
     return () => window.clearInterval(timerId);
   }, [battlefieldPointers.length]);
 
-  const setBattlefieldPointersState = useCallback((builder) => {
-    const repositoryPointers = normalizeBattlefieldPointers(
-      repository.readJson(POINTERS_KEY, sharedPointerStateRef.current)
-    );
-    const currentPointers = repositoryPointers.length ? repositoryPointers : sharedPointerStateRef.current;
+  const updateBattlefieldPointersState = useCallback((builder) => {
+    const currentPointers = sharedPointerStateRef.current;
     const builtPointers = typeof builder === 'function' ? builder(currentPointers) : builder;
-    if (!Array.isArray(builtPointers)) return;
+    if (!Array.isArray(builtPointers)) return null;
     const nextPointers = normalizeBattlefieldPointers(builtPointers);
-    if (battlefieldPointersEqual(currentPointers, nextPointers)) return;
+    if (battlefieldPointersEqual(currentPointers, nextPointers)) return null;
     sharedPointerStateRef.current = nextPointers;
     setSharedPointerState(nextPointers);
-    repository.writeJson(POINTERS_KEY, nextPointers, { sourceId: pointerRepositorySourceIdRef.current });
+    return nextPointers;
   }, []);
+
+  const sendBattlefieldPointerBroadcast = useCallback((event, payload) => {
+    const channel = pointerBroadcastChannelRef.current;
+    if (!pointerBroadcastConnectedRef.current || !channel) return false;
+    channel.send({ type: 'broadcast', event, payload }).catch(() => {});
+    return true;
+  }, []);
+
+  const setBattlefieldPointersState = useCallback((builder) => {
+    const nextPointers = updateBattlefieldPointersState(builder);
+    if (!nextPointers) return;
+    if (pointerRealtimeEnabled && pointerBroadcastConnectedRef.current) return;
+    repository.writeJson(POINTERS_KEY, nextPointers, { sourceId: pointerRepositorySourceIdRef.current });
+  }, [pointerRealtimeEnabled, updateBattlefieldPointersState]);
 
   const clearLocalBattlefieldPointer = useCallback(() => {
     if (!battlefieldPointerId) return;
@@ -3638,7 +3728,11 @@ export default function CombatPanel({
     setBattlefieldPointersState((currentPointers) => currentPointers.filter((pointer) => (
       pointer.id !== battlefieldPointerId && now - pointer.updatedAt <= SHARED_POINTER_VISIBLE_MS
     )));
-  }, [battlefieldPointerId, setBattlefieldPointersState]);
+    sendBattlefieldPointerBroadcast(SHARED_POINTER_CLEAR_EVENT, {
+      id: battlefieldPointerId,
+      updatedAt: now,
+    });
+  }, [battlefieldPointerId, sendBattlefieldPointerBroadcast, setBattlefieldPointersState]);
 
   const setLocalBattlefieldPointer = useCallback((point) => {
     if (!canShareBattlefieldPointer || !battlefieldPointerId) return;
@@ -3656,7 +3750,10 @@ export default function CombatPanel({
       ));
       return [...retainedPointers, nextPointer];
     });
-  }, [battlefieldPointerId, battlefieldPointerLabel, canShareBattlefieldPointer, setBattlefieldPointersState]);
+    sendBattlefieldPointerBroadcast(SHARED_POINTER_BROADCAST_EVENT, {
+      pointer: nextPointer,
+    });
+  }, [battlefieldPointerId, battlefieldPointerLabel, canShareBattlefieldPointer, sendBattlefieldPointerBroadcast, setBattlefieldPointersState]);
 
   useEffect(() => {
     if (!canShareBattlefieldPointer) {

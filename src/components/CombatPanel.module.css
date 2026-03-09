@@ -1277,7 +1277,7 @@
   transform: translate(-16%, -12%);
   pointer-events: none;
   will-change: left, top;
-  transition: left 60ms linear, top 60ms linear;
+  transition: left 32ms linear, top 32ms linear;
 }
 
 .sharedCursor {
