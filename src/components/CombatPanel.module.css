@@ -351,22 +351,44 @@
 }
 
 .floatingConfigDock {
-  position: relative;
-  width: min(960px, calc(100vw - 32px));
+  width: min(1120px, calc(100vw - 32px));
   z-index: 11;
   max-width: 100%;
-  padding: 18px;
-  border-radius: 22px;
+  max-height: calc(100dvh - 112px);
+  padding: 16px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 220, 160, 0.14);
   background:
-    radial-gradient(circle at top left, rgba(255, 214, 128, 0.12), transparent 42%),
+    linear-gradient(90deg, rgba(255, 214, 128, 0.045), transparent 18%, transparent 82%, rgba(255, 214, 128, 0.045)),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 38px),
+    radial-gradient(circle at top left, rgba(255, 214, 128, 0.14), transparent 42%),
     linear-gradient(180deg, rgba(15, 11, 8, 0.95), rgba(7, 5, 4, 0.88));
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow:
     0 22px 42px rgba(0, 0, 0, 0.46),
     inset 0 1px 0 rgba(255, 240, 214, 0.04);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   pointer-events: auto;
+}
+
+.floatingConfigDockFloating {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+}
+
+.floatingConfigDockPopout {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  transform: none;
+  width: min(1280px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  margin: 0 auto;
 }
 
 .floatingConfigDock .controlsRight {
@@ -375,12 +397,13 @@
 
 .sceneDockWrap {
   position: absolute;
-  right: 16px;
+  left: 50%;
   bottom: 16px;
+  transform: translateX(-50%);
   z-index: 11;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
   max-width: calc(100% - 32px);
   pointer-events: auto;
@@ -419,17 +442,44 @@
 }
 
 .dmControlHeader {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background:
+    linear-gradient(135deg, rgba(255, 214, 128, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(20, 14, 10, 0.92), rgba(11, 8, 6, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 250, 240, 0.035);
+  overflow: hidden;
+}
+
+.dmControlHeader::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 214, 138, 0), rgba(255, 214, 138, 0.28), rgba(255, 214, 138, 0));
+  pointer-events: none;
 }
 
 .dmControlHeaderCopy {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.dmControlHeaderTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .dmControlEyebrow {
@@ -438,6 +488,13 @@
   letter-spacing: 0.24em;
   text-transform: uppercase;
   font-weight: 900;
+}
+
+.dmControlTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .dmControlTitle {
@@ -449,32 +506,110 @@
   line-height: 1;
 }
 
-.dmControlText {
-  max-width: 620px;
+.dmControlModePill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.18);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.1), rgba(255, 245, 220, 0.03));
+  color: rgba(255, 226, 172, 0.9);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.dmControlHeaderLine {
+  max-width: 60ch;
   color: rgba(255, 236, 206, 0.74);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .dmControlClose {
   flex-shrink: 0;
 }
 
+.dmControlWindowActions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.dmControlUtilityBtn {
+  flex-shrink: 0;
+}
+
+.dmControlDragHandle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.16);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.025));
+  color: rgba(255, 220, 160, 0.88);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 900;
+  font-family: var(--koa-font-display);
+  cursor: grab;
+  transition: transform 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.dmControlDragHandle:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(255, 220, 160, 0.3);
+}
+
+.dmControlDragHandle:active:not(:disabled) {
+  cursor: grabbing;
+}
+
+.dmControlDragHandleDisabled,
+.dmControlDragHandle:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+
 .dmControlStats {
-  margin-top: 16px;
+  margin-top: 12px;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .dmControlStat {
+  position: relative;
   min-width: 0;
-  padding: 12px 14px;
-  border-radius: 16px;
+  min-height: 96px;
+  padding: 14px 16px;
+  border-radius: 18px;
   border: 1px solid rgba(255, 220, 160, 0.12);
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.03));
+  background:
+    linear-gradient(135deg, rgba(255, 214, 128, 0.08), transparent 45%),
+    linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.03));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+
+.dmControlStat::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 214, 138, 0.42), rgba(255, 214, 138, 0));
+  pointer-events: none;
 }
 
 .dmControlStatLabel {
@@ -498,34 +633,89 @@
   text-overflow: ellipsis;
 }
 
+.dmControlStatMeta {
+  display: block;
+  margin-top: 8px;
+  color: rgba(255, 228, 185, 0.62);
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dmControlGrid {
-  margin-top: 16px;
+  margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.42fr) minmax(320px, 0.96fr);
+  grid-template-areas:
+    "maps initiative"
+    "view token";
+  gap: 14px;
+  align-items: start;
+}
+
+.dmControlMapsCard {
+  grid-area: maps;
+}
+
+.dmControlInitiativeCard {
+  grid-area: initiative;
+}
+
+.dmControlViewCard {
+  grid-area: view;
+}
+
+.dmControlTokenCard {
+  grid-area: token;
 }
 
 .dmControlCard {
+  position: relative;
   min-width: 0;
-  padding: 16px;
-  border-radius: 18px;
+  padding: 15px 16px 16px;
+  border-radius: 20px;
   border: 1px solid rgba(255, 220, 160, 0.1);
   background:
-    linear-gradient(180deg, rgba(17, 12, 8, 0.92), rgba(9, 7, 5, 0.84));
+    radial-gradient(circle at top left, rgba(255, 214, 128, 0.07), transparent 36%),
+    linear-gradient(180deg, rgba(17, 12, 8, 0.94), rgba(9, 7, 5, 0.86));
   box-shadow:
     inset 0 1px 0 rgba(255, 250, 240, 0.03),
     0 12px 22px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.dmControlCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 214, 138, 0.2), rgba(255, 214, 138, 0), rgba(255, 214, 138, 0.2));
+  pointer-events: none;
 }
 
 .dmControlCardWide {
   grid-column: 1 / -1;
 }
 
+.dmControlCardTopline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
 .dmControlCardHeader {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-bottom: 14px;
+  gap: 6px;
+  margin-bottom: 0;
+  min-width: 0;
 }
 
 .dmControlCardTitle {
@@ -541,12 +731,31 @@
   font-size: 12px;
   line-height: 1.45;
   font-weight: 700;
+  max-width: 48ch;
+}
+
+.dmControlSignal {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.02));
+  color: rgba(255, 220, 160, 0.88);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .dmControlFieldGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 12px 14px;
 }
 
 .dmControlField {
@@ -556,6 +765,10 @@
   gap: 6px;
 }
 
+.dmControlFieldWide {
+  grid-column: 1 / -1;
+}
+
 .dmControlSelect,
 .dmControlNumberInput,
 .dmControlInlineButton {
@@ -563,16 +776,112 @@
   max-width: none;
 }
 
+.dmControlSelect {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.dmControlNumberInput {
+  width: 100%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.dmControlInlineButton {
+  min-height: 38px;
+  border-radius: 12px;
+}
+
+.dmControlTextInput {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.03));
+  border-color: rgba(255, 220, 160, 0.22);
+}
+
 .dmControlActions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
   margin-top: 14px;
 }
 
+.dmControlInitiativeBoard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.05), rgba(255, 245, 220, 0.02));
+}
+
+.dmControlInitiativeReadout {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dmControlInitiativeMeta {
+  color: rgba(255, 232, 194, 0.72);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 800;
+}
+
+.dmControlActionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dmControlMiniStats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.dmControlMiniStat {
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  background: rgba(255, 245, 220, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dmControlMiniStat span {
+  color: rgba(255, 214, 138, 0.58);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.dmControlMiniStat strong {
+  color: #fff1cf;
+  font-size: 15px;
+  line-height: 1;
+  font-weight: 950;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .roundBadge {
-  height: 34px;
+  height: 36px;
   padding: 0 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 220, 160, 0.18);
@@ -596,6 +905,11 @@
 .roundValue {
   font-size: 17px;
   font-weight: 950;
+}
+
+.dmControlGridFields {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
 }
 
 .controlsRight {
@@ -640,6 +954,7 @@
 }
 
 .toolbarActionBtn {
+  width: 100%;
   white-space: nowrap;
 }
 
@@ -664,10 +979,12 @@
 
 .battlefieldMapHint {
   margin-top: 14px;
-  padding: 12px 14px;
+  padding: 13px 14px;
   border-radius: 14px;
   border: 1px solid rgba(255, 220, 160, 0.1);
-  background: linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.025));
+  background:
+    linear-gradient(90deg, rgba(255, 214, 128, 0.05), transparent 28%),
+    linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.025));
   color: rgba(255, 235, 190, 0.76);
   font-size: 11px;
   font-weight: 800;
@@ -676,10 +993,18 @@
 
 .dmControlTokenSummary {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dmControlTokenIdentity {
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  margin-bottom: 14px;
 }
 
 .dmControlTokenMeta {
@@ -691,12 +1016,16 @@
   text-transform: uppercase;
 }
 
+.dmControlTokenFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .dmControlEmpty {
   padding: 14px;
   border-radius: 14px;
   border: 1px dashed rgba(255, 220, 160, 0.18);
   color: rgba(255, 232, 194, 0.68);
-  background: rgba(255, 245, 220, 0.025);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.035), rgba(255, 245, 220, 0.02));
   font-size: 12px;
   line-height: 1.5;
   font-weight: 700;
@@ -5487,13 +5816,28 @@
     left: 8px;
     right: 8px;
     bottom: 8px;
+    transform: none;
     max-width: none;
     align-items: stretch;
   }
 
   .floatingConfigDock {
     width: 100%;
+    max-height: calc(100dvh - 92px);
     padding: 14px;
+  }
+
+  .floatingConfigDockFloating {
+    left: 8px;
+    right: 8px;
+    bottom: 58px;
+    width: auto;
+    transform: none;
+  }
+
+  .floatingConfigDockPopout {
+    width: 100%;
+    max-height: calc(100vh - 32px);
   }
 
   .windowControls {
@@ -5509,6 +5853,19 @@
 
   .dmControlHeader {
     flex-direction: column;
+    gap: 12px;
+  }
+
+  .dmControlClose {
+    align-self: flex-end;
+  }
+
+  .dmControlTitleRow,
+  .dmControlCardTopline,
+  .dmControlTokenSummary,
+  .dmControlWindowActions {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .dmControlTitle {
@@ -5519,18 +5876,27 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .dmControlGrid,
-  .dmControlFieldGrid {
+  .dmControlGrid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "maps"
+      "initiative"
+      "view"
+      "token";
+  }
+
+  .dmControlFieldGrid,
+  .dmControlActionGrid,
+  .dmControlActions,
+  .dmControlInitiativeBoard,
+  .dmControlMiniStats,
+  .dmControlGridFields,
+  .dmControlTokenFields {
     grid-template-columns: 1fr;
   }
 
   .dmControlCardWide {
     grid-column: auto;
-  }
-
-  .dmControlActions {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .sceneDockToggle {

@@ -808,6 +808,28 @@ async function listCombatMediaLibraryEntries(supabase, campaignId) {
   });
 }
 
+function normalizeBattlefieldMapMeta(raw) {
+  if (!raw || typeof raw !== 'object') return {};
+  return Object.entries(raw).reduce((acc, [storagePath, value]) => {
+    const normalizedPath = cleanText(storagePath);
+    const label = cleanText(value?.label);
+    if (!normalizedPath || !label) return acc;
+    acc[normalizedPath] = {
+      label,
+      updatedAt: Math.max(0, toInt(value?.updatedAt, 0)),
+    };
+    return acc;
+  }, {});
+}
+
+function resolveBattlefieldMapLabel(storagePath, fallbackLabel, mapMetaByPath = {}) {
+  const explicitLabel = cleanText(mapMetaByPath?.[storagePath]?.label);
+  if (explicitLabel) return explicitLabel;
+  const fallback = cleanText(fallbackLabel);
+  if (fallback) return fallback;
+  return prettifyBattleMapLabel(battleMapStorageFileName(storagePath));
+}
+
 function tokenImageForCharacter(id, name) {
   const fromId = TOKEN_IMAGE_BY_ID[tokenKey(id)];
   if (fromId) return fromId;
@@ -1886,6 +1908,7 @@ function defaultEncounter() {
     combatants: [],
     diceLog: [],
     battlefield: normalizeBattlefield(null),
+    battlefieldMapMeta: {},
     castorWilliamResourceSync: false,
     sheetProfiles: {},
     updatedAt: Date.now(),
@@ -1898,6 +1921,7 @@ function normalize(enc) {
   if (!Array.isArray(e.combatants)) e.combatants = [];
   e.diceLog = normalizeDiceLog(e.diceLog);
   e.battlefield = normalizeBattlefield(e.battlefield);
+  e.battlefieldMapMeta = normalizeBattlefieldMapMeta(e.battlefieldMapMeta);
   const rawProfiles = e.sheetProfiles && typeof e.sheetProfiles === 'object' ? e.sheetProfiles : {};
   e.sheetProfiles = Object.entries(rawProfiles).reduce((acc, [key, value]) => {
     const normalizedKey = cleanText(key);
@@ -3535,8 +3559,11 @@ export default function CombatPanel({
   const [battlefieldMapDeleteBusy, setBattlefieldMapDeleteBusy] = useState(false);
   const [battlefieldMapLibraryBusy, setBattlefieldMapLibraryBusy] = useState(false);
   const [battlefieldMapLibrary, setBattlefieldMapLibrary] = useState([]);
+  const [battlefieldMapNameDraft, setBattlefieldMapNameDraft] = useState('');
   const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
   const [sceneDockOpen, setSceneDockOpen] = useState(false);
+  const [sceneDockPosition, setSceneDockPosition] = useState(null);
+  const [sceneDockPopoutOpen, setSceneDockPopoutOpen] = useState(false);
   const [initiativeDockOpen, setInitiativeDockOpen] = useState(false);
   const [diceDockOpen, setDiceDockOpen] = useState(false);
   const [diceNotationDraft, setDiceNotationDraft] = useState(DEFAULT_DICE_NOTATION);
@@ -3577,6 +3604,10 @@ export default function CombatPanel({
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
   const battlefieldFileInputRef = useRef(null);
+  const sceneDockRef = useRef(null);
+  const sceneDockDragRef = useRef({ dragging: false, offsetX: 0, offsetY: 0 });
+  const sceneDockPopoutWindowRef = useRef(null);
+  const sceneDockPopoutRootRef = useRef(null);
   const battlefieldMapLibraryRequestIdRef = useRef(0);
   const sheetFileInputRef = useRef(null);
   const sheetImportAbortRef = useRef(null);
@@ -3804,6 +3835,10 @@ export default function CombatPanel({
     () => normalizeBattlefield(encounter?.battlefield),
     [encounter?.battlefield]
   );
+  const battlefieldMapMeta = useMemo(
+    () => normalizeBattlefieldMapMeta(encounter?.battlefieldMapMeta),
+    [encounter?.battlefieldMapMeta]
+  );
   const battlefieldDrawings = useMemo(
     () => normalizeBattlefieldDrawings(battlefield?.drawings),
     [battlefield?.drawings]
@@ -3854,12 +3889,21 @@ export default function CombatPanel({
     battlefieldMapLibrary.forEach((entry) => {
       const storagePath = cleanText(entry?.storagePath);
       if (!storagePath) return;
-      entryMap.set(storagePath, entry);
+      const label = resolveBattlefieldMapLabel(storagePath, entry?.label, battlefieldMapMeta);
+      entryMap.set(storagePath, {
+        ...entry,
+        label,
+        optionLabel: buildBattleMapOptionLabel({ label, updatedAt: entry?.updatedAt }),
+      });
     });
 
     const activePath = cleanText(battlefield.mediaStoragePath);
     if (activePath && !entryMap.has(activePath)) {
-      const label = prettifyBattleMapLabel(battleMapStorageFileName(activePath));
+      const label = resolveBattlefieldMapLabel(
+        activePath,
+        prettifyBattleMapLabel(battleMapStorageFileName(activePath)),
+        battlefieldMapMeta
+      );
       const updatedAt = Math.max(0, toInt(battlefield.mediaUpdatedAt, 0));
       entryMap.set(activePath, {
         storagePath: activePath,
@@ -3881,6 +3925,7 @@ export default function CombatPanel({
     battlefield.mediaStoragePath,
     battlefield.mediaUpdatedAt,
     battlefieldMapLibrary,
+    battlefieldMapMeta,
   ]);
   const activeBattlefieldMap = useMemo(
     () => battlefieldMapOptions.find((entry) => entry.storagePath === cleanText(battlefield.mediaStoragePath)) || null,
@@ -3888,6 +3933,17 @@ export default function CombatPanel({
   );
   const activeBattlefieldMapLabel = activeBattlefieldMap?.label || '';
   const battlefieldMapBusy = battlefieldUploadBusy || battlefieldMapSelectionBusy || battlefieldMapDeleteBusy;
+
+  useEffect(() => {
+    if (!activeBattlefieldMapLabel) return;
+    setBattlefieldMapNameDraft(activeBattlefieldMapLabel);
+  }, [activeBattlefieldMapLabel]);
+  const battlefieldMapNameDirty = !!(
+    cleanText(battlefield.mediaStoragePath)
+    && cleanText(battlefieldMapNameDraft)
+    && cleanText(battlefieldMapNameDraft) !== activeBattlefieldMapLabel
+  );
+
   const battlefieldPointerId = useMemo(
     () => viewerUserId || viewerEmail || viewerUsernameKey || repositorySourceIdRef.current,
     [viewerEmail, viewerUserId, viewerUsernameKey]
@@ -4898,6 +4954,211 @@ export default function CombatPanel({
       closeSheetPopout(true, { suppressSessionEnd: true });
     };
   }, []);
+
+  const constrainSceneDockPosition = useCallback((nextPosition, rectOverride = null) => {
+    if (typeof window === 'undefined') return { x: 16, y: 16 };
+    const viewportWidth = Math.max(320, toInt(window.innerWidth, 1280));
+    const viewportHeight = Math.max(320, toInt(window.innerHeight, 900));
+    const panelRect = rectOverride || sceneDockRef.current?.getBoundingClientRect() || null;
+    const panelWidth = Math.max(320, toInt(panelRect?.width, Math.min(1120, viewportWidth - 32)));
+    const panelHeight = Math.max(280, toInt(panelRect?.height, Math.min(viewportHeight - 32, 640)));
+    const minX = 16;
+    const minY = 16;
+    const maxX = Math.max(minX, viewportWidth - panelWidth - 16);
+    const maxY = Math.max(minY, viewportHeight - panelHeight - 16);
+    return {
+      x: clamp(toInt(nextPosition?.x, minX), minX, maxX),
+      y: clamp(toInt(nextPosition?.y, minY), minY, maxY),
+    };
+  }, []);
+
+  const stopSceneDockDrag = useCallback(() => {
+    sceneDockDragRef.current.dragging = false;
+    if (typeof document !== 'undefined') {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    }
+  }, []);
+
+  const closeSceneDockPopout = useCallback((closeWindow = true) => {
+    const popout = sceneDockPopoutWindowRef.current;
+    const host = sceneDockPopoutRootRef.current;
+
+    if (closeWindow && popout && !popout.closed) {
+      try { popout.close(); } catch (_) {}
+    }
+
+    if (host && host.parentNode) {
+      host.parentNode.removeChild(host);
+    }
+
+    sceneDockPopoutRootRef.current = null;
+    sceneDockPopoutWindowRef.current = null;
+    setSceneDockPopoutOpen(false);
+  }, []);
+
+  const focusSceneDockPopout = useCallback(() => {
+    const popout = sceneDockPopoutWindowRef.current;
+    if (!popout || popout.closed) return false;
+    popout.focus();
+    return true;
+  }, []);
+
+  const openSceneDockPopout = useCallback(() => {
+    const existing = sceneDockPopoutWindowRef.current;
+    if (existing && !existing.closed) {
+      existing.focus();
+      setSceneDockPopoutOpen(true);
+      return;
+    }
+
+    const screenWidth = Math.max(1180, toInt(window.screen?.availWidth, 1360));
+    const screenHeight = Math.max(760, toInt(window.screen?.availHeight, 960));
+    const width = Math.min(screenWidth, 1360);
+    const height = Math.min(screenHeight, 960);
+    const left = Math.max(0, Math.round((screenWidth - width) / 2));
+    const top = Math.max(0, Math.round((screenHeight - height) / 2));
+    const featureString = [
+      'popup=yes',
+      `width=${width}`,
+      `height=${height}`,
+      `left=${left}`,
+      `top=${top}`,
+      'resizable=yes',
+      'scrollbars=yes',
+    ].join(',');
+    const popout = window.open('', 'combat-dm-controls-popout', featureString);
+    if (!popout) {
+      window.alert('Pop-up blocked. Please allow pop-ups for this site to use the DM Controls pop out.');
+      return;
+    }
+
+    try {
+      popout.document.head.innerHTML = '';
+      const metaCharset = popout.document.createElement('meta');
+      metaCharset.setAttribute('charset', 'utf-8');
+      popout.document.head.appendChild(metaCharset);
+      const metaViewport = popout.document.createElement('meta');
+      metaViewport.setAttribute('name', 'viewport');
+      metaViewport.setAttribute('content', 'width=device-width, initial-scale=1');
+      popout.document.head.appendChild(metaViewport);
+      copyHeadStyles(document, popout.document);
+
+      popout.document.body.innerHTML = '';
+      popout.document.body.style.margin = '0';
+      popout.document.body.style.background = '#080604';
+
+      const host = popout.document.createElement('div');
+      host.id = 'combat-dm-controls-popout-root';
+      host.style.minHeight = '100vh';
+      host.style.padding = '16px';
+      host.style.boxSizing = 'border-box';
+      popout.document.body.appendChild(host);
+
+      popout.addEventListener('beforeunload', () => {
+        sceneDockPopoutRootRef.current = null;
+        sceneDockPopoutWindowRef.current = null;
+        setSceneDockPopoutOpen(false);
+      }, { once: true });
+
+      sceneDockPopoutWindowRef.current = popout;
+      sceneDockPopoutRootRef.current = host;
+      setSceneDockPopoutOpen(true);
+      popout.document.title = 'DM Control Center';
+      popout.focus();
+    } catch (_) {
+      try { popout.close(); } catch (err) {}
+      sceneDockPopoutRootRef.current = null;
+      sceneDockPopoutWindowRef.current = null;
+      setSceneDockPopoutOpen(false);
+      window.alert('Unable to open the DM Controls pop-out window. Please try again.');
+    }
+  }, []);
+
+  const handleSceneDockDragStart = useCallback((event) => {
+    if (sceneDockPopoutOpen) return;
+    if (typeof window !== 'undefined' && window.innerWidth <= 980) return;
+    const panel = sceneDockRef.current;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    sceneDockDragRef.current = {
+      dragging: true,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+    };
+    setSceneDockPosition(constrainSceneDockPosition({ x: rect.left, y: rect.top }, rect));
+
+    if (typeof document !== 'undefined') {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
+    }
+
+    event.preventDefault();
+  }, [constrainSceneDockPosition, sceneDockPopoutOpen]);
+
+  useEffect(() => {
+    if (!sceneDockOpen || sceneDockPopoutOpen || !sceneDockPosition) return undefined;
+
+    const handleResize = () => {
+      if (window.innerWidth <= 980) {
+        setSceneDockPosition(null);
+        return;
+      }
+      setSceneDockPosition((prev) => (prev ? constrainSceneDockPosition(prev) : prev));
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [constrainSceneDockPosition, sceneDockOpen, sceneDockPopoutOpen, sceneDockPosition]);
+
+  useEffect(() => {
+    const handlePointerMove = (event) => {
+      if (!sceneDockDragRef.current.dragging || sceneDockPopoutOpen) return;
+      const rect = sceneDockRef.current?.getBoundingClientRect() || null;
+      const nextPosition = constrainSceneDockPosition({
+        x: event.clientX - sceneDockDragRef.current.offsetX,
+        y: event.clientY - sceneDockDragRef.current.offsetY,
+      }, rect);
+      setSceneDockPosition((prev) => (
+        prev && prev.x === nextPosition.x && prev.y === nextPosition.y ? prev : nextPosition
+      ));
+    };
+
+    const handlePointerEnd = () => {
+      if (!sceneDockDragRef.current.dragging) return;
+      stopSceneDockDrag();
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerEnd);
+    window.addEventListener('pointercancel', handlePointerEnd);
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerEnd);
+      window.removeEventListener('pointercancel', handlePointerEnd);
+      stopSceneDockDrag();
+    };
+  }, [constrainSceneDockPosition, sceneDockPopoutOpen, stopSceneDockDrag]);
+
+  useEffect(() => {
+    if (sceneDockOpen && canConfigureBattlefield) return;
+    stopSceneDockDrag();
+    if (sceneDockPopoutOpen) closeSceneDockPopout(true);
+  }, [canConfigureBattlefield, closeSceneDockPopout, sceneDockOpen, sceneDockPopoutOpen, stopSceneDockDrag]);
+
+  useEffect(() => {
+    if (!sceneDockPopoutOpen) return;
+    const popout = sceneDockPopoutWindowRef.current;
+    if (!popout || popout.closed) {
+      sceneDockPopoutRootRef.current = null;
+      sceneDockPopoutWindowRef.current = null;
+      setSceneDockPopoutOpen(false);
+      return;
+    }
+    popout.document.title = 'DM Control Center';
+  }, [sceneDockPopoutOpen]);
 
   const toggleCastorWilliamResourceSync = () => {
     if (!canManageCombat) return;
@@ -6047,6 +6308,7 @@ export default function CombatPanel({
       const next = defaultEncounter();
       const prior = normalize(prev);
       next.sheetProfiles = prior.sheetProfiles || {};
+      next.battlefieldMapMeta = prior.battlefieldMapMeta || {};
       return next;
     });
     setSelectedId(null);
@@ -6335,6 +6597,38 @@ export default function CombatPanel({
     setListEditorMode('');
   };
 
+  const upsertBattlefieldMapLabel = useCallback((storagePath, label) => {
+    const targetPath = cleanText(storagePath);
+    const nextLabel = cleanText(label);
+    if (!canConfigureBattlefield || !targetPath || !nextLabel) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      const currentLabel = cleanText(next.battlefieldMapMeta?.[targetPath]?.label);
+      if (currentLabel === nextLabel) return prev;
+      next.battlefieldMapMeta = {
+        ...(next.battlefieldMapMeta || {}),
+        [targetPath]: {
+          label: nextLabel,
+          updatedAt: Date.now(),
+        },
+      };
+      return next;
+    });
+  }, [canConfigureBattlefield]);
+
+  const removeBattlefieldMapLabel = useCallback((storagePath) => {
+    const targetPath = cleanText(storagePath);
+    if (!canConfigureBattlefield || !targetPath) return;
+    setEncounter((prev) => {
+      const next = normalize(prev);
+      if (!next.battlefieldMapMeta?.[targetPath]) return prev;
+      const remaining = { ...(next.battlefieldMapMeta || {}) };
+      delete remaining[targetPath];
+      next.battlefieldMapMeta = remaining;
+      return next;
+    });
+  }, [canConfigureBattlefield]);
+
   const deleteBattlefieldMedia = useCallback(async (storagePath) => {
     const targetPath = cleanText(storagePath);
     if (!targetPath) return true;
@@ -6347,6 +6641,22 @@ export default function CombatPanel({
     }
     return true;
   }, []);
+
+  const handleSaveBattlefieldMapName = useCallback(() => {
+    const storagePath = cleanText(battlefield.mediaStoragePath);
+    const nextLabel = cleanText(battlefieldMapNameDraft);
+    if (!canConfigureBattlefield || !storagePath) return;
+    if (!nextLabel) {
+      window.alert('Enter a map name first.');
+      return;
+    }
+    upsertBattlefieldMapLabel(storagePath, nextLabel);
+  }, [
+    battlefield.mediaStoragePath,
+    battlefieldMapNameDraft,
+    canConfigureBattlefield,
+    upsertBattlefieldMapLabel,
+  ]);
 
   const resolveBattlefieldMediaSelection = useCallback(async (storagePath) => {
     const targetPath = cleanText(storagePath);
@@ -6401,6 +6711,9 @@ export default function CombatPanel({
 
     const campaignId = getCampaignId();
     const nextStoragePath = buildCombatMediaPath(campaignId, encounter.id, file.name);
+    const nextLabel = (!cleanText(battlefield.mediaStoragePath) && cleanText(battlefieldMapNameDraft))
+      ? cleanText(battlefieldMapNameDraft)
+      : prettifyBattleMapLabel(file.name);
     setBattlefieldUploadBusy(true);
     try {
       const dimensions = await readImageDimensionsFromFile(file);
@@ -6417,6 +6730,8 @@ export default function CombatPanel({
         mediaHeight: dimensions.height,
         mediaUpdatedAt: Date.now(),
       });
+      upsertBattlefieldMapLabel(nextStoragePath, nextLabel);
+      setBattlefieldMapNameDraft(nextLabel);
       setBattlefieldResetRequestToken((tick) => tick + 1);
       void refreshBattlefieldMapLibrary({ showBusy: false });
     } catch (error) {
@@ -6426,9 +6741,12 @@ export default function CombatPanel({
       setBattlefieldUploadBusy(false);
     }
   }, [
+    battlefield.mediaStoragePath,
+    battlefieldMapNameDraft,
     canConfigureBattlefield,
     encounter.id,
     refreshBattlefieldMapLibrary,
+    upsertBattlefieldMapLabel,
     updateBattlefield,
   ]);
 
@@ -6509,6 +6827,7 @@ export default function CombatPanel({
       if (!deleted) {
         throw new Error('Unable to delete the selected battle map.');
       }
+      removeBattlefieldMapLabel(storagePath);
       clearBattlefieldMedia();
       await refreshBattlefieldMapLibrary({ showBusy: false });
     } catch (error) {
@@ -6524,6 +6843,7 @@ export default function CombatPanel({
     clearBattlefieldMedia,
     deleteBattlefieldMedia,
     refreshBattlefieldMapLibrary,
+    removeBattlefieldMapLabel,
   ]);
 
   // image upload — opens crop modal instead of applying directly
@@ -6758,6 +7078,489 @@ export default function CombatPanel({
   const tokenControlHint = selected
     ? 'Use size and rotation to fine tune the selected token on the board.'
     : 'Select a token on the map to adjust its size and facing.';
+  const initiativeActiveSummary = activeCombatant ? `${activeCombatant.name} is active.` : 'No combatants are in initiative yet.';
+  const closeSceneDockPanel = () => {
+    stopSceneDockDrag();
+    setSceneDockOpen(false);
+    if (sceneDockPopoutOpen) closeSceneDockPopout(true);
+  };
+  const handleSceneDockToggle = () => {
+    stopSceneDockDrag();
+    if (typeof window !== 'undefined' && window.innerWidth <= 980) {
+      setSceneDockPosition(null);
+    }
+    if (sceneDockPopoutOpen) {
+      closeSceneDockPopout(true);
+      setSceneDockOpen(false);
+      return;
+    }
+    setSceneDockOpen((open) => !open);
+  };
+  const sceneDockToggleLabel = sceneDockPopoutOpen ? 'Close DM Popout' : sceneDockOpen ? 'Hide DM Controls' : 'DM Controls';
+  const sceneDockPanel = sceneDockOpen ? (
+    <div
+      id="dm-control-center"
+      ref={sceneDockRef}
+      className={`${styles.floatingConfigDock} ${sceneDockPopoutOpen ? styles.floatingConfigDockPopout : styles.floatingConfigDockFloating}`}
+      style={!sceneDockPopoutOpen && sceneDockPosition ? {
+        left: sceneDockPosition.x,
+        top: sceneDockPosition.y,
+        bottom: 'auto',
+        transform: 'none',
+      } : undefined}
+    >
+      <input
+        ref={battlefieldFileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className={styles.hiddenInput}
+        onChange={handleBattlefieldMediaUpload}
+      />
+      <div className={styles.dmControlHeader}>
+        <div className={styles.dmControlHeaderCopy}>
+          <div className={styles.dmControlEyebrow}>DM Control Center</div>
+          <div className={styles.dmControlTitleRow}>
+            <div className={styles.dmControlTitle}>Battlefield Command</div>
+            <div className={styles.dmControlModePill}>
+              {activeCombatant ? 'Encounter Live' : 'Standby'}
+            </div>
+          </div>
+          <div className={styles.dmControlHeaderLine}>
+            {activeBattlefieldMapLabel
+              ? `${activeBattlefieldMapLabel} deployed over ${activeBattlefieldBackgroundLabel.toLowerCase()} backdrop.`
+              : `${activeBattlefieldBackgroundLabel} backdrop armed. No uploaded map is active.`}
+          </div>
+          <div className={styles.dmControlHeaderTools}>
+            <button
+              type="button"
+              className={`${styles.dmControlDragHandle} ${sceneDockPopoutOpen ? styles.dmControlDragHandleDisabled : ''}`}
+              onPointerDown={handleSceneDockDragStart}
+              disabled={sceneDockPopoutOpen}
+              title={sceneDockPopoutOpen ? 'Use the browser window frame to move the popout.' : 'Drag the panel to reposition it on the battlefield.'}
+            >
+              {sceneDockPopoutOpen ? 'Window Detached' : 'Drag Panel'}
+            </button>
+            {!sceneDockPopoutOpen && (
+              <button
+                type="button"
+                className={btnClass('ghost', 'sm', styles.dmControlUtilityBtn)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  stopSceneDockDrag();
+                  setSceneDockPosition(null);
+                }}
+                disabled={!sceneDockPosition}
+              >
+                Center Panel
+              </button>
+            )}
+          </div>
+        </div>
+        <div className={styles.dmControlWindowActions}>
+          <button
+            type="button"
+            className={btnClass('ghost', 'sm', styles.dmControlUtilityBtn)}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              stopSceneDockDrag();
+              if (sceneDockPopoutOpen) {
+                closeSceneDockPopout(true);
+                window.focus();
+                return;
+              }
+              openSceneDockPopout();
+            }}
+          >
+            {sceneDockPopoutOpen ? 'Dock' : 'Pop Out'}
+          </button>
+          <button
+            type="button"
+            className={btnClass('danger', 'sm', styles.dmControlClose)}
+            onMouseEnter={playHover}
+            onClick={() => {
+              playNav();
+              closeSceneDockPanel();
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.dmControlStats}>
+        <div className={styles.dmControlStat}>
+          <span className={styles.dmControlStatLabel}>Backdrop</span>
+          <span className={styles.dmControlStatValue}>{activeBattlefieldBackgroundLabel}</span>
+          <span className={styles.dmControlStatMeta}>
+            {battlefield.mediaStoragePath ? 'Under active map overlay' : 'Primary scene plate'}
+          </span>
+        </div>
+        <div className={styles.dmControlStat}>
+          <span className={styles.dmControlStatLabel}>Map Library</span>
+          <span className={styles.dmControlStatValue}>{battlefieldMapOptions.length}</span>
+          <span className={styles.dmControlStatMeta}>
+            {activeBattlefieldMapLabel ? activeBattlefieldMapLabel : 'No uploaded map live'}
+          </span>
+        </div>
+        <div className={styles.dmControlStat}>
+          <span className={styles.dmControlStatLabel}>Grid</span>
+          <span className={styles.dmControlStatValue}>{battlefield.gridEnabled ? 'Visible' : 'Hidden'}</span>
+          <span className={styles.dmControlStatMeta}>{battlefield.gridCellSize}px tactical cells</span>
+        </div>
+        <div className={styles.dmControlStat}>
+          <span className={styles.dmControlStatLabel}>Token</span>
+          <span className={styles.dmControlStatValue}>{selected ? selected.name : 'None'}</span>
+          <span className={styles.dmControlStatMeta}>
+            {selected ? selectedTokenDescriptor : 'Awaiting board selection'}
+          </span>
+        </div>
+      </div>
+
+      <div className={styles.dmControlGrid}>
+        <section className={`${styles.dmControlCard} ${styles.dmControlMapsCard}`}>
+          <div className={styles.dmControlCardTopline}>
+            <div className={styles.dmControlCardHeader}>
+              <div className={styles.dmControlCardTitle}>Scene And Maps</div>
+              <div className={styles.dmControlCardText}>
+                Deploy backdrops, browse the map archive, and push the active battlefield live.
+              </div>
+            </div>
+            <div className={styles.dmControlSignal}>
+              {battlefieldMapBusy ? 'Syncing' : battlefield.mediaStoragePath ? 'Map Live' : 'Backdrop Only'}
+            </div>
+          </div>
+          <div className={styles.dmControlFieldGrid}>
+            <label className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Backdrop</span>
+              <select
+                value={battleBg || ''}
+                onChange={(event) => {
+                  playNav();
+                  updateBattlefield({ backgroundSrc: event.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
+                }}
+                onMouseEnter={playHover}
+                className={`${styles.sceneSelect} ${styles.dmControlSelect}`}
+                disabled={!canConfigureBattlefield}
+              >
+                {BATTLE_BACKGROUNDS.map((background, index) => (
+                  <option key={index} value={background.src || ''}>
+                    {background.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Uploaded Map</span>
+              <select
+                value={battlefield.mediaStoragePath || ''}
+                onChange={(event) => {
+                  playNav();
+                  handleBattlefieldMediaSelection(event);
+                }}
+                onMouseEnter={playHover}
+                className={`${styles.sceneSelect} ${styles.battlefieldMapSelect} ${styles.dmControlSelect}`}
+                disabled={!canConfigureBattlefield || battlefieldMapBusy || battlefieldMapLibraryBusy}
+              >
+                <option value="">
+                  {battlefieldMapLibraryBusy ? 'Loading uploaded maps...' : 'No uploaded map'}
+                </option>
+                {battlefieldMapOptions.map((entry) => (
+                  <option key={entry.storagePath} value={entry.storagePath}>
+                    {entry.optionLabel}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={`${styles.dmControlField} ${styles.dmControlFieldWide}`}>
+              <span className={styles.sceneLabel}>Map Name</span>
+              <input
+                type="text"
+                value={battlefieldMapNameDraft}
+                onChange={(event) => setBattlefieldMapNameDraft(event.target.value)}
+                className={`${styles.input} ${styles.compactInput} ${styles.dmControlTextInput}`}
+                placeholder={battlefield.mediaStoragePath ? 'Rename the selected map' : 'Name for the next upload'}
+                maxLength={80}
+              />
+            </label>
+          </div>
+          <div className={styles.dmControlActions}>
+            <button
+              className={btnClass('gold', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                battlefieldFileInputRef.current?.click();
+              }}
+              disabled={!canConfigureBattlefield || battlefieldMapBusy}
+            >
+              {battlefieldUploadBusy ? 'Uploading...' : 'Upload Map'}
+            </button>
+            <button
+              className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                handleSaveBattlefieldMapName();
+              }}
+              disabled={!battlefieldMapNameDirty}
+            >
+              Save Name
+            </button>
+            <button
+              className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                clearBattlefieldMedia();
+              }}
+              disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
+            >
+              Hide Active Map
+            </button>
+            <button
+              className={btnClass('danger', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                handleDeleteBattlefieldMedia();
+              }}
+              disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
+            >
+              {battlefieldMapDeleteBusy ? 'Deleting...' : 'Delete Map'}
+            </button>
+          </div>
+          <div className={styles.battlefieldMapHint}>{battlefieldMapStatusText}</div>
+        </section>
+
+        <section className={`${styles.dmControlCard} ${styles.dmControlInitiativeCard}`}>
+          <div className={styles.dmControlCardTopline}>
+            <div className={styles.dmControlCardHeader}>
+              <div className={styles.dmControlCardTitle}>Initiative Control</div>
+              <div className={styles.dmControlCardText}>
+                Step the encounter forward, reset the queue, or clear the board without exposing ops controls.
+              </div>
+            </div>
+            <div className={styles.dmControlSignal}>{combatants.length ? 'Queue Armed' : 'Queue Empty'}</div>
+          </div>
+          <div className={styles.dmControlInitiativeBoard}>
+            <div className={styles.dmControlInitiativeReadout}>
+              <div className={styles.roundBadge}>
+                <span className={styles.roundLabel}>Round</span>
+                <span className={styles.roundValue}>{encounter.round}</span>
+              </div>
+              <div className={styles.dmControlInitiativeMeta}>{initiativeActiveSummary}</div>
+            </div>
+            <div className={styles.dmControlMiniStats}>
+              <div className={styles.dmControlMiniStat}>
+                <span>Roster</span>
+                <strong>{combatants.length}</strong>
+              </div>
+              <div className={styles.dmControlMiniStat}>
+                <span>Turn</span>
+                <strong>{combatants.length ? `${Math.min(encounter.activeIndex + 1, combatants.length)}/${combatants.length}` : '--'}</strong>
+              </div>
+            </div>
+          </div>
+          <div className={styles.dmControlActionGrid}>
+            <button
+              className={btnClass('gold', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                gotoPrev();
+              }}
+              disabled={!canWriteCombat}
+            >
+              Prev Turn
+            </button>
+            <button
+              className={btnClass('gold', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                gotoNext();
+              }}
+              disabled={!canWriteCombat}
+            >
+              Next Turn
+            </button>
+            <button
+              className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                resetEncounter();
+              }}
+              disabled={!canManageCombat}
+            >
+              Reset Encounter
+            </button>
+            <button
+              className={btnClass('danger', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                clearEncounter();
+              }}
+              disabled={!canManageCombat}
+            >
+              Clear Encounter
+            </button>
+          </div>
+        </section>
+
+        <section className={`${styles.dmControlCard} ${styles.dmControlViewCard}`}>
+          <div className={styles.dmControlCardTopline}>
+            <div className={styles.dmControlCardHeader}>
+              <div className={styles.dmControlCardTitle}>Grid And View</div>
+              <div className={styles.dmControlCardText}>
+                Adjust board fidelity, line up the cells, and snap the camera back into frame.
+              </div>
+            </div>
+            <div className={styles.dmControlSignal}>{battlefield.gridEnabled ? 'Grid Online' : 'Grid Hidden'}</div>
+          </div>
+          <div className={`${styles.dmControlFieldGrid} ${styles.dmControlGridFields}`}>
+            <div className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Grid</span>
+              <button
+                className={btnClass('ghost', 'sm', styles.dmControlInlineButton)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
+                }}
+                disabled={!canConfigureBattlefield}
+              >
+                {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
+              </button>
+            </div>
+            <label className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Cell Size</span>
+              <input
+                type="number"
+                min="32"
+                max="192"
+                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                value={battlefield.gridCellSize}
+                onChange={(event) => updateBattlefield({ gridCellSize: clamp(toInt(event.target.value, battlefield.gridCellSize), 32, 192) })}
+                disabled={!canConfigureBattlefield}
+              />
+            </label>
+            <label className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Offset X</span>
+              <input
+                type="number"
+                min="-2048"
+                max="2048"
+                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                value={battlefield.gridOffsetX}
+                onChange={(event) => updateBattlefield({ gridOffsetX: clamp(toInt(event.target.value, battlefield.gridOffsetX), -2048, 2048) })}
+                disabled={!canConfigureBattlefield}
+              />
+            </label>
+            <label className={styles.dmControlField}>
+              <span className={styles.sceneLabel}>Offset Y</span>
+              <input
+                type="number"
+                min="-2048"
+                max="2048"
+                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                value={battlefield.gridOffsetY}
+                onChange={(event) => updateBattlefield({ gridOffsetY: clamp(toInt(event.target.value, battlefield.gridOffsetY), -2048, 2048) })}
+                disabled={!canConfigureBattlefield}
+              />
+            </label>
+          </div>
+          <div className={styles.dmControlActions}>
+            <button
+              className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+              onMouseEnter={playHover}
+              onClick={() => {
+                playNav();
+                setBattlefieldResetRequestToken((tick) => tick + 1);
+              }}
+            >
+              Reset View
+            </button>
+          </div>
+        </section>
+
+        <section className={`${styles.dmControlCard} ${styles.dmControlTokenCard}`}>
+          <div className={styles.dmControlCardTopline}>
+            <div className={styles.dmControlCardHeader}>
+              <div className={styles.dmControlCardTitle}>Selected Token</div>
+              <div className={styles.dmControlCardText}>
+                Tune token scale and facing from the command deck without opening the full sheet.
+              </div>
+            </div>
+            <div className={styles.dmControlSignal}>
+              {selected ? (selectedReadOnly ? 'Read Only' : 'Linked') : 'Idle'}
+            </div>
+          </div>
+          <div className={styles.dmControlTokenSummary}>
+            <div className={styles.dmControlTokenIdentity}>
+              <div className={styles.sceneTokenBadge} title={selected ? selected.name : 'No token selected'}>
+                {selected ? selected.name : 'No token selected'}
+              </div>
+              <div className={styles.dmControlTokenMeta}>{selectedTokenDescriptor}</div>
+            </div>
+            {selected ? (
+              <div className={styles.dmControlMiniStats}>
+                <div className={styles.dmControlMiniStat}>
+                  <span>Scale</span>
+                  <strong>{selectedTokenScalePercent}%</strong>
+                </div>
+                <div className={styles.dmControlMiniStat}>
+                  <span>Facing</span>
+                  <strong>{selectedTokenRotationDegrees}°</strong>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {selected ? (
+            <>
+              <div className={`${styles.dmControlFieldGrid} ${styles.dmControlTokenFields}`}>
+                <label className={styles.dmControlField}>
+                  <span className={styles.sceneLabel}>Size %</span>
+                  <input
+                    type="number"
+                    min={Math.round(TOKEN_SCALE_MIN * 100)}
+                    max={Math.round(TOKEN_SCALE_MAX * 100)}
+                    step="5"
+                    className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                    value={selectedTokenScalePercent}
+                    onChange={(event) => setSelectedTokenScalePercent(event.target.value)}
+                    disabled={!selectedCanEdit}
+                  />
+                </label>
+                <label className={styles.dmControlField}>
+                  <span className={styles.sceneLabel}>Rotation</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="359"
+                    step="5"
+                    className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                    value={selectedTokenRotationDegrees}
+                    onChange={(event) => setSelectedTokenRotationDegrees(event.target.value)}
+                    disabled={!selectedCanEdit}
+                  />
+                </label>
+              </div>
+              <div className={styles.sceneDockHint}>{tokenControlHint}</div>
+            </>
+          ) : (
+            <div className={styles.dmControlEmpty}>{tokenControlHint}</div>
+          )}
+        </section>
+      </div>
+    </div>
+  ) : null;
+  const sceneDockPopoutNode = sceneDockPanel && sceneDockPopoutOpen && sceneDockPopoutRootRef.current
+    ? createPortal(sceneDockPanel, sceneDockPopoutRootRef.current)
+    : null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -6845,283 +7648,22 @@ export default function CombatPanel({
             </div>
           )}
 
+          {canConfigureBattlefield && !sceneDockPopoutOpen && sceneDockPanel}
+          {sceneDockPopoutNode}
           {canConfigureBattlefield && (
             <div className={styles.sceneDockWrap}>
-              {sceneDockOpen && (
-                <div id="dm-control-center" className={styles.floatingConfigDock}>
-                  <input
-                    ref={battlefieldFileInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className={styles.hiddenInput}
-                    onChange={handleBattlefieldMediaUpload}
-                  />
-                  <div className={styles.dmControlHeader}>
-                    <div className={styles.dmControlHeaderCopy}>
-                      <div className={styles.dmControlEyebrow}>DM Control Center</div>
-                      <div className={styles.dmControlTitle}>Battlefield Command</div>
-                      <div className={styles.dmControlText}>
-                        Manage backdrops, uploaded maps, grid alignment, and selected token tuning from one clean control panel.
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      className={btnClass('danger', 'sm', styles.dmControlClose)}
-                      onMouseEnter={playHover}
-                      onClick={() => {
-                        playNav();
-                        setSceneDockOpen(false);
-                      }}
-                    >
-                      Close
-                    </button>
-                  </div>
-
-                  <div className={styles.dmControlStats}>
-                    <div className={styles.dmControlStat}>
-                      <span className={styles.dmControlStatLabel}>Backdrop</span>
-                      <span className={styles.dmControlStatValue}>{activeBattlefieldBackgroundLabel}</span>
-                    </div>
-                    <div className={styles.dmControlStat}>
-                      <span className={styles.dmControlStatLabel}>Map Library</span>
-                      <span className={styles.dmControlStatValue}>{battlefieldMapOptions.length}</span>
-                    </div>
-                    <div className={styles.dmControlStat}>
-                      <span className={styles.dmControlStatLabel}>Grid</span>
-                      <span className={styles.dmControlStatValue}>{battlefield.gridEnabled ? 'Visible' : 'Hidden'}</span>
-                    </div>
-                    <div className={styles.dmControlStat}>
-                      <span className={styles.dmControlStatLabel}>Token</span>
-                      <span className={styles.dmControlStatValue}>{selected ? selected.name : 'None'}</span>
-                    </div>
-                  </div>
-
-                  <div className={styles.dmControlGrid}>
-                    <section className={`${styles.dmControlCard} ${styles.dmControlCardWide}`}>
-                      <div className={styles.dmControlCardHeader}>
-                        <div className={styles.dmControlCardTitle}>Scene And Maps</div>
-                        <div className={styles.dmControlCardText}>
-                          Choose the battlefield backdrop and swap between any uploaded maps for this campaign.
-                        </div>
-                      </div>
-                      <div className={styles.dmControlFieldGrid}>
-                        <label className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Backdrop</span>
-                          <select
-                            value={battleBg || ''}
-                            onChange={(event) => {
-                              playNav();
-                              updateBattlefield({ backgroundSrc: event.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
-                            }}
-                            onMouseEnter={playHover}
-                            className={`${styles.sceneSelect} ${styles.dmControlSelect}`}
-                            disabled={!canConfigureBattlefield}
-                          >
-                            {BATTLE_BACKGROUNDS.map((background, index) => (
-                              <option key={index} value={background.src || ''}>
-                                {background.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Uploaded Map</span>
-                          <select
-                            value={battlefield.mediaStoragePath || ''}
-                            onChange={(event) => {
-                              playNav();
-                              handleBattlefieldMediaSelection(event);
-                            }}
-                            onMouseEnter={playHover}
-                            className={`${styles.sceneSelect} ${styles.battlefieldMapSelect} ${styles.dmControlSelect}`}
-                            disabled={!canConfigureBattlefield || battlefieldMapBusy || battlefieldMapLibraryBusy}
-                          >
-                            <option value="">
-                              {battlefieldMapLibraryBusy ? 'Loading uploaded maps...' : 'No uploaded map'}
-                            </option>
-                            {battlefieldMapOptions.map((entry) => (
-                              <option key={entry.storagePath} value={entry.storagePath}>
-                                {entry.optionLabel}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <div className={styles.dmControlActions}>
-                        <button
-                          className={btnClass('gold', 'sm', styles.toolbarActionBtn)}
-                          onMouseEnter={playHover}
-                          onClick={() => {
-                            playNav();
-                            battlefieldFileInputRef.current?.click();
-                          }}
-                          disabled={!canConfigureBattlefield || battlefieldMapBusy}
-                        >
-                          {battlefieldUploadBusy ? 'Uploading...' : 'Upload Map'}
-                        </button>
-                        <button
-                          className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                          onMouseEnter={playHover}
-                          onClick={() => {
-                            playNav();
-                            clearBattlefieldMedia();
-                          }}
-                          disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
-                        >
-                          Hide Active Map
-                        </button>
-                        <button
-                          className={btnClass('danger', 'sm', styles.toolbarActionBtn)}
-                          onMouseEnter={playHover}
-                          onClick={() => {
-                            playNav();
-                            handleDeleteBattlefieldMedia();
-                          }}
-                          disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
-                        >
-                          {battlefieldMapDeleteBusy ? 'Deleting...' : 'Delete Map'}
-                        </button>
-                      </div>
-                      <div className={styles.battlefieldMapHint}>{battlefieldMapStatusText}</div>
-                    </section>
-
-                    <section className={styles.dmControlCard}>
-                      <div className={styles.dmControlCardHeader}>
-                        <div className={styles.dmControlCardTitle}>Grid And View</div>
-                        <div className={styles.dmControlCardText}>
-                          Tune the tactical grid and reset the camera when the board needs a clean framing pass.
-                        </div>
-                      </div>
-                      <div className={styles.dmControlFieldGrid}>
-                        <div className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Grid</span>
-                          <button
-                            className={btnClass('ghost', 'sm', styles.dmControlInlineButton)}
-                            onMouseEnter={playHover}
-                            onClick={() => {
-                              playNav();
-                              updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
-                            }}
-                            disabled={!canConfigureBattlefield}
-                          >
-                            {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
-                          </button>
-                        </div>
-                        <label className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Cell Size</span>
-                          <input
-                            type="number"
-                            min="32"
-                            max="192"
-                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
-                            value={battlefield.gridCellSize}
-                            onChange={(event) => updateBattlefield({ gridCellSize: clamp(toInt(event.target.value, battlefield.gridCellSize), 32, 192) })}
-                            disabled={!canConfigureBattlefield}
-                          />
-                        </label>
-                        <label className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Offset X</span>
-                          <input
-                            type="number"
-                            min="-2048"
-                            max="2048"
-                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
-                            value={battlefield.gridOffsetX}
-                            onChange={(event) => updateBattlefield({ gridOffsetX: clamp(toInt(event.target.value, battlefield.gridOffsetX), -2048, 2048) })}
-                            disabled={!canConfigureBattlefield}
-                          />
-                        </label>
-                        <label className={styles.dmControlField}>
-                          <span className={styles.sceneLabel}>Offset Y</span>
-                          <input
-                            type="number"
-                            min="-2048"
-                            max="2048"
-                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
-                            value={battlefield.gridOffsetY}
-                            onChange={(event) => updateBattlefield({ gridOffsetY: clamp(toInt(event.target.value, battlefield.gridOffsetY), -2048, 2048) })}
-                            disabled={!canConfigureBattlefield}
-                          />
-                        </label>
-                      </div>
-                      <div className={styles.dmControlActions}>
-                        <button
-                          className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                          onMouseEnter={playHover}
-                          onClick={() => {
-                            playNav();
-                            setBattlefieldResetRequestToken((tick) => tick + 1);
-                          }}
-                        >
-                          Reset View
-                        </button>
-                      </div>
-                    </section>
-
-                    <section className={styles.dmControlCard}>
-                      <div className={styles.dmControlCardHeader}>
-                        <div className={styles.dmControlCardTitle}>Selected Token</div>
-                        <div className={styles.dmControlCardText}>
-                          Fine tune token presence without opening the full character editor.
-                        </div>
-                      </div>
-                      <div className={styles.dmControlTokenSummary}>
-                        <div className={styles.sceneTokenBadge} title={selected ? selected.name : 'No token selected'}>
-                          {selected ? selected.name : 'No token selected'}
-                        </div>
-                        <div className={styles.dmControlTokenMeta}>{selectedTokenDescriptor}</div>
-                      </div>
-                      {selected ? (
-                        <>
-                          <div className={styles.dmControlFieldGrid}>
-                            <label className={styles.dmControlField}>
-                              <span className={styles.sceneLabel}>Size %</span>
-                              <input
-                                type="number"
-                                min={Math.round(TOKEN_SCALE_MIN * 100)}
-                                max={Math.round(TOKEN_SCALE_MAX * 100)}
-                                step="5"
-                                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
-                                value={selectedTokenScalePercent}
-                                onChange={(event) => setSelectedTokenScalePercent(event.target.value)}
-                                disabled={!selectedCanEdit}
-                              />
-                            </label>
-                            <label className={styles.dmControlField}>
-                              <span className={styles.sceneLabel}>Rotation</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max="359"
-                                step="5"
-                                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
-                                value={selectedTokenRotationDegrees}
-                                onChange={(event) => setSelectedTokenRotationDegrees(event.target.value)}
-                                disabled={!selectedCanEdit}
-                              />
-                            </label>
-                          </div>
-                          <div className={styles.sceneDockHint}>{tokenControlHint}</div>
-                        </>
-                      ) : (
-                        <div className={styles.dmControlEmpty}>{tokenControlHint}</div>
-                      )}
-                    </section>
-                  </div>
-                </div>
-              )}
               <button
                 type="button"
                 className={btnClass('gold', 'sm', styles.sceneDockToggle)}
                 onMouseEnter={playHover}
                 onClick={() => {
                   playNav();
-                  setSceneDockOpen((open) => !open);
+                  handleSceneDockToggle();
                 }}
                 aria-expanded={sceneDockOpen}
                 aria-controls="dm-control-center"
               >
-                {sceneDockOpen ? 'Hide DM Controls' : 'DM Controls'}
+                {sceneDockToggleLabel}
               </button>
             </div>
           )}
@@ -7187,30 +7729,10 @@ export default function CombatPanel({
                       <div className={styles.initHeaderCenter}>
                         <div className={styles.initHeading}>Initiative</div>
                         <div className={styles.initRoundControls}>
-                          {canManageCombat && (
-                            <button
-                              className={btnClass('gold')}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); gotoPrev(); }}
-                              disabled={!canWriteCombat}
-                            >
-                              ◀ Prev
-                            </button>
-                          )}
                           <div className={styles.roundBadge}>
                             <span className={styles.roundLabel}>Round</span>
                             <span className={styles.roundValue}>{encounter.round}</span>
                           </div>
-                          {canManageCombat && (
-                            <button
-                              className={btnClass('gold')}
-                              onMouseEnter={playHover}
-                              onClick={() => { playNav(); gotoNext(); }}
-                              disabled={!canWriteCombat}
-                            >
-                              Next ▶
-                            </button>
-                          )}
                         </div>
                         <div className={styles.initSubheading}>
                           {activeCombatant ? `${activeCombatant.name} is active` : 'No combatants are in initiative yet.'}
@@ -7271,26 +7793,28 @@ export default function CombatPanel({
                                     <div className={styles.initHp} style={{ color: hpColor }}>
                                       {c.hp === '' ? '—' : c.hp}
                                     </div>
-                                    <div className={styles.initActions}>
-                                      <button
-                                        title={c.dead ? 'Revive' : 'Mark dead'}
-                                        onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
-                                        onMouseEnter={playHover}
-                                        className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
-                                        disabled={!canControlCombatant(c)}
-                                      >
-                                        ☠
-                                      </button>
-                                      <button
-                                        title="Remove"
-                                        onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
-                                        onMouseEnter={playHover}
-                                        className={iconMiniBtnClass('danger')}
-                                        disabled={!canRemoveCombatant(c)}
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
+                                    {canManageCombat && (
+                                      <div className={styles.initActions}>
+                                        <button
+                                          title={c.dead ? 'Revive' : 'Mark dead'}
+                                          onClick={(e) => { e.stopPropagation(); playNav(); toggleDead(c.id); }}
+                                          onMouseEnter={playHover}
+                                          className={iconMiniBtnClass(c.dead ? 'danger' : 'ghost')}
+                                          disabled={!canControlCombatant(c)}
+                                        >
+                                          ☠
+                                        </button>
+                                        <button
+                                          title="Remove"
+                                          onClick={(e) => { e.stopPropagation(); playNav(); removeCombatant(c.id); }}
+                                          onMouseEnter={playHover}
+                                          className={iconMiniBtnClass('danger')}
+                                          disabled={!canRemoveCombatant(c)}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className={styles.initHpTrack}>
@@ -7307,8 +7831,6 @@ export default function CombatPanel({
                     </div>
                     <div className={styles.initButtons}>
                       <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); setAddModalOpen(true); }} disabled={!canWriteCombat}>+ Add</button>
-                      <button className={btnClass('gold', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); resetEncounter(); }} disabled={!canManageCombat}>Reset</button>
-                      <button className={btnClass('danger', 'sm')} onMouseEnter={playHover} onClick={() => { playNav(); clearEncounter(); }} disabled={!canManageCombat}>Clear</button>
                     </div>
                   </div>
                 </div>
