@@ -352,16 +352,20 @@
 
 .floatingConfigDock {
   position: relative;
-  width: min(1120px, calc(100vw - 32px));
+  width: min(960px, calc(100vw - 32px));
   z-index: 11;
   max-width: 100%;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 220, 160, 0.1);
-  background: linear-gradient(180deg, rgba(10, 8, 6, 0.86), rgba(10, 8, 6, 0.72));
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 220, 160, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(255, 214, 128, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(15, 11, 8, 0.95), rgba(7, 5, 4, 0.88));
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow:
+    0 22px 42px rgba(0, 0, 0, 0.46),
+    inset 0 1px 0 rgba(255, 240, 214, 0.04);
   pointer-events: auto;
 }
 
@@ -371,19 +375,20 @@
 
 .sceneDockWrap {
   position: absolute;
-  left: 16px;
+  right: 16px;
   bottom: 16px;
   z-index: 11;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 10px;
   max-width: calc(100% - 32px);
   pointer-events: auto;
 }
 
 .sceneDockToggle {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  min-width: 154px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 
 .sceneTokenBadge {
@@ -406,11 +411,164 @@
 }
 
 .sceneDockHint {
-  padding: 0 4px;
+  padding: 0 2px;
   color: rgba(255, 235, 190, 0.76);
   font-size: 11px;
   font-weight: 800;
   line-height: 1.35;
+}
+
+.dmControlHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dmControlHeaderCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dmControlEyebrow {
+  color: rgba(255, 214, 138, 0.72);
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.dmControlTitle {
+  color: #fff3d6;
+  font-family: var(--koa-font-display);
+  font-size: 28px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.dmControlText {
+  max-width: 620px;
+  color: rgba(255, 236, 206, 0.74);
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.dmControlClose {
+  flex-shrink: 0;
+}
+
+.dmControlStats {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dmControlStat {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 220, 160, 0.12);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.08), rgba(255, 245, 220, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.dmControlStatLabel {
+  display: block;
+  color: rgba(255, 214, 138, 0.62);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.dmControlStatValue {
+  display: block;
+  margin-top: 6px;
+  color: #fff1cf;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dmControlGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.dmControlCard {
+  min-width: 0;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 220, 160, 0.1);
+  background:
+    linear-gradient(180deg, rgba(17, 12, 8, 0.92), rgba(9, 7, 5, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 240, 0.03),
+    0 12px 22px rgba(0, 0, 0, 0.18);
+}
+
+.dmControlCardWide {
+  grid-column: 1 / -1;
+}
+
+.dmControlCardHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.dmControlCardTitle {
+  color: #fff0cb;
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  font-family: var(--koa-font-display);
+}
+
+.dmControlCardText {
+  color: rgba(255, 232, 194, 0.68);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+.dmControlFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dmControlField {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dmControlSelect,
+.dmControlNumberInput,
+.dmControlInlineButton {
+  width: 100%;
+  max-width: none;
+}
+
+.dmControlActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 
 .roundBadge {
@@ -477,6 +635,10 @@
   font-family: var(--koa-font-display);
 }
 
+.battlefieldMapSelect {
+  min-width: 0;
+}
+
 .toolbarActionBtn {
   white-space: nowrap;
 }
@@ -498,6 +660,46 @@
 .sceneSelect option {
   background: #1a1208;
   font-family: sans-serif;
+}
+
+.battlefieldMapHint {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 220, 160, 0.1);
+  background: linear-gradient(180deg, rgba(255, 245, 220, 0.06), rgba(255, 245, 220, 0.025));
+  color: rgba(255, 235, 190, 0.76);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.dmControlTokenSummary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.dmControlTokenMeta {
+  color: rgba(255, 228, 185, 0.62);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dmControlEmpty {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 220, 160, 0.18);
+  color: rgba(255, 232, 194, 0.68);
+  background: rgba(255, 245, 220, 0.025);
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 700;
 }
 
 .mainLayout {
@@ -5286,11 +5488,12 @@
     right: 8px;
     bottom: 8px;
     max-width: none;
+    align-items: stretch;
   }
 
   .floatingConfigDock {
     width: 100%;
-    padding: 8px 10px;
+    padding: 14px;
   }
 
   .windowControls {
@@ -5302,6 +5505,36 @@
 
   .controlsRight {
     justify-content: flex-start;
+  }
+
+  .dmControlHeader {
+    flex-direction: column;
+  }
+
+  .dmControlTitle {
+    font-size: 24px;
+  }
+
+  .dmControlStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dmControlGrid,
+  .dmControlFieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dmControlCardWide {
+    grid-column: auto;
+  }
+
+  .dmControlActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sceneDockToggle {
+    width: 100%;
   }
 
   .initDockToggleWrap {

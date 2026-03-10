@@ -668,6 +668,44 @@ function sanitizeUploadFileName(name) {
   return cleaned || 'battle-map';
 }
 
+function battleMapStorageFileName(storagePath) {
+  const parts = cleanText(storagePath).split('/').filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+function stripFileExtension(name) {
+  return String(name || '').replace(/\.[^.]+$/, '');
+}
+
+function prettifyBattleMapLabel(value) {
+  const cleaned = stripFileExtension(String(value || '').replace(/^\d{10,16}-/, ''))
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  if (!cleaned) return 'Untitled Map';
+  return cleaned.replace(/\b[a-z]/g, (char) => char.toUpperCase());
+}
+
+function formatBattleMapTimestamp(value) {
+  const timestamp = typeof value === 'number' ? value : Date.parse(String(value || ''));
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(timestamp);
+  } catch {
+    return new Date(timestamp).toLocaleString();
+  }
+}
+
+function buildBattleMapOptionLabel(entry) {
+  const label = cleanText(entry?.label) || 'Untitled Map';
+  const timestampLabel = formatBattleMapTimestamp(entry?.updatedAt);
+  return timestampLabel ? `${label} · ${timestampLabel}` : label;
+}
+
 function buildCombatMediaPath(campaignId, encounterId, fileName) {
   const campaignKey = cleanText(campaignId) || 'main-party';
   const encounterKey = cleanText(encounterId) || 'encounter';
@@ -691,6 +729,82 @@ function readImageDimensionsFromFile(file) {
       reject(new Error('Unable to read map image dimensions.'));
     };
     img.src = objectUrl;
+  });
+}
+
+function readImageDimensionsFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({
+        width: Math.max(0, toInt(img.naturalWidth, 0)),
+        height: Math.max(0, toInt(img.naturalHeight, 0)),
+      });
+    };
+    img.onerror = () => {
+      reject(new Error('Unable to read map image dimensions.'));
+    };
+    img.src = url;
+  });
+}
+
+function normalizeCombatMediaLibraryEntry(raw, parentPath) {
+  const name = cleanText(raw?.name);
+  if (!name) return null;
+  const storagePath = cleanText(parentPath) ? `${cleanText(parentPath)}/${name}` : name;
+  const updatedAtText = cleanText(raw?.updated_at || raw?.created_at || raw?.last_accessed_at);
+  const updatedAt = updatedAtText ? Date.parse(updatedAtText) : 0;
+  const label = prettifyBattleMapLabel(name);
+  return {
+    name,
+    storagePath,
+    label,
+    optionLabel: buildBattleMapOptionLabel({ label, updatedAt }),
+    mimeType: cleanText(raw?.metadata?.mimetype || raw?.metadata?.contentType),
+    updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
+  };
+}
+
+async function listCombatMediaLibraryEntries(supabase, campaignId) {
+  const rootPath = `${cleanText(campaignId) || 'main-party'}/combat/maps`;
+  const bucket = supabase.storage.from(COMBAT_MEDIA_BUCKET);
+  const folderPaths = [];
+  const entries = [];
+  const parseFolderItems = (items, parentPath) => {
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const name = cleanText(item?.name);
+      if (!name) return;
+      if (/\.[a-z0-9]+$/i.test(name)) {
+        const normalized = normalizeCombatMediaLibraryEntry(item, parentPath);
+        if (normalized) entries.push(normalized);
+        return;
+      }
+      folderPaths.push(`${parentPath}/${name}`);
+    });
+  };
+
+  const { data: rootItems, error: rootError } = await bucket.list(rootPath, {
+    limit: 200,
+    sortBy: { column: 'name', order: 'asc' },
+  });
+  if (rootError) throw rootError;
+  parseFolderItems(rootItems, rootPath);
+
+  const childLists = await Promise.all(folderPaths.map(async (folderPath) => {
+    const { data, error } = await bucket.list(folderPath, {
+      limit: 200,
+      sortBy: { column: 'name', order: 'asc' },
+    });
+    if (error) throw error;
+    return { folderPath, items: data };
+  }));
+
+  childLists.forEach(({ folderPath, items }) => parseFolderItems(items, folderPath));
+
+  return entries.sort((a, b) => {
+    const timeDiff = (b.updatedAt || 0) - (a.updatedAt || 0);
+    if (timeDiff !== 0) return timeDiff;
+    return a.label.localeCompare(b.label);
   });
 }
 
@@ -3417,6 +3531,10 @@ export default function CombatPanel({
   const [initSlideDirection, setInitSlideDirection] = useState('next');
   const [initSlideTick, setInitSlideTick] = useState(0);
   const [battlefieldUploadBusy, setBattlefieldUploadBusy] = useState(false);
+  const [battlefieldMapSelectionBusy, setBattlefieldMapSelectionBusy] = useState(false);
+  const [battlefieldMapDeleteBusy, setBattlefieldMapDeleteBusy] = useState(false);
+  const [battlefieldMapLibraryBusy, setBattlefieldMapLibraryBusy] = useState(false);
+  const [battlefieldMapLibrary, setBattlefieldMapLibrary] = useState([]);
   const [battlefieldMediaUrl, setBattlefieldMediaUrl] = useState('');
   const [sceneDockOpen, setSceneDockOpen] = useState(false);
   const [initiativeDockOpen, setInitiativeDockOpen] = useState(false);
@@ -3459,6 +3577,7 @@ export default function CombatPanel({
   const cropImgRef = useRef(null);
   const cropDragRef = useRef({ dragging: false, sx: 0, sy: 0, ox: 0, oy: 0 });
   const battlefieldFileInputRef = useRef(null);
+  const battlefieldMapLibraryRequestIdRef = useRef(0);
   const sheetFileInputRef = useRef(null);
   const sheetImportAbortRef = useRef(null);
   const [sheetPopoutOpen, setSheetPopoutOpen] = useState(false);
@@ -3692,6 +3811,83 @@ export default function CombatPanel({
   const battlefieldPointers = sharedPointerState;
   const battleBg = battlefield.backgroundSrc || DEFAULT_BATTLEFIELD.backgroundSrc;
   const canConfigureBattlefield = canManageCombat;
+  const refreshBattlefieldMapLibrary = useCallback(async ({ showBusy = true } = {}) => {
+    if (!canConfigureBattlefield) {
+      battlefieldMapLibraryRequestIdRef.current += 1;
+      setBattlefieldMapLibrary([]);
+      setBattlefieldMapLibraryBusy(false);
+      return [];
+    }
+
+    const supabase = getSupabaseClient();
+    const campaignId = getCampaignId();
+    if (!supabase || !campaignId) {
+      battlefieldMapLibraryRequestIdRef.current += 1;
+      setBattlefieldMapLibrary([]);
+      setBattlefieldMapLibraryBusy(false);
+      return [];
+    }
+
+    const requestId = battlefieldMapLibraryRequestIdRef.current + 1;
+    battlefieldMapLibraryRequestIdRef.current = requestId;
+    if (showBusy) setBattlefieldMapLibraryBusy(true);
+
+    try {
+      const entries = await listCombatMediaLibraryEntries(supabase, campaignId);
+      if (battlefieldMapLibraryRequestIdRef.current !== requestId) return entries;
+      setBattlefieldMapLibrary(entries);
+      return entries;
+    } catch (error) {
+      console.error('[CombatPanel] Unable to load uploaded battle maps.', error);
+      if (battlefieldMapLibraryRequestIdRef.current === requestId) {
+        setBattlefieldMapLibrary([]);
+      }
+      return [];
+    } finally {
+      if (battlefieldMapLibraryRequestIdRef.current === requestId) {
+        setBattlefieldMapLibraryBusy(false);
+      }
+    }
+  }, [canConfigureBattlefield]);
+  const battlefieldMapOptions = useMemo(() => {
+    const entryMap = new Map();
+    battlefieldMapLibrary.forEach((entry) => {
+      const storagePath = cleanText(entry?.storagePath);
+      if (!storagePath) return;
+      entryMap.set(storagePath, entry);
+    });
+
+    const activePath = cleanText(battlefield.mediaStoragePath);
+    if (activePath && !entryMap.has(activePath)) {
+      const label = prettifyBattleMapLabel(battleMapStorageFileName(activePath));
+      const updatedAt = Math.max(0, toInt(battlefield.mediaUpdatedAt, 0));
+      entryMap.set(activePath, {
+        storagePath: activePath,
+        name: battleMapStorageFileName(activePath),
+        label,
+        optionLabel: buildBattleMapOptionLabel({ label, updatedAt }),
+        mimeType: cleanText(battlefield.mediaMimeType),
+        updatedAt,
+      });
+    }
+
+    return Array.from(entryMap.values()).sort((a, b) => {
+      const timeDiff = (b.updatedAt || 0) - (a.updatedAt || 0);
+      if (timeDiff !== 0) return timeDiff;
+      return String(a.label || '').localeCompare(String(b.label || ''));
+    });
+  }, [
+    battlefield.mediaMimeType,
+    battlefield.mediaStoragePath,
+    battlefield.mediaUpdatedAt,
+    battlefieldMapLibrary,
+  ]);
+  const activeBattlefieldMap = useMemo(
+    () => battlefieldMapOptions.find((entry) => entry.storagePath === cleanText(battlefield.mediaStoragePath)) || null,
+    [battlefield.mediaStoragePath, battlefieldMapOptions]
+  );
+  const activeBattlefieldMapLabel = activeBattlefieldMap?.label || '';
+  const battlefieldMapBusy = battlefieldUploadBusy || battlefieldMapSelectionBusy || battlefieldMapDeleteBusy;
   const battlefieldPointerId = useMemo(
     () => viewerUserId || viewerEmail || viewerUsernameKey || repositorySourceIdRef.current,
     [viewerEmail, viewerUserId, viewerUsernameKey]
@@ -3744,6 +3940,12 @@ export default function CombatPanel({
     resolveSignedUrl();
     return () => { cancelled = true; };
   }, [battlefield.mediaStoragePath, battlefield.mediaUpdatedAt]);
+
+  useEffect(() => {
+    if (!active || !sceneDockOpen || !canConfigureBattlefield) return undefined;
+    void refreshBattlefieldMapLibrary();
+    return undefined;
+  }, [active, canConfigureBattlefield, refreshBattlefieldMapLibrary, sceneDockOpen]);
 
   useEffect(() => {
     if (!battlefieldPointers.length) return undefined;
@@ -5841,7 +6043,6 @@ export default function CombatPanel({
 
   const clearEncounter = () => {
     if (!canManageCombat) return;
-    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
     setEncounter((prev) => {
       const next = defaultEncounter();
       const prior = normalize(prev);
@@ -5851,9 +6052,7 @@ export default function CombatPanel({
     setSelectedId(null);
     setEditorOpen(false);
     setRestrictedModalOpen(false);
-    if (previousStoragePath) {
-      deleteBattlefieldMedia(previousStoragePath);
-    }
+    setBattlefieldMediaUrl('');
   };
   const openEditorFor = (id, forceMode = '') => {
     const target = combatants.find((c) => c.id === id);
@@ -6138,13 +6337,47 @@ export default function CombatPanel({
 
   const deleteBattlefieldMedia = useCallback(async (storagePath) => {
     const targetPath = cleanText(storagePath);
-    if (!targetPath) return;
+    if (!targetPath) return true;
     const supabase = getSupabaseClient();
-    if (!supabase) return;
+    if (!supabase) return false;
     const { error } = await supabase.storage.from(COMBAT_MEDIA_BUCKET).remove([targetPath]);
     if (error) {
-      console.warn('[CombatPanel] Unable to delete previous battle map.', error);
+      console.warn('[CombatPanel] Unable to delete battle map.', error);
+      return false;
     }
+    return true;
+  }, []);
+
+  const resolveBattlefieldMediaSelection = useCallback(async (storagePath) => {
+    const targetPath = cleanText(storagePath);
+    if (!targetPath) {
+      return {
+        signedUrl: '',
+        width: 0,
+        height: 0,
+      };
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error('Supabase storage is not available in this environment.');
+    }
+
+    const { data, error } = await supabase.storage
+      .from(COMBAT_MEDIA_BUCKET)
+      .createSignedUrl(targetPath, 60 * 60);
+    if (error) throw error;
+
+    const signedUrl = cleanText(data?.signedUrl);
+    const dimensions = signedUrl
+      ? await readImageDimensionsFromUrl(signedUrl)
+      : { width: 0, height: 0 };
+
+    return {
+      signedUrl,
+      width: dimensions.width,
+      height: dimensions.height,
+    };
   }, []);
 
   const handleBattlefieldMediaUpload = useCallback(async (event) => {
@@ -6168,7 +6401,6 @@ export default function CombatPanel({
 
     const campaignId = getCampaignId();
     const nextStoragePath = buildCombatMediaPath(campaignId, encounter.id, file.name);
-    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
     setBattlefieldUploadBusy(true);
     try {
       const dimensions = await readImageDimensionsFromFile(file);
@@ -6185,10 +6417,8 @@ export default function CombatPanel({
         mediaHeight: dimensions.height,
         mediaUpdatedAt: Date.now(),
       });
-
-      if (previousStoragePath && previousStoragePath !== nextStoragePath) {
-        deleteBattlefieldMedia(previousStoragePath);
-      }
+      setBattlefieldResetRequestToken((tick) => tick + 1);
+      void refreshBattlefieldMapLibrary({ showBusy: false });
     } catch (error) {
       console.error('[CombatPanel] Battle map upload failed.', error);
       window.alert(error?.message || 'Battle map upload failed.');
@@ -6196,16 +6426,66 @@ export default function CombatPanel({
       setBattlefieldUploadBusy(false);
     }
   }, [
+    canConfigureBattlefield,
+    encounter.id,
+    refreshBattlefieldMapLibrary,
+    updateBattlefield,
+  ]);
+
+  const selectBattlefieldMedia = useCallback(async (storagePath) => {
+    const targetPath = cleanText(storagePath);
+    if (!canConfigureBattlefield) return;
+    if (!targetPath) {
+      updateBattlefield({
+        mediaStoragePath: '',
+        mediaMimeType: '',
+        mediaWidth: 0,
+        mediaHeight: 0,
+        mediaUpdatedAt: Date.now(),
+      });
+      setBattlefieldMediaUrl('');
+      return;
+    }
+
+    const targetEntry = battlefieldMapOptions.find((entry) => entry.storagePath === targetPath) || null;
+    const { signedUrl, width, height } = await resolveBattlefieldMediaSelection(targetPath);
+    setBattlefieldMediaUrl(signedUrl);
+    updateBattlefield({
+      mediaStoragePath: targetPath,
+      mediaMimeType: cleanText(targetEntry?.mimeType),
+      mediaWidth: width,
+      mediaHeight: height,
+      mediaUpdatedAt: Date.now(),
+    });
+    setBattlefieldResetRequestToken((tick) => tick + 1);
+  }, [
+    battlefieldMapOptions,
+    canConfigureBattlefield,
+    resolveBattlefieldMediaSelection,
+    updateBattlefield,
+  ]);
+
+  const handleBattlefieldMediaSelection = useCallback(async (event) => {
+    const targetPath = cleanText(event.target.value);
+    if (!canConfigureBattlefield) return;
+    if (targetPath === cleanText(battlefield.mediaStoragePath)) return;
+    setBattlefieldMapSelectionBusy(true);
+    try {
+      await selectBattlefieldMedia(targetPath);
+    } catch (error) {
+      console.error('[CombatPanel] Unable to select battle map.', error);
+      window.alert(error?.message || 'Unable to load the selected battle map.');
+    } finally {
+      setBattlefieldMapSelectionBusy(false);
+    }
+  }, [
     battlefield.mediaStoragePath,
     canConfigureBattlefield,
-    deleteBattlefieldMedia,
-    encounter.id,
-    updateBattlefield,
+    selectBattlefieldMedia,
   ]);
 
   const clearBattlefieldMedia = useCallback(() => {
     if (!canConfigureBattlefield) return;
-    const previousStoragePath = cleanText(battlefield.mediaStoragePath);
     updateBattlefield({
       mediaStoragePath: '',
       mediaMimeType: '',
@@ -6213,10 +6493,38 @@ export default function CombatPanel({
       mediaHeight: 0,
       mediaUpdatedAt: Date.now(),
     });
-    if (previousStoragePath) {
-      deleteBattlefieldMedia(previousStoragePath);
+    setBattlefieldMediaUrl('');
+  }, [canConfigureBattlefield, updateBattlefield]);
+
+  const handleDeleteBattlefieldMedia = useCallback(async () => {
+    const storagePath = cleanText(battlefield.mediaStoragePath);
+    if (!canConfigureBattlefield || !storagePath) return;
+    const label = activeBattlefieldMapLabel || prettifyBattleMapLabel(battleMapStorageFileName(storagePath));
+    const confirmed = window.confirm(`Delete "${label}" from uploaded maps? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setBattlefieldMapDeleteBusy(true);
+    try {
+      const deleted = await deleteBattlefieldMedia(storagePath);
+      if (!deleted) {
+        throw new Error('Unable to delete the selected battle map.');
+      }
+      clearBattlefieldMedia();
+      await refreshBattlefieldMapLibrary({ showBusy: false });
+    } catch (error) {
+      console.error('[CombatPanel] Unable to delete battle map.', error);
+      window.alert(error?.message || 'Unable to delete the selected battle map.');
+    } finally {
+      setBattlefieldMapDeleteBusy(false);
     }
-  }, [battlefield.mediaStoragePath, canConfigureBattlefield, deleteBattlefieldMedia, updateBattlefield]);
+  }, [
+    activeBattlefieldMapLabel,
+    battlefield.mediaStoragePath,
+    canConfigureBattlefield,
+    clearBattlefieldMedia,
+    deleteBattlefieldMedia,
+    refreshBattlefieldMapLibrary,
+  ]);
 
   // image upload — opens crop modal instead of applying directly
   const handleImageUpload = (e) => {
@@ -6436,6 +6744,20 @@ export default function CombatPanel({
       </div>
     </div>
   ) : null;
+  const activeBattlefieldBackgroundLabel = BATTLE_BACKGROUNDS.find((entry) => entry.src === battleBg)?.label || 'Backdrop';
+  const battlefieldMapStatusText = battlefield.mediaStoragePath
+    ? `${activeBattlefieldMap?.label || 'Uploaded map'} is active on the board.`
+    : battlefieldMapLibraryBusy
+      ? 'Loading uploaded maps...'
+      : battlefieldMapOptions.length
+        ? `${battlefieldMapOptions.length} uploaded map${battlefieldMapOptions.length === 1 ? '' : 's'} ready for this encounter.`
+        : 'Upload a battle map to start your reusable library.';
+  const selectedTokenDescriptor = selected
+    ? `${selected.side || 'Combatant'}${selected.role ? ` · ${selected.role}` : ''}`
+    : 'No token selected';
+  const tokenControlHint = selected
+    ? 'Use size and rotation to fine tune the selected token on the board.'
+    : 'Select a token on the map to adjust its size and facing.';
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -6523,149 +6845,286 @@ export default function CombatPanel({
             </div>
           )}
 
-          <div className={styles.sceneDockWrap}>
-            {sceneDockOpen && (
-              <div className={styles.floatingConfigDock}>
-                <input
-                  ref={battlefieldFileInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className={styles.hiddenInput}
-                  onChange={handleBattlefieldMediaUpload}
-                />
-                <div className={styles.controlsRight}>
-                  <label className={styles.sceneLabel}>Scene</label>
-                  <select
-                    value={battleBg || ''}
-                    onChange={e => {
-                      playNav();
-                      updateBattlefield({ backgroundSrc: e.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
-                    }}
-                    onMouseEnter={playHover}
-                    className={styles.sceneSelect}
-                    disabled={!canConfigureBattlefield}
-                  >
-                    {BATTLE_BACKGROUNDS.map((b, i) => (
-                      <option key={i} value={b.src || ''}>
-                        {b.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                    onMouseEnter={playHover}
-                    onClick={() => {
-                      playNav();
-                      battlefieldFileInputRef.current?.click();
-                    }}
-                    disabled={!canConfigureBattlefield || battlefieldUploadBusy}
-                  >
-                    {battlefieldUploadBusy ? 'Uploading...' : (battlefield.mediaStoragePath ? 'Replace Map' : 'Upload Map')}
-                  </button>
-                  <button
-                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                    onMouseEnter={playHover}
-                    onClick={() => {
-                      playNav();
-                      clearBattlefieldMedia();
-                    }}
-                    disabled={!canConfigureBattlefield || !battlefield.mediaStoragePath}
-                  >
-                    Clear Map
-                  </button>
-                  <button
-                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                    onMouseEnter={playHover}
-                    onClick={() => {
-                      playNav();
-                      updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
-                    }}
-                    disabled={!canConfigureBattlefield}
-                  >
-                    {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
-                  </button>
-                  <label className={styles.sceneLabel}>Cell</label>
+          {canConfigureBattlefield && (
+            <div className={styles.sceneDockWrap}>
+              {sceneDockOpen && (
+                <div id="dm-control-center" className={styles.floatingConfigDock}>
                   <input
-                    type="number"
-                    min="32"
-                    max="192"
-                    className={styles.toolbarNumberInput}
-                    value={battlefield.gridCellSize}
-                    onChange={(e) => updateBattlefield({ gridCellSize: clamp(toInt(e.target.value, battlefield.gridCellSize), 32, 192) })}
-                    disabled={!canConfigureBattlefield}
+                    ref={battlefieldFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className={styles.hiddenInput}
+                    onChange={handleBattlefieldMediaUpload}
                   />
-                  <label className={styles.sceneLabel}>Offset</label>
-                  <input
-                    type="number"
-                    min="-2048"
-                    max="2048"
-                    className={styles.toolbarNumberInput}
-                    value={battlefield.gridOffsetX}
-                    onChange={(e) => updateBattlefield({ gridOffsetX: clamp(toInt(e.target.value, battlefield.gridOffsetX), -2048, 2048) })}
-                    disabled={!canConfigureBattlefield}
-                  />
-                  <input
-                    type="number"
-                    min="-2048"
-                    max="2048"
-                    className={styles.toolbarNumberInput}
-                    value={battlefield.gridOffsetY}
-                    onChange={(e) => updateBattlefield({ gridOffsetY: clamp(toInt(e.target.value, battlefield.gridOffsetY), -2048, 2048) })}
-                    disabled={!canConfigureBattlefield}
-                  />
-                  <button
-                    className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
-                    onMouseEnter={playHover}
-                    onClick={() => setBattlefieldResetRequestToken((tick) => tick + 1)}
-                  >
-                    Reset View
-                  </button>
-                  {selected ? (
-                    <>
-                      <label className={styles.sceneLabel}>Token</label>
-                      <div className={styles.sceneTokenBadge} title={selected.name}>{selected.name}</div>
-                      <label className={styles.sceneLabel}>Size %</label>
-                      <input
-                        type="number"
-                        min={Math.round(TOKEN_SCALE_MIN * 100)}
-                        max={Math.round(TOKEN_SCALE_MAX * 100)}
-                        step="5"
-                        className={styles.toolbarNumberInput}
-                        value={selectedTokenScalePercent}
-                        onChange={(e) => setSelectedTokenScalePercent(e.target.value)}
-                        disabled={!selectedCanEdit}
-                      />
-                      <label className={styles.sceneLabel}>Rotate</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="359"
-                        step="5"
-                        className={styles.toolbarNumberInput}
-                        value={selectedTokenRotationDegrees}
-                        onChange={(e) => setSelectedTokenRotationDegrees(e.target.value)}
-                        disabled={!selectedCanEdit}
-                      />
-                    </>
-                  ) : (
-                    <div className={styles.sceneDockHint}>Select a token to resize it. Hover a token to grab the rotate handle.</div>
-                  )}
+                  <div className={styles.dmControlHeader}>
+                    <div className={styles.dmControlHeaderCopy}>
+                      <div className={styles.dmControlEyebrow}>DM Control Center</div>
+                      <div className={styles.dmControlTitle}>Battlefield Command</div>
+                      <div className={styles.dmControlText}>
+                        Manage backdrops, uploaded maps, grid alignment, and selected token tuning from one clean control panel.
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className={btnClass('danger', 'sm', styles.dmControlClose)}
+                      onMouseEnter={playHover}
+                      onClick={() => {
+                        playNav();
+                        setSceneDockOpen(false);
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className={styles.dmControlStats}>
+                    <div className={styles.dmControlStat}>
+                      <span className={styles.dmControlStatLabel}>Backdrop</span>
+                      <span className={styles.dmControlStatValue}>{activeBattlefieldBackgroundLabel}</span>
+                    </div>
+                    <div className={styles.dmControlStat}>
+                      <span className={styles.dmControlStatLabel}>Map Library</span>
+                      <span className={styles.dmControlStatValue}>{battlefieldMapOptions.length}</span>
+                    </div>
+                    <div className={styles.dmControlStat}>
+                      <span className={styles.dmControlStatLabel}>Grid</span>
+                      <span className={styles.dmControlStatValue}>{battlefield.gridEnabled ? 'Visible' : 'Hidden'}</span>
+                    </div>
+                    <div className={styles.dmControlStat}>
+                      <span className={styles.dmControlStatLabel}>Token</span>
+                      <span className={styles.dmControlStatValue}>{selected ? selected.name : 'None'}</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.dmControlGrid}>
+                    <section className={`${styles.dmControlCard} ${styles.dmControlCardWide}`}>
+                      <div className={styles.dmControlCardHeader}>
+                        <div className={styles.dmControlCardTitle}>Scene And Maps</div>
+                        <div className={styles.dmControlCardText}>
+                          Choose the battlefield backdrop and swap between any uploaded maps for this campaign.
+                        </div>
+                      </div>
+                      <div className={styles.dmControlFieldGrid}>
+                        <label className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Backdrop</span>
+                          <select
+                            value={battleBg || ''}
+                            onChange={(event) => {
+                              playNav();
+                              updateBattlefield({ backgroundSrc: event.target.value || DEFAULT_BATTLEFIELD.backgroundSrc });
+                            }}
+                            onMouseEnter={playHover}
+                            className={`${styles.sceneSelect} ${styles.dmControlSelect}`}
+                            disabled={!canConfigureBattlefield}
+                          >
+                            {BATTLE_BACKGROUNDS.map((background, index) => (
+                              <option key={index} value={background.src || ''}>
+                                {background.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Uploaded Map</span>
+                          <select
+                            value={battlefield.mediaStoragePath || ''}
+                            onChange={(event) => {
+                              playNav();
+                              handleBattlefieldMediaSelection(event);
+                            }}
+                            onMouseEnter={playHover}
+                            className={`${styles.sceneSelect} ${styles.battlefieldMapSelect} ${styles.dmControlSelect}`}
+                            disabled={!canConfigureBattlefield || battlefieldMapBusy || battlefieldMapLibraryBusy}
+                          >
+                            <option value="">
+                              {battlefieldMapLibraryBusy ? 'Loading uploaded maps...' : 'No uploaded map'}
+                            </option>
+                            {battlefieldMapOptions.map((entry) => (
+                              <option key={entry.storagePath} value={entry.storagePath}>
+                                {entry.optionLabel}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className={styles.dmControlActions}>
+                        <button
+                          className={btnClass('gold', 'sm', styles.toolbarActionBtn)}
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playNav();
+                            battlefieldFileInputRef.current?.click();
+                          }}
+                          disabled={!canConfigureBattlefield || battlefieldMapBusy}
+                        >
+                          {battlefieldUploadBusy ? 'Uploading...' : 'Upload Map'}
+                        </button>
+                        <button
+                          className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playNav();
+                            clearBattlefieldMedia();
+                          }}
+                          disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
+                        >
+                          Hide Active Map
+                        </button>
+                        <button
+                          className={btnClass('danger', 'sm', styles.toolbarActionBtn)}
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playNav();
+                            handleDeleteBattlefieldMedia();
+                          }}
+                          disabled={!canConfigureBattlefield || battlefieldMapBusy || !battlefield.mediaStoragePath}
+                        >
+                          {battlefieldMapDeleteBusy ? 'Deleting...' : 'Delete Map'}
+                        </button>
+                      </div>
+                      <div className={styles.battlefieldMapHint}>{battlefieldMapStatusText}</div>
+                    </section>
+
+                    <section className={styles.dmControlCard}>
+                      <div className={styles.dmControlCardHeader}>
+                        <div className={styles.dmControlCardTitle}>Grid And View</div>
+                        <div className={styles.dmControlCardText}>
+                          Tune the tactical grid and reset the camera when the board needs a clean framing pass.
+                        </div>
+                      </div>
+                      <div className={styles.dmControlFieldGrid}>
+                        <div className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Grid</span>
+                          <button
+                            className={btnClass('ghost', 'sm', styles.dmControlInlineButton)}
+                            onMouseEnter={playHover}
+                            onClick={() => {
+                              playNav();
+                              updateBattlefield((current) => ({ gridEnabled: !current.gridEnabled }));
+                            }}
+                            disabled={!canConfigureBattlefield}
+                          >
+                            {battlefield.gridEnabled ? 'Hide Grid' : 'Show Grid'}
+                          </button>
+                        </div>
+                        <label className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Cell Size</span>
+                          <input
+                            type="number"
+                            min="32"
+                            max="192"
+                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                            value={battlefield.gridCellSize}
+                            onChange={(event) => updateBattlefield({ gridCellSize: clamp(toInt(event.target.value, battlefield.gridCellSize), 32, 192) })}
+                            disabled={!canConfigureBattlefield}
+                          />
+                        </label>
+                        <label className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Offset X</span>
+                          <input
+                            type="number"
+                            min="-2048"
+                            max="2048"
+                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                            value={battlefield.gridOffsetX}
+                            onChange={(event) => updateBattlefield({ gridOffsetX: clamp(toInt(event.target.value, battlefield.gridOffsetX), -2048, 2048) })}
+                            disabled={!canConfigureBattlefield}
+                          />
+                        </label>
+                        <label className={styles.dmControlField}>
+                          <span className={styles.sceneLabel}>Offset Y</span>
+                          <input
+                            type="number"
+                            min="-2048"
+                            max="2048"
+                            className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                            value={battlefield.gridOffsetY}
+                            onChange={(event) => updateBattlefield({ gridOffsetY: clamp(toInt(event.target.value, battlefield.gridOffsetY), -2048, 2048) })}
+                            disabled={!canConfigureBattlefield}
+                          />
+                        </label>
+                      </div>
+                      <div className={styles.dmControlActions}>
+                        <button
+                          className={btnClass('ghost', 'sm', styles.toolbarActionBtn)}
+                          onMouseEnter={playHover}
+                          onClick={() => {
+                            playNav();
+                            setBattlefieldResetRequestToken((tick) => tick + 1);
+                          }}
+                        >
+                          Reset View
+                        </button>
+                      </div>
+                    </section>
+
+                    <section className={styles.dmControlCard}>
+                      <div className={styles.dmControlCardHeader}>
+                        <div className={styles.dmControlCardTitle}>Selected Token</div>
+                        <div className={styles.dmControlCardText}>
+                          Fine tune token presence without opening the full character editor.
+                        </div>
+                      </div>
+                      <div className={styles.dmControlTokenSummary}>
+                        <div className={styles.sceneTokenBadge} title={selected ? selected.name : 'No token selected'}>
+                          {selected ? selected.name : 'No token selected'}
+                        </div>
+                        <div className={styles.dmControlTokenMeta}>{selectedTokenDescriptor}</div>
+                      </div>
+                      {selected ? (
+                        <>
+                          <div className={styles.dmControlFieldGrid}>
+                            <label className={styles.dmControlField}>
+                              <span className={styles.sceneLabel}>Size %</span>
+                              <input
+                                type="number"
+                                min={Math.round(TOKEN_SCALE_MIN * 100)}
+                                max={Math.round(TOKEN_SCALE_MAX * 100)}
+                                step="5"
+                                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                                value={selectedTokenScalePercent}
+                                onChange={(event) => setSelectedTokenScalePercent(event.target.value)}
+                                disabled={!selectedCanEdit}
+                              />
+                            </label>
+                            <label className={styles.dmControlField}>
+                              <span className={styles.sceneLabel}>Rotation</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="359"
+                                step="5"
+                                className={`${styles.toolbarNumberInput} ${styles.dmControlNumberInput}`}
+                                value={selectedTokenRotationDegrees}
+                                onChange={(event) => setSelectedTokenRotationDegrees(event.target.value)}
+                                disabled={!selectedCanEdit}
+                              />
+                            </label>
+                          </div>
+                          <div className={styles.sceneDockHint}>{tokenControlHint}</div>
+                        </>
+                      ) : (
+                        <div className={styles.dmControlEmpty}>{tokenControlHint}</div>
+                      )}
+                    </section>
+                  </div>
                 </div>
-              </div>
-            )}
-            <button
-              type="button"
-              className={btnClass('ghost', 'sm', styles.sceneDockToggle)}
-              onMouseEnter={playHover}
-              onClick={() => {
-                playNav();
-                setSceneDockOpen((open) => !open);
-              }}
-              aria-expanded={sceneDockOpen}
-            >
-              {sceneDockOpen ? 'Hide Scene' : 'Scene'}
-            </button>
-          </div>
+              )}
+              <button
+                type="button"
+                className={btnClass('gold', 'sm', styles.sceneDockToggle)}
+                onMouseEnter={playHover}
+                onClick={() => {
+                  playNav();
+                  setSceneDockOpen((open) => !open);
+                }}
+                aria-expanded={sceneDockOpen}
+                aria-controls="dm-control-center"
+              >
+                {sceneDockOpen ? 'Hide DM Controls' : 'DM Controls'}
+              </button>
+            </div>
+          )}
 
           <div
           className={styles.mainLayout}
